@@ -1841,7 +1841,7 @@ template makeCompilers(bool isMemoize){
 debug(dpeg) pragma(msg, makeCompilers!false);
 debug(dpeg) pragma(msg, makeCompilers!true);
 
-debug void main(){}
+debug(dpeg) void main(){}
 
 private:
 
@@ -1901,8 +1901,8 @@ template UnTuple(E){
 }
 
 UnTuple!R unTuple(R)(R r){
-	static if(staticLength!(ResultType!(R).Types) == 1){
-		return Result!(ResultType!(R).Types[0])(r.match, r.value[0], r.rest);
+	static if(staticLength!(ResultType!R.Types) == 1){
+		return Result!(ResultType!R.Types[0])(r.match, r.value[0], r.rest);
 	}else{
 		return r;
 	}
@@ -1949,7 +1949,7 @@ dchar decode(string str, ref size_t i){
 	}
 }
 
-public:
+debug(dpeg) public:
 
 mixin dpeg!q{
 	int addExp = mulExp (("+" / "-")  addExp)? >> (int lhs, Option!(Tuple!(string, int)) rhs){
@@ -1987,9 +1987,20 @@ mixin dpeg!q{
 		}
 		return result;
 	};
+
+    None A = B $;
+
+    None B = ^"a" ^B ^"a" / ^"a";
 };
 
 unittest{
 	assert(addExp("5*8+3*20").value == 100);
+	assert( A("a").match);
+	assert( A("aaa").match);
+	assert(!A("aaaaa").match);
+	assert( A("aaaaaaa").match);
+	assert(!A("aaaaaaaaa").match);
+	assert(!A("aaaaaaaaaaa").match);
+	assert(!A("aaaaaaaaaaaaa").match);
+    assert( A("aaaaaaaaaaaaaaa").match);
 }
-
