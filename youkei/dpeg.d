@@ -65,8 +65,8 @@ struct Option(T){
 		}
 	}
 
-	unittest{
-		enum dg ={
+	debug(dpeg) unittest{
+		enum dg = {
 			auto r = combinateSequence!(
 				parseString!("hello"),
 				parseString!("world")
@@ -89,7 +89,7 @@ struct Option(T){
 			assert(r2.value[2] == "!");
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -113,8 +113,8 @@ struct Option(T){
 		}
 	}
 
-	unittest{
-		enum dg ={
+	debug(dpeg) unittest{
+		enum dg = {
 			alias combinateChoice!(parseString!"h",parseString!"w") p;
 			auto r1 = p("hw");
 			assert(r1.match);
@@ -128,7 +128,7 @@ struct Option(T){
 			assert(!r3.match);
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -164,8 +164,8 @@ struct Option(T){
 		alias combinateMore!(1, parser, sep) combinateMore1;
 	}
 
-	unittest{
-		enum dg ={
+	debug(dpeg) unittest{
+		enum dg = {
 			alias combinateMore!(0, parseString!"w") p;
 			auto r1 = p("wwwwwwwww w");
 			assert(r1.match);
@@ -184,7 +184,7 @@ struct Option(T){
 			assert(!r4.match);
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -201,8 +201,8 @@ struct Option(T){
 		return res;
 	}
 
-	unittest{
-		enum dg ={
+	debug(dpeg) unittest{
+		enum dg = {
 			alias combinateOption!(parseString!"w") p;
 			auto r1 = p("w");
 			assert(r1.match);
@@ -215,7 +215,7 @@ struct Option(T){
 			assert(!r2.value.some);
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -229,8 +229,8 @@ struct Option(T){
 		return res;
 	}
 
-	unittest{
-		enum dg ={
+	debug(dpeg) unittest{
+		enum dg = {
 			alias combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")) p;
 			auto r1 = p("(w)");
 			assert(r1.match);
@@ -238,7 +238,7 @@ struct Option(T){
 			assert(r1.value == "w");
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -249,8 +249,8 @@ struct Option(T){
 		return res;
 	}
 
-	unittest{
-		enum dg ={
+	debug(dpeg) unittest{
+		enum dg = {
 			alias combinateMore!(0, combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))) p;
 			auto r1 = p("www");
 			assert(r1.match);
@@ -258,7 +258,7 @@ struct Option(T){
 			assert(r1.value.mkString() == "ww");
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -269,8 +269,8 @@ struct Option(T){
 		return res;
 	}
 
-	unittest{
-		enum dg ={
+	debug(dpeg) unittest{
+		enum dg = {
 			alias combinateMore!(0, combinateSequence!(parseString!"w", combinateNot!(parseString!"s"))) p;
 			auto r1 = p("wwws");
 			assert(r1.match);
@@ -278,7 +278,7 @@ struct Option(T){
 			assert(r1.value.mkString() == "ww");
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -297,8 +297,8 @@ struct Option(T){
 		return res;
 	}
 
-	unittest{
-		enum dg ={
+	debug(dpeg) unittest{
+		enum dg = {
 			alias combinateConvert!(
 				combinateMore!(0, parseString!"w"),
 				function(string[] ws){
@@ -311,7 +311,7 @@ struct Option(T){
 			assert(r1.value == 3);
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -324,8 +324,8 @@ struct Option(T){
 		return res;
 	}
 
-	unittest{
-		enum dg ={
+	debug(dpeg) unittest{
+		enum dg = {
 			alias combinateConvert!(
 				combinateCheck!(
 					combinateMore!(0, parseString!"w"),
@@ -345,13 +345,12 @@ struct Option(T){
 			assert(!r2.match);
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 }
 
 /*parsers*/version(all){
-static:
 	Result!(string) parseString(string str)(string input) {
 		typeof(return) res;
 		if(!str.length){
@@ -366,13 +365,17 @@ static:
 		return res;
 	}
 
-	debug static assert({
-		auto r = parseString!"hello"("hello world");
-		assert(r.match);
-		assert(r.rest == " world");
-		assert(r.value == "hello");
-		return true;
-	}());
+	debug(dpeg) unittest{
+		enum dg = {
+            auto r = parseString!"hello"("hello world");
+            assert(r.match);
+            assert(r.rest == " world");
+            assert(r.value == "hello");
+            return true;
+        };
+        debug(dpeg_ct) static assert(dg());
+        dg();
+	}
 
 	Result!string parseCharRange(dchar low, dchar high)(string input){
 		typeof(return) res;
@@ -389,19 +392,23 @@ static:
 		return res;
 	}
 
-	debug static assert({
-		auto r = parseCharRange!('a', 'z')("hoge");
-		assert(r.match);
-		assert(r.rest == "oge");
-		assert(r.value == "h");
-		auto r2 = parseCharRange!('\u0100', '\U0010FFFF')("はろーわーるど");
-		assert(r2.match);
-		assert(r2.rest == "ろーわーるど");
-		assert(r2.value == "は");
-		auto r3 = parseCharRange!('\u0100', '\U0010FFFF')("hello world");
-		assert(!r3.match);
-		return true;
-	}());
+	debug(dpeg) unittest{
+		enum dg = {
+            auto r = parseCharRange!('a', 'z')("hoge");
+            assert(r.match);
+            assert(r.rest == "oge");
+            assert(r.value == "h");
+            auto r2 = parseCharRange!('\u0100', '\U0010FFFF')("はろーわーるど");
+            assert(r2.match);
+            assert(r2.rest == "ろーわーるど");
+            assert(r2.value == "は");
+            auto r3 = parseCharRange!('\u0100', '\U0010FFFF')("hello world");
+            assert(!r3.match);
+            return true;
+		};
+        debug(dpeg_ct) static assert(dg());
+        dg();
+	}
 
 	Result!string parseAnyChar(string input){
 		typeof(return) res;
@@ -416,26 +423,30 @@ static:
 		return res;
 	}
 
-	debug static assert({
-		auto r = parseAnyChar("hoge");
-		assert(r.match);
-		assert(r.rest == "oge");
-		assert(r.value == "h");
-		auto r2 = parseAnyChar("欝だー");
-		assert(r2.match);
-		assert(r2.rest == "だー");
-		assert(r2.value == "欝");
-		return true;
-	}());
+	debug(dpeg) unittest{
+		enum dg = {
+            auto r = parseAnyChar("hoge");
+            assert(r.match);
+            assert(r.rest == "oge");
+            assert(r.value == "h");
+            auto r2 = parseAnyChar("欝だー");
+            assert(r2.match);
+            assert(r2.rest == "だー");
+            assert(r2.value == "欝");
+            return true;
+		};
+        debug(dpeg_ct) static assert(dg());
+        dg();
+	}
 
-	Result!string parseAnyCharES(string input){
+	Result!string parseEscapeSequence(string input){
 		typeof(return) res;
 		res.rest = input;
 		if(input.length > 0){
-			res.match = true;
 			size_t i;
 			auto c = decode(input, i);
 			if(c == '\\'){
+				res.match = true;
 				c = decode(input, i);
 				if(c == 'u'){
 					res.value = input[0..i+4];
@@ -447,37 +458,36 @@ static:
 					res.value = input[0..i];
 					res.rest = input[i..$];
 				}
-			}else{
-				res.value = input[0..i];
-				res.rest = input[i..$];
 			}
 		}
 		return res;
 	}
 
-	debug static assert({
-		auto r = parseAnyCharES(`\"hoge`);
-		assert(r.match);
-		assert(r.rest == "hoge");
-		assert(r.value == `\"`);
-		auto r2 = parseAnyCharES("\\U0010FFFF");
-		assert(r2.match);
-		assert(r2.rest == "");
-		assert(r2.value == "\\U0010FFFF");
-		auto r3 = parseAnyCharES("\\u10FF");
-		assert(r3.match);
-		assert(r3.rest == "");
-		assert(r3.value == "\\u10FF");
-		auto r4 = parseAnyCharES("欝");
-		assert(r4.match);
-		assert(r4.rest == "");
-		assert(r4.value == "欝");
-		auto r5 = parseAnyCharES(`\\`);
-		assert(r5.match);
-		assert(r5.rest == "");
-		assert(r5.value == `\\`);
-		return true;
-	}());
+	debug(dpeg) unittest{
+		enum dg = {
+            auto r = parseEscapeSequence(`\"hoge`);
+            assert(r.match);
+            assert(r.rest == "hoge");
+            assert(r.value == `\"`);
+            auto r2 = parseEscapeSequence("\\U0010FFFF");
+            assert(r2.match);
+            assert(r2.rest == "");
+            assert(r2.value == "\\U0010FFFF");
+            auto r3 = parseEscapeSequence("\\u10FF");
+            assert(r3.match);
+            assert(r3.rest == "");
+            assert(r3.value == "\\u10FF");
+            auto r4 = parseEscapeSequence("欝");
+            assert(!r4.match);
+            auto r5 = parseEscapeSequence(`\\`);
+            assert(r5.match);
+            assert(r5.rest == "");
+            assert(r5.value == `\\`);
+            return true;
+		};
+        debug(dpeg_ct) static assert(dg());
+        dg();
+	}
 
 	Result!string parseSpace(string input){
 		typeof(return) res;
@@ -489,25 +499,33 @@ static:
 		return res;
 	}
 
-	debug static assert({
-		auto r = parseSpace("\thoge");
-		assert(r.match);
-		assert(r.rest == "hoge");
-		assert(r.value == "\t");
-		return true;
-	}());
+	debug(dpeg) unittest{
+		enum dg = {
+            auto r = parseSpace("\thoge");
+            assert(r.match);
+            assert(r.rest == "hoge");
+            assert(r.value == "\t");
+            return true;
+		};
+        debug(dpeg_ct) static assert(dg());
+        dg();
+	}
 
 	alias combinateNone!(combinateMore0!parseSpace) parseSpaces;
 
-	debug static assert({
-		auto r1 = parseSpaces("\t \rhoge");
-		assert(r1.match);
-		assert(r1.rest == "hoge");
-		auto r2 = parseSpaces("hoge");
-		assert(r2.match);
-		assert(r2.rest == "hoge");
-		return true;
-	}());
+	debug(dpeg) unittest{
+		enum dg = {
+            auto r1 = parseSpaces("\t \rhoge");
+            assert(r1.match);
+            assert(r1.rest == "hoge");
+            auto r2 = parseSpaces("hoge");
+            assert(r2.match);
+            assert(r2.rest == "hoge");
+            return true;
+		};
+        debug(dpeg_ct) static assert(dg());
+        dg();
+	}
 
 	Result!None parseEOF(string input){
 		typeof(return) res;
@@ -517,11 +535,15 @@ static:
 		return res;
 	}
 
-	debug static assert({
-		auto r = parseEOF("");
-		assert(r.match);
-		return true;
-	}());
+	debug(dpeg) unittest{
+		enum dg = {
+            auto r = parseEOF("");
+            assert(r.match);
+            return true;
+		};
+        debug(dpeg_ct) static assert(dg());
+        dg();
+	}
 }
 
 mixin template dpegWithoutMemoize(string src){
@@ -530,6 +552,10 @@ mixin template dpegWithoutMemoize(string src){
 
 mixin template dpeg(string src){
 	mixin(makeCompilers!true.defs(src).value);
+}
+
+template getSource(string src){
+	enum getSource = makeCompilers!true.defs(src);
 }
 
 template makeCompilers(bool isMemoize){
@@ -554,7 +580,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			string src = q{
 				bool hoge = ^"hello" $ >> {return false;};
@@ -620,7 +646,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	};
 
@@ -649,7 +675,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			auto r = def(q{bool hoge = ^"hello" $ >> {return false;};});
 			assert(r.match);
@@ -691,7 +717,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	};
 
@@ -720,7 +746,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			auto r = convExp(q{^"hello" $ >> {return false;}});
 			assert(r.match);
@@ -758,7 +784,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -787,7 +813,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			auto r1 = choiceExp(`^$* / (&(!"a"))?`);
 			assert(r1.match);
@@ -855,7 +881,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -875,7 +901,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			auto r1 = seqExp("^$* (&(!$))?");
 			assert(r1.match);
@@ -943,7 +969,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -968,7 +994,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			auto r1 = optionExp("(&(!\"hello\"))?");
 			assert(r1.match);
@@ -998,7 +1024,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1047,7 +1073,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			auto r1 = postExp("^$*");
 			assert(r1.match);
@@ -1073,7 +1099,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1104,7 +1130,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			auto r1 = preExp("^$");
 			assert(r1.match);
@@ -1126,7 +1152,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1146,7 +1172,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			static if(isMemoize){
 				auto r1 = primaryExp("(&(!$)?)");
@@ -1199,7 +1225,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1212,7 +1238,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			auto r1 = literal("\"hello\nworld\"");
 			assert(r1.match);
@@ -1274,7 +1300,7 @@ template makeCompilers(bool isMemoize){
 			assert(!rn.match);
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1289,7 +1315,10 @@ template makeCompilers(bool isMemoize){
 						combinateNot!(
 							parseString!"\""
 						),
-						parseAnyCharES
+						combinateChoice!(
+							parseEscapeSequence,
+							parseAnyChar
+						)
 					)
 				),
 				combinateNone!(
@@ -1302,7 +1331,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			auto r1 = stringLit("\"hello\nworld\" ");
 			assert(r1.match);
@@ -1316,7 +1345,7 @@ template makeCompilers(bool isMemoize){
 			assert(!r2.match);
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1354,11 +1383,17 @@ template makeCompilers(bool isMemoize){
 	Result!string charRange(string input){
 		return combinateConvert!(
 			combinateSequence!(
-				parseAnyCharES,
+				combinateChoice!(
+					parseEscapeSequence,
+					parseAnyChar
+				),
 				combinateNone!(
 					parseString!"-"
 				),
-				parseAnyCharES,
+				combinateChoice!(
+					parseEscapeSequence,
+					parseAnyChar
+				),
 			),
 			function(string low, string high){
 				return fix("parseCharRange!('"~low~"','"~high~"')");
@@ -1368,14 +1403,17 @@ template makeCompilers(bool isMemoize){
 
 	Result!string oneChar(string input){
 		return combinateConvert!(
-			parseAnyCharES,
+			combinateChoice!(
+				parseEscapeSequence,
+				parseAnyChar
+			),
 			function(string c){
 				return fix("parseString!\""~c~"\"");
 			}
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			auto r1 = rangeLit("[a-z]");
 			assert(r1.match);
@@ -1409,7 +1447,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1424,7 +1462,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-    unittest{
+    debug(dpeg) unittest{
     	enum dg = {
 			auto r1 = eofLit("$");
 			assert(r1.match);
@@ -1438,7 +1476,7 @@ template makeCompilers(bool isMemoize){
 			assert(!r2.match);
 			return true;
     	};
-    	debug(ct) static assert(dg());
+    	debug(dpeg_ct) static assert(dg());
     	dg();
     }
 
@@ -1465,7 +1503,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-    unittest{
+    debug(dpeg) unittest{
     	enum dg = {
 			auto r1 = usefulLit("@space");
 			assert(r1.match);
@@ -1501,7 +1539,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
     	};
-    	debug(ct) static assert(dg());
+    	debug(dpeg_ct) static assert(dg());
     	dg();
     }
 
@@ -1531,7 +1569,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-    unittest{
+    debug(dpeg) unittest{
     	enum dg = {
 			auto r1 = id("int");
 			assert(r1.match);
@@ -1543,13 +1581,13 @@ template makeCompilers(bool isMemoize){
 			assert(r2.value == "select!(true)(\"true\", \"false\")");
 			return true;
     	};
-    	debug(ct) static assert(dg());
+    	debug(dpeg_ct) static assert(dg());
     	dg();
     }
 
 	alias combinateConvert!(id,function(string id){return fix(id);}) nonterminal;
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			auto r1 = nonterminal("int");
 			assert(r1.match);
@@ -1569,7 +1607,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
     }
 
@@ -1601,7 +1639,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			auto r1 = typeName("int");
 			assert(r1.match);
@@ -1617,7 +1655,7 @@ template makeCompilers(bool isMemoize){
 			assert(r3.value == "int[]");
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1642,7 +1680,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			auto r = func(
 			"(int num, string code){"
@@ -1678,7 +1716,7 @@ template makeCompilers(bool isMemoize){
 			);
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1709,7 +1747,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			auto r = arch("(a(i(u)e)o())");
 			assert(r.match);
@@ -1717,7 +1755,7 @@ template makeCompilers(bool isMemoize){
 			assert(r.value == "(a(i(u)e)o())");
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1748,7 +1786,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			auto r = squareArch("[a[i[u]e]o[]]");
 			assert(r.match);
@@ -1756,7 +1794,7 @@ template makeCompilers(bool isMemoize){
 			assert(r.value == "[a[i[u]e]o[]]");
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1787,7 +1825,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	unittest{
+	debug(dpeg) unittest{
 		enum dg = {
 			auto r = brace("{a{i{u}e}o{}}");
 			assert(r.match);
@@ -1795,13 +1833,13 @@ template makeCompilers(bool isMemoize){
 			assert(r.value == "{a{i{u}e}o{}}");
 			return true;
 		};
-		debug(ct) static assert(dg());
+		debug(dpeg_ct) static assert(dg());
 		dg();
 	}
 }
 
-debug pragma(msg, makeCompilers!false);
-debug pragma(msg, makeCompilers!true);
+debug(dpeg) pragma(msg, makeCompilers!false);
+debug(dpeg) pragma(msg, makeCompilers!true);
 
 debug void main(){}
 
@@ -1909,5 +1947,49 @@ dchar decode(string str, ref size_t i){
 		i+=4;
 		return res;
 	}
+}
+
+public:
+
+mixin dpeg!q{
+	int addExp = mulExp (("+" / "-")  addExp)? >> (int lhs, Option!(Tuple!(string, int)) rhs){
+		if(rhs.some){
+			final switch(rhs.value[0]){
+				case "+":
+					return lhs + rhs.value[1];
+				case "-":
+					return lhs - rhs.value[1];
+			}
+		}else{
+			return lhs;
+		}
+	};
+
+	int mulExp = primary (("*" / "/")  mulExp)? >> (int lhs, Option!(Tuple!(string, int)) rhs){
+		if(rhs.some){
+			final switch(rhs.value[0]){
+				case "*":
+					return lhs * rhs.value[1];
+				case "/":
+					return lhs / rhs.value[1];
+			}
+		}else{
+			return lhs;
+		}
+	};
+
+	int primary = ^"(" addExp ^")" / num;
+
+	int num = [0-9]+ >> (string[] nums){
+		int result;
+		foreach(i, num;nums){
+			result = result * 10 + (num[0] - '0');
+		}
+		return result;
+	};
+};
+
+unittest{
+	assert(addExp("5*8+3*20").value == 100);
 }
 
