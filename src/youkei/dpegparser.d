@@ -4,14 +4,14 @@ import std.traits;
 import std.typecons;
 import std.functional;
 
-ReturnType!fun memoizeInput(alias fun)(string input){
-    static ReturnType!fun[uint] memo;
-    auto p = cast(uint)input.ptr in memo;
+ReturnType!fun memoizeInput(alias fun)(StringWithPosition input){
+    static ReturnType!fun[size_t] memo;
+    auto p = cast(size_t)input.str.ptr in memo;
     if(p){
         return *p;
     }
     auto res = fun(input);
-    memo[cast(uint)input.ptr] = res;
+    memo[cast(size_t)input.str.ptr] = res;
     return res;
 }
 
@@ -20,11 +20,14 @@ alias Tuple!() None;
 struct Result(T){
 	bool match;
 	T value;
-	string rest;
+	StringWithPosition rest;
+	Error error;
+
 	void opAssign(F)(Result!F rhs) if(isAssignable!(T, F)){
 		match = rhs.match;
 		value = rhs.value;
 		rest = rhs.rest;
+		error = error;
 	}
 }
 
@@ -36,13 +39,42 @@ struct Option(T){
 	}
 }
 
+struct StringWithPosition{
+    invariant(){
+        assert(line >= 0);
+        assert(column >= 0);
+    }
+
+    Tuple!(size_t, "size", dchar, "c", StringWithPosition, "rest") get(){
+        typeof(return) res;
+        res.c = decode(str, res.size);
+        res.rest.str = str[res.size..$];
+        if(res.c == '\n'){
+            res.rest.line = line + 1;
+            res.rest.column = 0;
+        }else{
+            res.rest.line = line;
+            res.rest.column = column + 1;
+        }
+        return res;
+    }
+
+    @property size_t length(){
+        return str.length;
+    }
+
+    string str;
+    int line;
+    int column;
+}
+
 /*combinators*/version(all){
-	UnTuple!(CombinateSequenceImplType!parsers) combinateSequence(parsers...)(string input){
+	UnTuple!(CombinateSequenceImplType!parsers) combinateSequence(parsers...)(StringWithPosition input){
 		static assert(staticLength!parsers > 0);
 		return unTuple(combinateSequenceImpl!parsers(input));
 	}
 
-	private CombinateSequenceImplType!parsers combinateSequenceImpl(parsers...)(string input){
+	private CombinateSequenceImplType!parsers combinateSequenceImpl(parsers...)(StringWithPosition input){
 		typeof(return) res;
 		static if(staticLength!parsers == 1){
 			auto r = parsers[0](input);
@@ -102,7 +134,7 @@ struct Option(T){
 		dg();
 	}
 
-	Result!(CommonParserType!parsers) combinateChoice(parsers...)(string input){
+	Result!(CommonParserType!parsers) combinateChoice(parsers...)(StringWithPosition input){
 		static assert(staticLength!parsers > 0);
 		static if(staticLength!parsers == 1){
 			return parsers[0](input);
@@ -141,7 +173,7 @@ struct Option(T){
 		dg();
 	}
 
-	Result!(ParserType!parser[]) combinateMore(int n, alias parser, alias sep = parseString!"")(string input){
+	Result!(ParserType!parser[]) combinateMore(int n, alias parser, alias sep = parseString!"")(StringWithPosition input){
 		typeof(return) res;
 		res.rest = input;
 		while(true){
@@ -197,7 +229,7 @@ struct Option(T){
 		dg();
 	}
 
-	Result!(Option!(ParserType!parser)) combinateOption(alias parser)(string input){
+	Result!(Option!(ParserType!parser)) combinateOption(alias parser)(StringWithPosition input){
 		typeof(return) res;
 		res.rest = input;
 		res.match = true;
@@ -228,7 +260,7 @@ struct Option(T){
 		dg();
 	}
 
-	Result!None combinateNone(alias parser)(string input){
+	Result!None combinateNone(alias parser)(StringWithPosition input){
 		typeof(return) res;
 		auto r = parser(input);
 		if(r.match){
@@ -251,7 +283,7 @@ struct Option(T){
 		dg();
 	}
 
-	Result!None combinateAnd(alias parser)(string input){
+	Result!None combinateAnd(alias parser)(StringWithPosition input){
 		typeof(return) res;
 		res.rest = input;
 		res.match = parser(input).match;
@@ -271,7 +303,7 @@ struct Option(T){
 		dg();
 	}
 
-	Result!None combinateNot(alias parser)(string input){
+	Result!None combinateNot(alias parser)(StringWithPosition input){
 		typeof(return) res;
 		res.rest = input;
 		res.match = !parser(input).match;
@@ -291,7 +323,7 @@ struct Option(T){
 		dg();
 	}
 
-	Result!(ReturnType!(converter)) combinateConvert(alias parser, alias converter)(string input){
+	Result!(ReturnType!(converter)) combinateConvert(alias parser, alias converter)(StringWithPosition input){
 		typeof(return) res;
 		auto r = parser(input);
 		if(r.match){
@@ -324,7 +356,7 @@ struct Option(T){
 		dg();
 	}
 
-	Result!(ParserType!parser) combinateCheck(alias parser, alias checker)(string input){
+	Result!(ParserType!parser) combinateCheck(alias parser, alias checker)(StringWithPosition input){
 		typeof(return) res;
 		auto r = parser(input);
 		if(r.match && checker(r.value)){
@@ -360,16 +392,30 @@ struct Option(T){
 }
 
 /*parsers*/version(all){
-	Result!(string) parseString(string str)(string input) {
+	Result!(string) parseString(string str)(StringWithPosition input){
 		typeof(return) res;
 		if(!str.length){
 			res.match = true;
-			res.value = str;
 			res.rest = input;
-		}else if(input.length >= str.length && input[0..str.length] == str){
-			res.match = true;
-			res.value = str;
-			res.rest = input[str.length..$];
+		}else if(input.length >= str.length){
+		    size_t pos;
+		    MyString mstr = input;
+		    while(true){
+		        dchar c = decode(str, pos);
+		        auto r = mstr.get();
+		        if(c == r.c){
+                    if(pos == str.length){
+                        res.match = true;
+                        res.value = str;
+                        res.rest = r.rest;
+                        break;
+                    }else{
+                        mstr = r.rest;
+                    }
+		        }else{
+		            break;
+		        }
+		    }
 		}
 		return res;
 	}
@@ -386,16 +432,15 @@ struct Option(T){
         dg();
 	}
 
-	Result!string parseCharRange(dchar low, dchar high)(string input){
+	Result!string parseCharRange(dchar low, dchar high)(StringWithPosition input){
 		typeof(return) res;
 		res.rest = input;
 		if(input.length > 0){
-			size_t i;
-			dchar c = decode(input, i);
-			if(low <= c && c <= high){
+			auto r = input.get();
+			if(low <= r.c && r.c <= high){
 				res.match = true;
-				res.value = input[0..i];
-				res.rest = input[i..$];
+				res.value = input.str[0..r.size];
+				res.rest = r.rest;
 			}
 		}
 		return res;
@@ -419,7 +464,7 @@ struct Option(T){
         dg();
 	}
 
-	Result!string parseAnyChar(string input){
+	Result!string parseAnyChar(StringWithPosition input){
 		typeof(return) res;
 		res.rest = input;
 		if(input.length > 0){
@@ -448,7 +493,7 @@ struct Option(T){
         dg();
 	}
 
-	Result!string parseEscapeSequence(string input){
+	Result!string parseEscapeSequence(StringWithPosition input){
 		typeof(return) res;
 		res.rest = input;
 		if(input.length > 0){
@@ -498,7 +543,7 @@ struct Option(T){
         dg();
 	}
 
-	Result!string parseSpace(string input){
+	Result!string parseSpace(StringWithPosition input){
 		typeof(return) res;
 		if(input.length > 0 && (input[0] == ' ' || input[0] == '\n' || input[0] == '\t' || input[0] == '\r' || input[0] == '\f')){
 			res.match = true;
@@ -536,7 +581,7 @@ struct Option(T){
         dg();
 	}
 
-	Result!None parseEOF(string input){
+	Result!None parseEOF(StringWithPosition input){
 		typeof(return) res;
 		if(input.length == 0){
 			res.match = true;
