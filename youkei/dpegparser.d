@@ -4,7 +4,16 @@ import std.traits;
 import std.typecons;
 import std.functional;
 
-alias std.functional.memoize memoize;
+ReturnType!fun memoizeInput(alias fun)(string input){
+    static ReturnType!fun[uint] memo;
+    auto p = cast(uint)input.ptr in memo;
+    if(p){
+        return *p;
+    }
+    auto res = fun(input);
+    memo[cast(uint)input.ptr] = res;
+    return res;
+}
 
 alias Tuple!() None;
 
@@ -560,7 +569,7 @@ template getSource(string src){
 
 template makeCompilers(bool isMemoize){
 	string fix(string parser){
-		return isMemoize ? "memoize!(" ~ parser ~ ",uint.max)" : parser;
+		return isMemoize ? "memoizeInput!(" ~ parser ~ ")" : parser;
 	}
 
 	Result!string defs(string input){
@@ -593,27 +602,27 @@ template makeCompilers(bool isMemoize){
 				assert(
 					r.value ==
 					"Result!(bool) hoge(string input){"
-						"return memoize!(combinateConvert!("
-							"memoize!(combinateSequence!("
-								"memoize!(combinateNone!("
-									"memoize!(parseString!\"hello\",uint.max)"
-								"),uint.max),"
-								"memoize!(parseEOF,uint.max)"
-							"),uint.max),"
+						"return memoizeInput!(combinateConvert!("
+							"memoizeInput!(combinateSequence!("
+								"memoizeInput!(combinateNone!("
+									"memoizeInput!(parseString!\"hello\")"
+								")),"
+								"memoizeInput!(parseEOF)"
+							")),"
 							"function(){"
 								"return false;"
 							"}"
-						"),uint.max)(input);"
+						"))(input);"
 					"}"
 					"Result!(Tuple!piyo) hoge2(string input){"
-						"return memoize!(combinateConvert!("
-							"memoize!(combinateMore0!("
-								"memoize!(hoge,uint.max)"
-							"),uint.max),"
+						"return memoizeInput!(combinateConvert!("
+							"memoizeInput!(combinateMore0!("
+								"memoizeInput!(hoge)"
+							")),"
 							"function(){"
 								"return tuple(\"foo\");"
 							"}"
-						"),uint.max)(input);"
+						"))(input);"
 					"}"
 				);
 			}else{
@@ -684,17 +693,17 @@ template makeCompilers(bool isMemoize){
 				assert(
 					r.value ==
 					"Result!(bool) hoge(string input){"
-						"return memoize!(combinateConvert!("
-							"memoize!(combinateSequence!("
-								"memoize!(combinateNone!("
-									"memoize!(parseString!\"hello\",uint.max)"
-								"),uint.max),"
-								"memoize!(parseEOF,uint.max)"
-							"),uint.max),"
+						"return memoizeInput!(combinateConvert!("
+							"memoizeInput!(combinateSequence!("
+								"memoizeInput!(combinateNone!("
+									"memoizeInput!(parseString!\"hello\")"
+								")),"
+								"memoizeInput!(parseEOF)"
+							")),"
 							"function(){"
 								"return false;"
 							"}"
-						"),uint.max)(input);"
+						"))(input);"
 					"}"
 				);
 			}else{
@@ -754,17 +763,17 @@ template makeCompilers(bool isMemoize){
 			static if(isMemoize){
 				assert(
 					r.value ==
-					"memoize!(combinateConvert!("
-						"memoize!(combinateSequence!("
-							"memoize!(combinateNone!("
-								"memoize!(parseString!\"hello\",uint.max)"
-							"),uint.max),"
-							"memoize!(parseEOF,uint.max)"
-						"),uint.max),"
+					"memoizeInput!(combinateConvert!("
+						"memoizeInput!(combinateSequence!("
+							"memoizeInput!(combinateNone!("
+								"memoizeInput!(parseString!\"hello\")"
+							")),"
+							"memoizeInput!(parseEOF)"
+						")),"
 						"function(){"
 							"return false;"
 						"}"
-					"),uint.max)"
+					"))"
 				);
 			}else{
 				assert(
@@ -821,20 +830,20 @@ template makeCompilers(bool isMemoize){
 			static if(isMemoize){
 				assert(
 					r1.value ==
-					"memoize!(combinateChoice!("
-						"memoize!(combinateMore0!("
-							"memoize!(combinateNone!("
-								"memoize!(parseEOF,uint.max)"
-							"),uint.max)"
-						"),uint.max),"
-						"memoize!(combinateOption!("
-							"memoize!(combinateAnd!("
-								"memoize!(combinateNot!("
-									"memoize!(parseString!\"a\",uint.max)"
-								"),uint.max)"
-							"),uint.max)"
-						"),uint.max)"
-					"),uint.max)"
+					"memoizeInput!(combinateChoice!("
+						"memoizeInput!(combinateMore0!("
+							"memoizeInput!(combinateNone!("
+								"memoizeInput!(parseEOF)"
+							"))"
+						")),"
+						"memoizeInput!(combinateOption!("
+							"memoizeInput!(combinateAnd!("
+								"memoizeInput!(combinateNot!("
+									"memoizeInput!(parseString!\"a\")"
+								"))"
+							"))"
+						"))"
+					"))"
 				);
 			}else{
 				assert(
@@ -861,12 +870,12 @@ template makeCompilers(bool isMemoize){
 			static if(isMemoize){
 				assert(
 					r2.value ==
-					"memoize!(combinateSequence!("
-						"memoize!(combinateNone!("
-							"memoize!(parseString!\"hello\",uint.max)"
-						"),uint.max),"
-						"memoize!(parseEOF,uint.max)"
-					"),uint.max)"
+					"memoizeInput!(combinateSequence!("
+						"memoizeInput!(combinateNone!("
+							"memoizeInput!(parseString!\"hello\")"
+						")),"
+						"memoizeInput!(parseEOF)"
+					"))"
 				);
 			}else{
 				assert(
@@ -909,20 +918,20 @@ template makeCompilers(bool isMemoize){
 			static if(isMemoize){
 				assert(
 					r1.value ==
-					"memoize!(combinateSequence!("
-						"memoize!(combinateMore0!("
-							"memoize!(combinateNone!("
-								"memoize!(parseEOF,uint.max)"
-							"),uint.max)"
-						"),uint.max),"
-						"memoize!(combinateOption!("
-							"memoize!(combinateAnd!("
-								"memoize!(combinateNot!("
-									"memoize!(parseEOF,uint.max)"
-								"),uint.max)"
-							"),uint.max)"
-						"),uint.max)"
-					"),uint.max)"
+					"memoizeInput!(combinateSequence!("
+						"memoizeInput!(combinateMore0!("
+							"memoizeInput!(combinateNone!("
+								"memoizeInput!(parseEOF)"
+							"))"
+						")),"
+						"memoizeInput!(combinateOption!("
+							"memoizeInput!(combinateAnd!("
+								"memoizeInput!(combinateNot!("
+									"memoizeInput!(parseEOF)"
+								"))"
+							"))"
+						"))"
+					"))"
 				);
 			}else{
 				assert(
@@ -949,12 +958,12 @@ template makeCompilers(bool isMemoize){
 			static if(isMemoize){
 				assert(
 					r2.value ==
-					"memoize!(combinateSequence!("
-						"memoize!(combinateNone!("
-							"memoize!(parseString!\"hello\",uint.max)"
-						"),uint.max),"
-						"memoize!(parseEOF,uint.max)"
-					"),uint.max)"
+					"memoizeInput!(combinateSequence!("
+						"memoizeInput!(combinateNone!("
+							"memoizeInput!(parseString!\"hello\")"
+						")),"
+						"memoizeInput!(parseEOF)"
+					"))"
 				);
 			}else{
 				assert(
@@ -1002,13 +1011,13 @@ template makeCompilers(bool isMemoize){
 			static if(isMemoize){
 				assert(
 					r1.value ==
-					"memoize!(combinateOption!("
-						"memoize!(combinateAnd!("
-							"memoize!(combinateNot!("
-								"memoize!(parseString!\"hello\",uint.max)"
-							"),uint.max)"
-						"),uint.max)"
-					"),uint.max)"
+					"memoizeInput!(combinateOption!("
+						"memoizeInput!(combinateAnd!("
+							"memoizeInput!(combinateNot!("
+								"memoizeInput!(parseString!\"hello\")"
+							"))"
+						"))"
+					"))"
 				);
 			}else{
 				assert(
@@ -1081,11 +1090,11 @@ template makeCompilers(bool isMemoize){
 			static if(isMemoize){
 				assert(
 					r1.value ==
-					"memoize!(combinateMore0!("
-						"memoize!(combinateNone!("
-							"memoize!(parseEOF,uint.max)"
-						"),uint.max)"
-					"),uint.max)"
+					"memoizeInput!(combinateMore0!("
+						"memoizeInput!(combinateNone!("
+							"memoizeInput!(parseEOF)"
+						"))"
+					"))"
 				);
 			}else{
 				assert(
@@ -1138,9 +1147,9 @@ template makeCompilers(bool isMemoize){
 			static if(isMemoize){
 				assert(
 					r1.value ==
-					"memoize!(combinateNone!("
-						"memoize!(parseEOF,uint.max)"
-					"),uint.max)"
+					"memoizeInput!(combinateNone!("
+						"memoizeInput!(parseEOF)"
+					"))"
 				);
 			}else{
 				assert(
@@ -1180,22 +1189,22 @@ template makeCompilers(bool isMemoize){
 				assert(r1.rest == "");
 				assert(
 					r1.value ==
-					"memoize!(combinateOption!("
-						"memoize!(combinateAnd!("
-							"memoize!(combinateNot!("
-								"memoize!(parseEOF,uint.max)"
-							"),uint.max)"
-						"),uint.max)"
-					"),uint.max)"
+					"memoizeInput!(combinateOption!("
+						"memoizeInput!(combinateAnd!("
+							"memoizeInput!(combinateNot!("
+								"memoizeInput!(parseEOF)"
+							"))"
+						"))"
+					"))"
 				);
 				auto r2 = primaryExp("int");
 				assert(r2.match);
 				assert(r2.rest == "");
-				assert(r2.value == "memoize!(int,uint.max)");
+				assert(r2.value == "memoizeInput!(int)");
 				auto r3 = primaryExp("select!(true)(\"true\", \"false\")");
 				assert(r3.match);
 				assert(r3.rest == "");
-				assert(r3.value == "memoize!(select!(true)(\"true\", \"false\"),uint.max)");
+				assert(r3.value == "memoizeInput!(select!(true)(\"true\", \"false\"))");
 				auto rn = primaryExp("###縺薙・繧ｳ繝｡繝ｳ繝医・陦ｨ遉ｺ縺輔ｌ縺ｾ縺帙ｓ###");
 				assert(!rn.match);
 			}else{
@@ -1244,7 +1253,7 @@ template makeCompilers(bool isMemoize){
 			assert(r1.match);
 			assert(r1.rest == "");
 			static if(isMemoize){
-				assert(r1.value == "memoize!(parseString!\"hello\nworld\",uint.max)");
+				assert(r1.value == "memoizeInput!(parseString!\"hello\nworld\")");
 			}else{
 				assert(r1.value == "parseString!\"hello\nworld\"");
 			}
@@ -1252,7 +1261,7 @@ template makeCompilers(bool isMemoize){
 			assert(r2.match);
 			assert(r2.rest == "");
 			static if(isMemoize){
-				assert(r2.value == "memoize!(parseCharRange!('a','z'),uint.max)");
+				assert(r2.value == "memoizeInput!(parseCharRange!('a','z'))");
 			}else{
 				assert(r2.value == "parseCharRange!('a','z')");
 			}
@@ -1260,7 +1269,7 @@ template makeCompilers(bool isMemoize){
 			assert(r3.match);
 			assert(r3.rest == "");
 			static if(isMemoize){
-				assert(r3.value == "memoize!(parseSpace,uint.max)");
+				assert(r3.value == "memoizeInput!(parseSpace)");
 			}else{
 				assert(r3.value == "parseSpace");
 			}
@@ -1268,7 +1277,7 @@ template makeCompilers(bool isMemoize){
 			assert(r4.match);
 			assert(r4.rest == "");
 			static if(isMemoize){
-				assert(r4.value == "memoize!(parseEscapeSequence,uint.max)");
+				assert(r4.value == "memoizeInput!(parseEscapeSequence)");
 			}else{
 				assert(r4.value == "parseEscapeSequence");
 			}
@@ -1276,7 +1285,7 @@ template makeCompilers(bool isMemoize){
 			assert(r5.match);
 			assert(r5.rest == "");
 			static if(isMemoize){
-				assert(r5.value == "memoize!(parseAnyChar,uint.max)");
+				assert(r5.value == "memoizeInput!(parseAnyChar)");
 			}else{
 				assert(r5.value == "parseAnyChar");
 			}
@@ -1284,7 +1293,7 @@ template makeCompilers(bool isMemoize){
 			assert(r6.match);
 			assert(r6.rest == "");
 			static if(isMemoize){
-				assert(r6.value == "memoize!(parseSpaces,uint.max)");
+				assert(r6.value == "memoizeInput!(parseSpaces)");
 			}else{
 				assert(r6.value == "parseSpaces");
 			}
@@ -1292,7 +1301,7 @@ template makeCompilers(bool isMemoize){
 			assert(r7.match);
 			assert(r7.rest == "");
 			static if(isMemoize){
-				assert(r7.value == "memoize!(parseEOF,uint.max)");
+				assert(r7.value == "memoizeInput!(parseEOF)");
 			}else{
 				assert(r7.value == "parseEOF");
 			}
@@ -1337,7 +1346,7 @@ template makeCompilers(bool isMemoize){
 			assert(r1.match);
 			assert(r1.rest == " ");
 			static if(isMemoize){
-				assert(r1.value == "memoize!(parseString!\"hello\nworld\",uint.max)");
+				assert(r1.value == "memoizeInput!(parseString!\"hello\nworld\")");
 			}else{
 				assert(r1.value == "parseString!\"hello\nworld\"");
 			}
@@ -1419,7 +1428,7 @@ template makeCompilers(bool isMemoize){
 			assert(r1.match);
 			assert(r1.rest == "");
 			static if(isMemoize){
-				assert(r1.value == "memoize!(parseCharRange!('a','z'),uint.max)");
+				assert(r1.value == "memoizeInput!(parseCharRange!('a','z'))");
 			}else{
 				assert(r1.value == "parseCharRange!('a','z')");
 			}
@@ -1429,11 +1438,11 @@ template makeCompilers(bool isMemoize){
 			static if(isMemoize){
 				assert(
 					r2.value ==
-					"memoize!(combinateChoice!("
-						"memoize!(parseCharRange!('a','z'),uint.max),"
-						"memoize!(parseCharRange!('A','Z'),uint.max),"
-						"memoize!(parseString!\"_\",uint.max)"
-					"),uint.max)"
+					"memoizeInput!(combinateChoice!("
+						"memoizeInput!(parseCharRange!('a','z')),"
+						"memoizeInput!(parseCharRange!('A','Z')),"
+						"memoizeInput!(parseString!\"_\")"
+					"))"
 				);
 			}else{
 				assert(
@@ -1468,7 +1477,7 @@ template makeCompilers(bool isMemoize){
 			assert(r1.match);
 			assert(r1.rest == "");
 			static if(isMemoize){
-				assert(r1.value == "memoize!(parseEOF,uint.max)");
+				assert(r1.value == "memoizeInput!(parseEOF)");
 			}else{
 				assert(r1.value == "parseEOF");
 			}
@@ -1509,7 +1518,7 @@ template makeCompilers(bool isMemoize){
 			assert(r1.match);
 			assert(r1.rest == "");
 			static if(isMemoize){
-				assert(r1.value == "memoize!(parseSpace,uint.max)");
+				assert(r1.value == "memoizeInput!(parseSpace)");
 			} else{
 				assert(r1.value == "parseSpace");
 			}
@@ -1517,7 +1526,7 @@ template makeCompilers(bool isMemoize){
 			assert(r2.match);
 			assert(r2.rest == "");
 			static if(isMemoize){
-				assert(r2.value == "memoize!(parseEscapeSequence,uint.max)");
+				assert(r2.value == "memoizeInput!(parseEscapeSequence)");
 			}else{
 				assert(r2.value == "parseEscapeSequence");
 			}
@@ -1525,7 +1534,7 @@ template makeCompilers(bool isMemoize){
 			assert(r3.match);
 			assert(r3.rest == "");
 			static if(isMemoize){
-				assert(r3.value == "memoize!(parseAnyChar,uint.max)");
+				assert(r3.value == "memoizeInput!(parseAnyChar)");
 			}else{
 				assert(r3.value == "parseAnyChar");
 			}
@@ -1533,7 +1542,7 @@ template makeCompilers(bool isMemoize){
 			assert(r4.match);
 			assert(r4.rest == "");
 			static if(isMemoize){
-				assert(r4.value == "memoize!(parseSpaces,uint.max)");
+				assert(r4.value == "memoizeInput!(parseSpaces)");
 			}else{
 				assert(r4.value == "parseSpaces");
 			}
@@ -1593,7 +1602,7 @@ template makeCompilers(bool isMemoize){
 			assert(r1.match);
 			assert(r1.rest == "");
 			static if(isMemoize){
-				assert(r1.value == "memoize!(int,uint.max)");
+				assert(r1.value == "memoizeInput!(int)");
 			}else{
 				assert(r1.value == "int");
 			}
@@ -1601,7 +1610,7 @@ template makeCompilers(bool isMemoize){
 			assert(r2.match);
 			assert(r2.rest == "");
 			static if(isMemoize){
-				assert(r2.value == "memoize!(select!(true)(\"true\", \"false\"),uint.max)");
+				assert(r2.value == "memoizeInput!(select!(true)(\"true\", \"false\"))");
 			}else{
 				assert(r2.value == "select!(true)(\"true\", \"false\")");
 			}
@@ -1951,56 +1960,59 @@ dchar decode(string str, ref size_t i){
 
 debug(dpegparser) public:
 
-mixin dpeg!q{
-	int addExp = mulExp (("+" / "-")  addExp)? >> (int lhs, Option!(Tuple!(string, int)) rhs){
-		if(rhs.some){
-			final switch(rhs.value[0]){
-				case "+":
-					return lhs + rhs.value[1];
-				case "-":
-					return lhs - rhs.value[1];
-			}
-		}else{
-			return lhs;
-		}
-	};
-
-	int mulExp = primary (("*" / "/")  mulExp)? >> (int lhs, Option!(Tuple!(string, int)) rhs){
-		if(rhs.some){
-			final switch(rhs.value[0]){
-				case "*":
-					return lhs * rhs.value[1];
-				case "/":
-					return lhs / rhs.value[1];
-			}
-		}else{
-			return lhs;
-		}
-	};
-
-	int primary = ^"(" addExp ^")" / num;
-
-	int num = [0-9]+ >> (string[] nums){
-		int result;
-		foreach(i, num;nums){
-			result = result * 10 + (num[0] - '0');
-		}
-		return result;
-	};
-
-    None A = B $;
-
-    None B = ^"a" ^B ^"a" / ^"a";
-};
-
 unittest{
-	assert(addExp("5*8+3*20").value == 100);
-	assert( A("a").match);
-	assert( A("aaa").match);
-	assert(!A("aaaaa").match);
-	assert( A("aaaaaaa").match);
-	assert(!A("aaaaaaaaa").match);
-	assert(!A("aaaaaaaaaaa").match);
-	assert(!A("aaaaaaaaaaaaa").match);
-    assert( A("aaaaaaaaaaaaaaa").match);
+    struct parser{
+        static mixin dpeg!q{
+            int addExp = mulExp (("+" / "-")  addExp)? >> (int lhs, Option!(Tuple!(string, int)) rhs){
+                if(rhs.some){
+                    final switch(rhs.value[0]){
+                        case "+":
+                            return lhs + rhs.value[1];
+                        case "-":
+                            return lhs - rhs.value[1];
+                    }
+                }else{
+                    return lhs;
+                }
+            };
+
+            int mulExp = primary (("*" / "/")  mulExp)? >> (int lhs, Option!(Tuple!(string, int)) rhs){
+                if(rhs.some){
+                    final switch(rhs.value[0]){
+                        case "*":
+                            return lhs * rhs.value[1];
+                        case "/":
+                            return lhs / rhs.value[1];
+                    }
+                }else{
+                    return lhs;
+                }
+            };
+
+            int primary = ^"(" addExp ^")" / num;
+
+            int num = [0-9]+ >> (string[] nums){
+                int result;
+                foreach(i, num;nums){
+                    result = result * 10 + (num[0] - '0');
+                }
+                return result;
+            };
+
+            None A = B $;
+
+            None B = ^"a" ^B ^"a" / ^"a";
+        };
+    }
+
+	assert( parser.addExp("5*8+3*20").value == 100);
+	assert( parser.addExp("5*(8+3)*20").value == 1100);
+	assert( parser.A("a").match);
+	assert( parser.A("aaa").match);
+	assert(!parser.A("aaaaa").match);
+	assert( parser.A("aaaaaaa").match);
+	assert(!parser.A("aaaaaaaaa").match);
+	assert(!parser.A("aaaaaaaaaaa").match);
+	assert(!parser.A("aaaaaaaaaaaaa").match);
+    assert( parser.A("aaaaaaaaaaaaaaa").match);
 }
