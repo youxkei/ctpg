@@ -4,7 +4,7 @@ import std.traits;
 import std.typecons;
 import std.functional;
 
-ReturnType!fun memoizeInput(alias fun)(StringWithPosition input){
+ReturnType!fun memoizeInput(alias fun)(stringp input){
     static ReturnType!fun[size_t] memo;
     auto p = cast(size_t)input.str.ptr in memo;
     if(p){
@@ -17,17 +17,64 @@ ReturnType!fun memoizeInput(alias fun)(StringWithPosition input){
 
 alias Tuple!() None;
 
+struct stringp{
+    invariant(){
+        assert(line >= 0);
+        assert(column >= 0);
+    }
+
+    const immutable(char) opIndex(size_t i){
+        return str[i];
+    }
+
+    const typeof(this) opSlice(size_t x, size_t y){
+        typeof(return) res;
+        res.str = str[x..y];
+        res.line = line;
+        res.column = column;
+        for(size_t i; i < x; i++){
+            if(str[i] == '\n'){
+                res.line++;
+                res.column = 0;
+            }else{
+                res.column++;
+            }
+        }
+        return res;
+    }
+
+    bool opEquals(T)(T rhs)if(is(T == string)){
+        return str == rhs;
+    }
+
+    @property size_t length(){
+        return str.length;
+    }
+
+    dchar decode(ref size_t i){
+        return .decode(str, i);
+    }
+
+    @property string to(){
+        return str;
+    }
+
+    string str;
+    int line;
+    int column;
+}
+
 struct Result(T){
 	bool match;
 	T value;
-	StringWithPosition rest;
+	stringp rest;
 	Error error;
 
 	void opAssign(F)(Result!F rhs) if(isAssignable!(T, F)){
 		match = rhs.match;
 		value = rhs.value;
 		rest = rhs.rest;
-		error = error;
+		error = rhs.error;
 	}
 }
 
@@ -39,42 +86,16 @@ struct Option(T){
 	}
 }
 
-struct StringWithPosition{
-    invariant(){
-        assert(line >= 0);
-        assert(column >= 0);
-    }
-
-    Tuple!(size_t, "size", dchar, "c", StringWithPosition, "rest") get(){
-        typeof(return) res;
-        res.c = decode(str, res.size);
-        res.rest.str = str[res.size..$];
-        if(res.c == '\n'){
-            res.rest.line = line + 1;
-            res.rest.column = 0;
-        }else{
-            res.rest.line = line;
-            res.rest.column = column + 1;
-        }
-        return res;
-    }
-
-    @property size_t length(){
-        return str.length;
-    }
-
-    string str;
-    int line;
-    int column;
+struct Error{
 }
 
 /*combinators*/version(all){
-	UnTuple!(CombinateSequenceImplType!parsers) combinateSequence(parsers...)(StringWithPosition input){
+	UnTuple!(CombinateSequenceImplType!parsers) combinateSequence(parsers...)(stringp input){
 		static assert(staticLength!parsers > 0);
 		return unTuple(combinateSequenceImpl!parsers(input));
 	}
 
-	private CombinateSequenceImplType!parsers combinateSequenceImpl(parsers...)(StringWithPosition input){
+	private CombinateSequenceImplType!parsers combinateSequenceImpl(parsers...)(stringp input){
 		typeof(return) res;
 		static if(staticLength!parsers == 1){
 			auto r = parsers[0](input);
@@ -111,7 +132,7 @@ struct StringWithPosition{
 			auto r = combinateSequence!(
 				parseString!("hello"),
 				parseString!("world")
-			)("helloworld");
+			)("helloworld".s);
 			assert(r.match);
 			assert(r.rest == "");
 			assert(r.value[0] == "hello");
@@ -122,7 +143,7 @@ struct StringWithPosition{
 					parseString!("world")
 				),
 				parseString!"!"
-			)("helloworld!");
+			)("helloworld!".s);
 			assert(r2.match);
 			assert(r2.rest == "");
 			assert(r2.value[0] == "hello");
@@ -134,7 +155,7 @@ struct StringWithPosition{
 		dg();
 	}
 
-	Result!(CommonParserType!parsers) combinateChoice(parsers...)(StringWithPosition input){
+	Result!(CommonParserType!parsers) combinateChoice(parsers...)(stringp input){
 		static assert(staticLength!parsers > 0);
 		static if(staticLength!parsers == 1){
 			return parsers[0](input);
@@ -157,15 +178,15 @@ struct StringWithPosition{
 	debug(dpegparser) unittest{
 		enum dg = {
 			alias combinateChoice!(parseString!"h",parseString!"w") p;
-			auto r1 = p("hw");
+			auto r1 = p("hw".s);
 			assert(r1.match);
 			assert(r1.rest == "w");
 			assert(r1.value == "h");
-			auto r2 = p("w");
+			auto r2 = p("w".s);
 			assert(r2.match);
 			assert(r2.rest == "");
 			assert(r2.value == "w");
-			auto r3 = p("");
+			auto r3 = p("".s);
 			assert(!r3.match);
 			return true;
 		};
@@ -173,7 +194,7 @@ struct StringWithPosition{
 		dg();
 	}
 
-	Result!(ParserType!parser[]) combinateMore(int n, alias parser, alias sep = parseString!"")(StringWithPosition input){
+	Result!(ParserType!parser[]) combinateMore(int n, alias parser, alias sep = parseString!"")(stringp input){
 		typeof(return) res;
 		res.rest = input;
 		while(true){
@@ -208,20 +229,20 @@ struct StringWithPosition{
 	debug(dpegparser) unittest{
 		enum dg = {
 			alias combinateMore!(0, parseString!"w") p;
-			auto r1 = p("wwwwwwwww w");
+			auto r1 = p("wwwwwwwww w".s);
 			assert(r1.match);
 			assert(r1.rest == " w");
 			assert(r1.value.mkString() == "wwwwwwwww");
-			auto r2 = p(" w");
+			auto r2 = p(" w".s);
 			assert(r2.match);
 			assert(r2.rest == " w");
 			assert(r2.value.mkString == "");
 			alias combinateMore!(1, parseString!"w") p2;
-			auto r3 = p2("wwwwwwwww w");
+			auto r3 = p2("wwwwwwwww w".s);
 			assert(r3.match);
 			assert(r3.rest == " w");
 			assert(r3.value.mkString() == "wwwwwwwww");
-			auto r4 = p2(" w");
+			auto r4 = p2(" w".s);
 			assert(!r4.match);
 			return true;
 		};
@@ -229,7 +250,7 @@ struct StringWithPosition{
 		dg();
 	}
 
-	Result!(Option!(ParserType!parser)) combinateOption(alias parser)(StringWithPosition input){
+	Result!(Option!(ParserType!parser)) combinateOption(alias parser)(stringp input){
 		typeof(return) res;
 		res.rest = input;
 		res.match = true;
@@ -245,12 +266,12 @@ struct StringWithPosition{
 	debug(dpegparser) unittest{
 		enum dg = {
 			alias combinateOption!(parseString!"w") p;
-			auto r1 = p("w");
+			auto r1 = p("w".s);
 			assert(r1.match);
 			assert(r1.rest == "");
 			assert(r1.value.some);
 			assert(r1.value.value == "w");
-			auto r2 = p("");
+			auto r2 = p("".s);
 			assert(r2.match);
 			assert(r2.rest == "");
 			assert(!r2.value.some);
@@ -260,7 +281,7 @@ struct StringWithPosition{
 		dg();
 	}
 
-	Result!None combinateNone(alias parser)(StringWithPosition input){
+	Result!None combinateNone(alias parser)(stringp input){
 		typeof(return) res;
 		auto r = parser(input);
 		if(r.match){
@@ -273,7 +294,7 @@ struct StringWithPosition{
 	debug(dpegparser) unittest{
 		enum dg = {
 			alias combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")) p;
-			auto r1 = p("(w)");
+			auto r1 = p("(w)".s);
 			assert(r1.match);
 			assert(r1.rest == "");
 			assert(r1.value == "w");
@@ -283,7 +304,7 @@ struct StringWithPosition{
 		dg();
 	}
 
-	Result!None combinateAnd(alias parser)(StringWithPosition input){
+	Result!None combinateAnd(alias parser)(stringp input){
 		typeof(return) res;
 		res.rest = input;
 		res.match = parser(input).match;
@@ -293,7 +314,7 @@ struct StringWithPosition{
 	debug(dpegparser) unittest{
 		enum dg = {
 			alias combinateMore!(0, combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))) p;
-			auto r1 = p("www");
+			auto r1 = p("www".s);
 			assert(r1.match);
 			assert(r1.rest == "w");
 			assert(r1.value.mkString() == "ww");
@@ -303,7 +324,7 @@ struct StringWithPosition{
 		dg();
 	}
 
-	Result!None combinateNot(alias parser)(StringWithPosition input){
+	Result!None combinateNot(alias parser)(stringp input){
 		typeof(return) res;
 		res.rest = input;
 		res.match = !parser(input).match;
@@ -313,7 +334,7 @@ struct StringWithPosition{
 	debug(dpegparser) unittest{
 		enum dg = {
 			alias combinateMore!(0, combinateSequence!(parseString!"w", combinateNot!(parseString!"s"))) p;
-			auto r1 = p("wwws");
+			auto r1 = p("wwws".s);
 			assert(r1.match);
 			assert(r1.rest == "ws");
 			assert(r1.value.mkString() == "ww");
@@ -323,7 +344,7 @@ struct StringWithPosition{
 		dg();
 	}
 
-	Result!(ReturnType!(converter)) combinateConvert(alias parser, alias converter)(StringWithPosition input){
+	Result!(ReturnType!(converter)) combinateConvert(alias parser, alias converter)(stringp input){
 		typeof(return) res;
 		auto r = parser(input);
 		if(r.match){
@@ -346,7 +367,7 @@ struct StringWithPosition{
 					return ws.length;
 				}
 			) p;
-			auto r1 = p("www");
+			auto r1 = p("www".s);
 			assert(r1.match);
 			assert(r1.rest == "");
 			assert(r1.value == 3);
@@ -356,7 +377,7 @@ struct StringWithPosition{
 		dg();
 	}
 
-	Result!(ParserType!parser) combinateCheck(alias parser, alias checker)(StringWithPosition input){
+	Result!(ParserType!parser) combinateCheck(alias parser, alias checker)(stringp input){
 		typeof(return) res;
 		auto r = parser(input);
 		if(r.match && checker(r.value)){
@@ -378,11 +399,11 @@ struct StringWithPosition{
 					return ws.mkString();
 				}
 			) p;
-			auto r1 = p("wwwww");
+			auto r1 = p("wwwww".s);
 			assert(r1.match);
 			assert(r1.value == "wwwww");
 			assert(r1.rest == "");
-			auto r2 = p("wwww");
+			auto r2 = p("wwww".s);
 			assert(!r2.match);
 			return true;
 		};
@@ -392,37 +413,22 @@ struct StringWithPosition{
 }
 
 /*parsers*/version(all){
-	Result!(string) parseString(string str)(StringWithPosition input){
+	Result!(string) parseString(string str)(stringp input){
 		typeof(return) res;
 		if(!str.length){
 			res.match = true;
 			res.rest = input;
-		}else if(input.length >= str.length){
-		    size_t pos;
-		    MyString mstr = input;
-		    while(true){
-		        dchar c = decode(str, pos);
-		        auto r = mstr.get();
-		        if(c == r.c){
-                    if(pos == str.length){
-                        res.match = true;
-                        res.value = str;
-                        res.rest = r.rest;
-                        break;
-                    }else{
-                        mstr = r.rest;
-                    }
-		        }else{
-		            break;
-		        }
-		    }
+		}else if(input.length >= str.length && input[0..str.length] == str){
+		    res.match = true;
+		    res.value = str;
+		    res.rest = input[str.length..input.length];
 		}
 		return res;
 	}
 
 	debug(dpegparser) unittest{
 		enum dg = {
-            auto r = parseString!"hello"("hello world");
+            auto r = parseString!"hello"("hello world".s);
             assert(r.match);
             assert(r.rest == " world");
             assert(r.value == "hello");
@@ -432,15 +438,16 @@ struct StringWithPosition{
         dg();
 	}
 
-	Result!string parseCharRange(dchar low, dchar high)(StringWithPosition input){
+	Result!string parseCharRange(dchar low, dchar high)(stringp input){
 		typeof(return) res;
 		res.rest = input;
 		if(input.length > 0){
-			auto r = input.get();
-			if(low <= r.c && r.c <= high){
+		    size_t i;
+			dchar c = input.decode(i);
+			if(low <= c && c <= high){
 				res.match = true;
-				res.value = input.str[0..r.size];
-				res.rest = r.rest;
+				res.value = input[0..i].to;
+				res.rest = input[i..input.length];
 			}
 		}
 		return res;
@@ -448,15 +455,15 @@ struct StringWithPosition{
 
 	debug(dpegparser) unittest{
 		enum dg = {
-            auto r = parseCharRange!('a', 'z')("hoge");
+            auto r = parseCharRange!('a', 'z')("hoge".s);
             assert(r.match);
             assert(r.rest == "oge");
             assert(r.value == "h");
-            auto r2 = parseCharRange!('\u0100', '\U0010FFFF')("はろーわーるど");
+            auto r2 = parseCharRange!('\u0100', '\U0010FFFF')("はろーわーるど".s);
             assert(r2.match);
             assert(r2.rest == "ろーわーるど");
             assert(r2.value == "は");
-            auto r3 = parseCharRange!('\u0100', '\U0010FFFF')("hello world");
+            auto r3 = parseCharRange!('\u0100', '\U0010FFFF')("hello world".s);
             assert(!r3.match);
             return true;
 		};
@@ -464,26 +471,26 @@ struct StringWithPosition{
         dg();
 	}
 
-	Result!string parseAnyChar(StringWithPosition input){
+	Result!string parseAnyChar(stringp input){
 		typeof(return) res;
 		res.rest = input;
 		if(input.length > 0){
-			size_t i;
-			decode(input, i);
+		    size_t i;
+		    input.decode(i);
 			res.match = true;
-			res.value = input[0..i];
-			res.rest = input[i..$];
+			res.value = input[0..i].to;
+			res.rest = input[i..input.length];
 		}
 		return res;
 	}
 
 	debug(dpegparser) unittest{
 		enum dg = {
-            auto r = parseAnyChar("hoge");
+            auto r = parseAnyChar("hoge".s);
             assert(r.match);
             assert(r.rest == "oge");
             assert(r.value == "h");
-            auto r2 = parseAnyChar("欝だー");
+            auto r2 = parseAnyChar("欝だー".s);
             assert(r2.match);
             assert(r2.rest == "だー");
             assert(r2.value == "欝");
@@ -493,24 +500,22 @@ struct StringWithPosition{
         dg();
 	}
 
-	Result!string parseEscapeSequence(StringWithPosition input){
+	Result!string parseEscapeSequence(stringp input){
 		typeof(return) res;
 		res.rest = input;
 		if(input.length > 0){
-			size_t i;
-			auto c = decode(input, i);
-			if(c == '\\'){
+			if(input[0] == '\\'){
 				res.match = true;
-				c = decode(input, i);
+				auto c = input[1];
 				if(c == 'u'){
-					res.value = input[0..i+4];
-					res.rest = input[i+4..$];
+					res.value = input[0..6].to;
+					res.rest = input[6..input.length];
 				}else if(c == 'U'){
-					res.value = input[0..i+8];
-					res.rest = input[i+8..$];
+					res.value = input[0..10].to;
+					res.rest = input[10..input.length];
 				}else{
-					res.value = input[0..i];
-					res.rest = input[i..$];
+					res.value = input[0..2].to;
+					res.rest = input[2..input.length];
 				}
 			}
 		}
@@ -519,21 +524,21 @@ struct StringWithPosition{
 
 	debug(dpegparser) unittest{
 		enum dg = {
-            auto r = parseEscapeSequence(`\"hoge`);
+            auto r = parseEscapeSequence(`\"hoge`.s);
             assert(r.match);
             assert(r.rest == "hoge");
             assert(r.value == `\"`);
-            auto r2 = parseEscapeSequence("\\U0010FFFF");
+            auto r2 = parseEscapeSequence("\\U0010FFFF".s);
             assert(r2.match);
             assert(r2.rest == "");
             assert(r2.value == "\\U0010FFFF");
-            auto r3 = parseEscapeSequence("\\u10FF");
+            auto r3 = parseEscapeSequence("\\u10FF".s);
             assert(r3.match);
             assert(r3.rest == "");
             assert(r3.value == "\\u10FF");
-            auto r4 = parseEscapeSequence("欝");
+            auto r4 = parseEscapeSequence("欝".s);
             assert(!r4.match);
-            auto r5 = parseEscapeSequence(`\\`);
+            auto r5 = parseEscapeSequence(`\\`.s);
             assert(r5.match);
             assert(r5.rest == "");
             assert(r5.value == `\\`);
@@ -543,19 +548,19 @@ struct StringWithPosition{
         dg();
 	}
 
-	Result!string parseSpace(StringWithPosition input){
+	Result!string parseSpace(stringp input){
 		typeof(return) res;
 		if(input.length > 0 && (input[0] == ' ' || input[0] == '\n' || input[0] == '\t' || input[0] == '\r' || input[0] == '\f')){
 			res.match = true;
-			res.value = input[0..1];
-			res.rest = input[1..$];
+			res.value = input[0..1].to;
+			res.rest = input[1..input.length];
 		}
 		return res;
 	}
 
 	debug(dpegparser) unittest{
 		enum dg = {
-            auto r = parseSpace("\thoge");
+            auto r = parseSpace("\thoge".s);
             assert(r.match);
             assert(r.rest == "hoge");
             assert(r.value == "\t");
@@ -569,10 +574,10 @@ struct StringWithPosition{
 
 	debug(dpegparser) unittest{
 		enum dg = {
-            auto r1 = parseSpaces("\t \rhoge");
+            auto r1 = parseSpaces("\t \rhoge".s);
             assert(r1.match);
             assert(r1.rest == "hoge");
-            auto r2 = parseSpaces("hoge");
+            auto r2 = parseSpaces("hoge".s);
             assert(r2.match);
             assert(r2.rest == "hoge");
             return true;
@@ -581,7 +586,7 @@ struct StringWithPosition{
         dg();
 	}
 
-	Result!None parseEOF(StringWithPosition input){
+	Result!None parseEOF(stringp input){
 		typeof(return) res;
 		if(input.length == 0){
 			res.match = true;
@@ -591,7 +596,7 @@ struct StringWithPosition{
 
 	debug(dpegparser) unittest{
 		enum dg = {
-            auto r = parseEOF("");
+            auto r = parseEOF("".s);
             assert(r.match);
             return true;
 		};
@@ -601,23 +606,36 @@ struct StringWithPosition{
 }
 
 mixin template dpegWithoutMemoize(string src){
-	mixin(makeCompilers!false.defs(src).value);
+	mixin(makeCompilers!false.defs(src.s).value);
 }
 
 mixin template dpeg(string src){
-	mixin(makeCompilers!true.defs(src).value);
+	mixin(makeCompilers!true.defs(src.s).value);
 }
 
 template getSource(string src){
-	enum getSource = makeCompilers!true.defs(src);
+	enum getSource = makeCompilers!true.defs(src.s);
 }
 
 template makeCompilers(bool isMemoize){
+    enum prefix = "auto parse(string input){"
+        "auto res = root(stringp(input));"
+        "if(res.match){"
+            "return res.value;"
+        "}else{"
+            "if(__ctfe){"
+                "assert(false, q{parsing failed});"
+            "}else{"
+                "throw new Exception(q{parsing failed});"
+            "}"
+        "}"
+    "}";
+
 	string fix(string parser){
 		return isMemoize ? "memoizeInput!(" ~ parser ~ ")" : parser;
 	}
 
-	Result!string defs(string input){
+	Result!string defs(stringp input){
 		return combinateConvert!(
 			combinateSequence!(
 				parseSpaces,
@@ -629,7 +647,7 @@ template makeCompilers(bool isMemoize){
 				parseEOF
 			),
 			function(string[] defs){
-				return defs.mkString();
+				return prefix ~ defs.mkString();
 			}
 		)(input);
 	}
@@ -640,13 +658,14 @@ template makeCompilers(bool isMemoize){
 				bool hoge = ^"hello" $ >> {return false;};
 				Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
 			};
-			auto r = defs(src);
+			auto r = defs(src.s);
 			assert(r.match);
 			assert(r.rest == "");
 			static if(isMemoize){
 				assert(
 					r.value ==
-					"Result!(bool) hoge(string input){"
+					prefix ~
+					"Result!(bool) hoge(stringp input){"
 						"return memoizeInput!(combinateConvert!("
 							"memoizeInput!(combinateSequence!("
 								"memoizeInput!(combinateNone!("
@@ -659,7 +678,7 @@ template makeCompilers(bool isMemoize){
 							"}"
 						"))(input);"
 					"}"
-					"Result!(Tuple!piyo) hoge2(string input){"
+					"Result!(Tuple!piyo) hoge2(stringp input){"
 						"return memoizeInput!(combinateConvert!("
 							"memoizeInput!(combinateMore0!("
 								"memoizeInput!(hoge)"
@@ -673,7 +692,8 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(
 					r.value ==
-					"Result!(bool) hoge(string input){"
+					prefix ~
+					"Result!(bool) hoge(stringp input){"
 						"return combinateConvert!("
 							"combinateSequence!("
 								"combinateNone!("
@@ -686,7 +706,7 @@ template makeCompilers(bool isMemoize){
 							"}"
 						")(input);"
 					"}"
-					"Result!(Tuple!piyo) hoge2(string input){"
+					"Result!(Tuple!piyo) hoge2(stringp input){"
 						"return combinateConvert!("
 							"combinateMore0!("
 								"hoge"
@@ -704,7 +724,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	};
 
-	Result!string def(string input){
+	Result!string def(stringp input){
 		return combinateConvert!(
 			combinateSequence!(
 				typeName,
@@ -722,7 +742,7 @@ template makeCompilers(bool isMemoize){
 				)
 			),
 			function(string type, string name, string convExp){
-				return "Result!("~type~") "~name~"(string input){"
+				return "Result!("~type~") "~name~"(stringp input){"
 					"return "~convExp~"(input);"
 				"}";
 			}
@@ -731,13 +751,13 @@ template makeCompilers(bool isMemoize){
 
 	debug(dpegparser) unittest{
 		enum dg = {
-			auto r = def(q{bool hoge = ^"hello" $ >> {return false;};});
+			auto r = def(q{bool hoge = ^"hello" $ >> {return false;};}.s);
 			assert(r.match);
 			assert(r.rest == "");
 			static if(isMemoize){
 				assert(
 					r.value ==
-					"Result!(bool) hoge(string input){"
+					"Result!(bool) hoge(stringp input){"
 						"return memoizeInput!(combinateConvert!("
 							"memoizeInput!(combinateSequence!("
 								"memoizeInput!(combinateNone!("
@@ -754,7 +774,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(
 					r.value ==
-					"Result!(bool) hoge(string input){"
+					"Result!(bool) hoge(stringp input){"
 						"return combinateConvert!("
 							"combinateSequence!("
 								"combinateNone!("
@@ -775,7 +795,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	};
 
-	Result!string convExp(string input){
+	Result!string convExp(stringp input){
 		return combinateConvert!(
 			combinateSequence!(
 				choiceExp,
@@ -802,7 +822,7 @@ template makeCompilers(bool isMemoize){
 
 	debug(dpegparser) unittest{
 		enum dg = {
-			auto r = convExp(q{^"hello" $ >> {return false;}});
+			auto r = convExp(q{^"hello" $ >> {return false;}}.s);
 			assert(r.match);
 			assert(r.rest == "");
 			static if(isMemoize){
@@ -842,7 +862,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	}
 
-	Result!string choiceExp(string input){
+	Result!string choiceExp(stringp input){
 		return combinateConvert!(
 			combinateSequence!(
 				seqExp,
@@ -869,7 +889,7 @@ template makeCompilers(bool isMemoize){
 
 	debug(dpegparser) unittest{
 		enum dg = {
-			auto r1 = choiceExp(`^$* / (&(!"a"))?`);
+			auto r1 = choiceExp(`^$* / (&(!"a"))?`.s);
 			assert(r1.match);
 			assert(r1.rest == "");
 			static if(isMemoize){
@@ -909,7 +929,7 @@ template makeCompilers(bool isMemoize){
 					")"
 				);
 			}
-			auto r2 = choiceExp(`^"hello" $`);
+			auto r2 = choiceExp(`^"hello" $`.s);
 			assert(r2.match);
 			assert(r2.rest == "");
 			static if(isMemoize){
@@ -939,7 +959,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	}
 
-	Result!string seqExp(string input){
+	Result!string seqExp(stringp input){
 		return combinateConvert!(
 			combinateMore1!(
 				optionExp,
@@ -957,7 +977,7 @@ template makeCompilers(bool isMemoize){
 
 	debug(dpegparser) unittest{
 		enum dg = {
-			auto r1 = seqExp("^$* (&(!$))?");
+			auto r1 = seqExp("^$* (&(!$))?".s);
 			assert(r1.match);
 			assert(r1.rest == "");
 			static if(isMemoize){
@@ -997,7 +1017,7 @@ template makeCompilers(bool isMemoize){
 					")"
 				);
 			}
-			enum r2 = seqExp("^\"hello\" $");
+			enum r2 = seqExp("^\"hello\" $".s);
 			assert(r2.match);
 			assert(r2.rest == "");
 			static if(isMemoize){
@@ -1027,7 +1047,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	}
 
-	Result!string optionExp(string input){
+	Result!string optionExp(stringp input){
 		return combinateConvert!(
 			combinateSequence!(
 				postExp,
@@ -1050,7 +1070,7 @@ template makeCompilers(bool isMemoize){
 
 	debug(dpegparser) unittest{
 		enum dg = {
-			auto r1 = optionExp("(&(!\"hello\"))?");
+			auto r1 = optionExp("(&(!\"hello\"))?".s);
 			assert(r1.match);
 			assert(r1.rest == "");
 			static if(isMemoize){
@@ -1082,7 +1102,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	}
 
-	Result!string postExp(string input){
+	Result!string postExp(stringp input){
 		return combinateConvert!(
 			combinateSequence!(
 				preExp,
@@ -1129,7 +1149,7 @@ template makeCompilers(bool isMemoize){
 
 	debug(dpegparser) unittest{
 		enum dg = {
-			auto r1 = postExp("^$*");
+			auto r1 = postExp("^$*".s);
 			assert(r1.match);
 			assert(r1.rest == "");
 			static if(isMemoize){
@@ -1157,7 +1177,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	}
 
-	Result!string preExp(string input){
+	Result!string preExp(stringp input){
 		return combinateConvert!(
 			combinateSequence!(
 				combinateOption!(
@@ -1186,7 +1206,7 @@ template makeCompilers(bool isMemoize){
 
 	debug(dpegparser) unittest{
 		enum dg = {
-			auto r1 = preExp("^$");
+			auto r1 = preExp("^$".s);
 			assert(r1.match);
 			assert(r1.rest == "");
 			static if(isMemoize){
@@ -1210,7 +1230,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	}
 
-	Result!string primaryExp(string input){
+	Result!string primaryExp(stringp input){
 		return combinateChoice!(
 			literal,
 			nonterminal,
@@ -1229,7 +1249,7 @@ template makeCompilers(bool isMemoize){
 	debug(dpegparser) unittest{
 		enum dg = {
 			static if(isMemoize){
-				auto r1 = primaryExp("(&(!$)?)");
+				auto r1 = primaryExp("(&(!$)?)".s);
 				assert(r1.match);
 				assert(r1.rest == "");
 				assert(
@@ -1242,18 +1262,18 @@ template makeCompilers(bool isMemoize){
 						"))"
 					"))"
 				);
-				auto r2 = primaryExp("int");
+				auto r2 = primaryExp("int".s);
 				assert(r2.match);
 				assert(r2.rest == "");
 				assert(r2.value == "memoizeInput!(int)");
-				auto r3 = primaryExp("select!(true)(\"true\", \"false\")");
+				auto r3 = primaryExp("select!(true)(\"true\", \"false\")".s);
 				assert(r3.match);
 				assert(r3.rest == "");
 				assert(r3.value == "memoizeInput!(select!(true)(\"true\", \"false\"))");
-				auto rn = primaryExp("###縺薙・繧ｳ繝｡繝ｳ繝医・陦ｨ遉ｺ縺輔ｌ縺ｾ縺帙ｓ###");
+				auto rn = primaryExp("###縺薙・繧ｳ繝｡繝ｳ繝医・陦ｨ遉ｺ縺輔ｌ縺ｾ縺帙ｓ###".s);
 				assert(!rn.match);
 			}else{
-				auto r1 = primaryExp("(&(!$)?)");
+				auto r1 = primaryExp("(&(!$)?)".s);
 				assert(r1.match);
 				assert(r1.rest == "");
 				assert(
@@ -1266,15 +1286,15 @@ template makeCompilers(bool isMemoize){
 						")"
 					")"
 				);
-				auto r2 = primaryExp("int");
+				auto r2 = primaryExp("int".s);
 				assert(r2.match);
 				assert(r2.rest == "");
 				assert(r2.value == "int");
-				auto r3 = primaryExp("select!(true)(\"true\", \"false\")");
+				auto r3 = primaryExp("select!(true)(\"true\", \"false\")".s);
 				assert(r3.match);
 				assert(r3.rest == "");
 				assert(r3.value == "select!(true)(\"true\", \"false\")");
-				auto rn = primaryExp("###縺薙・繧ｳ繝｡繝ｳ繝医・陦ｨ遉ｺ縺輔ｌ縺ｾ縺帙ｓ###");
+				auto rn = primaryExp("###縺薙・繧ｳ繝｡繝ｳ繝医・陦ｨ遉ｺ縺輔ｌ縺ｾ縺帙ｓ###".s);
 				assert(!rn.match);
 			}
 			return true;
@@ -1283,7 +1303,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	}
 
-	Result!string literal(string input){
+	Result!string literal(stringp input){
 		return combinateChoice!(
 			rangeLit,
 			stringLit,
@@ -1294,7 +1314,7 @@ template makeCompilers(bool isMemoize){
 
 	debug(dpegparser) unittest{
 		enum dg = {
-			auto r1 = literal("\"hello\nworld\"");
+			auto r1 = literal("\"hello\nworld\"".s);
 			assert(r1.match);
 			assert(r1.rest == "");
 			static if(isMemoize){
@@ -1302,7 +1322,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r1.value == "parseString!\"hello\nworld\"");
 			}
-			auto r2 = literal("[a-z]");
+			auto r2 = literal("[a-z]".s);
 			assert(r2.match);
 			assert(r2.rest == "");
 			static if(isMemoize){
@@ -1310,7 +1330,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r2.value == "parseCharRange!('a','z')");
 			}
-			auto r3 = usefulLit("@space");
+			auto r3 = usefulLit("@space".s);
 			assert(r3.match);
 			assert(r3.rest == "");
 			static if(isMemoize){
@@ -1318,7 +1338,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r3.value == "parseSpace");
 			}
-			auto r4 = usefulLit("@es");
+			auto r4 = usefulLit("@es".s);
 			assert(r4.match);
 			assert(r4.rest == "");
 			static if(isMemoize){
@@ -1326,7 +1346,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r4.value == "parseEscapeSequence");
 			}
-			auto r5 = usefulLit("@a");
+			auto r5 = usefulLit("@a".s);
 			assert(r5.match);
 			assert(r5.rest == "");
 			static if(isMemoize){
@@ -1334,7 +1354,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r5.value == "parseAnyChar");
 			}
-			auto r6 = usefulLit("@s");
+			auto r6 = usefulLit("@s".s);
 			assert(r6.match);
 			assert(r6.rest == "");
 			static if(isMemoize){
@@ -1342,7 +1362,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r6.value == "parseSpaces");
 			}
-			auto r7 = literal("$");
+			auto r7 = literal("$".s);
 			assert(r7.match);
 			assert(r7.rest == "");
 			static if(isMemoize){
@@ -1350,7 +1370,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r7.value == "parseEOF");
 			}
-			auto rn = literal("###縺薙・繧ｳ繝｡繝ｳ繝医・陦ｨ遉ｺ縺輔ｌ縺ｾ縺帙ｓ###");
+			auto rn = literal("###縺薙・繧ｳ繝｡繝ｳ繝医・陦ｨ遉ｺ縺輔ｌ縺ｾ縺帙ｓ###".s);
 			assert(!rn.match);
 			return true;
 		};
@@ -1358,7 +1378,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	}
 
-	Result!string stringLit(string input){
+	Result!string stringLit(stringp input){
 		return combinateConvert!(
 			combinateSequence!(
 				combinateNone!(
@@ -1387,7 +1407,7 @@ template makeCompilers(bool isMemoize){
 
 	debug(dpegparser) unittest{
 		enum dg = {
-			auto r1 = stringLit("\"hello\nworld\" ");
+			auto r1 = stringLit("\"hello\nworld\" ".s);
 			assert(r1.match);
 			assert(r1.rest == " ");
 			static if(isMemoize){
@@ -1395,7 +1415,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r1.value == "parseString!\"hello\nworld\"");
 			}
-			auto r2 = stringLit("aa\"");
+			auto r2 = stringLit("aa\"".s);
 			assert(!r2.match);
 			return true;
 		};
@@ -1403,7 +1423,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	}
 
-	Result!string rangeLit(string input){
+	Result!string rangeLit(stringp input){
 		return combinateConvert!(
 			combinateSequence!(
 				combinateNone!(
@@ -1434,7 +1454,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	Result!string charRange(string input){
+	Result!string charRange(stringp input){
 		return combinateConvert!(
 			combinateSequence!(
 				combinateChoice!(
@@ -1455,7 +1475,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	Result!string oneChar(string input){
+	Result!string oneChar(stringp input){
 		return combinateConvert!(
 			combinateChoice!(
 				parseEscapeSequence,
@@ -1469,7 +1489,7 @@ template makeCompilers(bool isMemoize){
 
 	debug(dpegparser) unittest{
 		enum dg = {
-			auto r1 = rangeLit("[a-z]");
+			auto r1 = rangeLit("[a-z]".s);
 			assert(r1.match);
 			assert(r1.rest == "");
 			static if(isMemoize){
@@ -1477,7 +1497,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r1.value == "parseCharRange!('a','z')");
 			}
-			auto r2 = rangeLit("[a-zA-Z_]");
+			auto r2 = rangeLit("[a-zA-Z_]".s);
 			assert(r2.match);
 			assert(r2.rest == "");
 			static if(isMemoize){
@@ -1505,7 +1525,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	}
 
-	Result!string eofLit(string input){
+	Result!string eofLit(stringp input){
 		return combinateConvert!(
 			combinateNone!(
 				parseString!"$"
@@ -1518,7 +1538,7 @@ template makeCompilers(bool isMemoize){
 
     debug(dpegparser) unittest{
     	enum dg = {
-			auto r1 = eofLit("$");
+			auto r1 = eofLit("$".s);
 			assert(r1.match);
 			assert(r1.rest == "");
 			static if(isMemoize){
@@ -1526,7 +1546,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r1.value == "parseEOF");
 			}
-			auto r2 = eofLit("#");
+			auto r2 = eofLit("#".s);
 			assert(!r2.match);
 			return true;
     	};
@@ -1534,7 +1554,7 @@ template makeCompilers(bool isMemoize){
     	dg();
     }
 
-	Result!string usefulLit(string input){
+	Result!string usefulLit(stringp input){
 		return combinateConvert!(
 			combinateChoice!(
 				parseString!"@space",
@@ -1559,7 +1579,7 @@ template makeCompilers(bool isMemoize){
 
     debug(dpegparser) unittest{
     	enum dg = {
-			auto r1 = usefulLit("@space");
+			auto r1 = usefulLit("@space".s);
 			assert(r1.match);
 			assert(r1.rest == "");
 			static if(isMemoize){
@@ -1567,7 +1587,7 @@ template makeCompilers(bool isMemoize){
 			} else{
 				assert(r1.value == "parseSpace");
 			}
-			auto r2 = usefulLit("@es");
+			auto r2 = usefulLit("@es".s);
 			assert(r2.match);
 			assert(r2.rest == "");
 			static if(isMemoize){
@@ -1575,7 +1595,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r2.value == "parseEscapeSequence");
 			}
-			auto r3 = usefulLit("@a");
+			auto r3 = usefulLit("@a".s);
 			assert(r3.match);
 			assert(r3.rest == "");
 			static if(isMemoize){
@@ -1583,7 +1603,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r3.value == "parseAnyChar");
 			}
-			auto r4 = usefulLit("@s");
+			auto r4 = usefulLit("@s".s);
 			assert(r4.match);
 			assert(r4.rest == "");
 			static if(isMemoize){
@@ -1597,7 +1617,7 @@ template makeCompilers(bool isMemoize){
     	dg();
     }
 
-	Result!string id(string input){
+	Result!string id(stringp input){
 		return combinateConvert!(
 			combinateSequence!(
 				combinateChoice!(
@@ -1625,11 +1645,11 @@ template makeCompilers(bool isMemoize){
 
     debug(dpegparser) unittest{
     	enum dg = {
-			auto r1 = id("int");
+			auto r1 = id("int".s);
 			assert(r1.match);
 			assert(r1.rest == "");
 			assert(r1.value == "int");
-			auto r2 = id("select!(true)(\"true\", \"false\")");
+			auto r2 = id("select!(true)(\"true\", \"false\")".s);
 			assert(r2.match);
 			assert(r2.rest == "");
 			assert(r2.value == "select!(true)(\"true\", \"false\")");
@@ -1643,7 +1663,7 @@ template makeCompilers(bool isMemoize){
 
 	debug(dpegparser) unittest{
 		enum dg = {
-			auto r1 = nonterminal("int");
+			auto r1 = nonterminal("int".s);
 			assert(r1.match);
 			assert(r1.rest == "");
 			static if(isMemoize){
@@ -1651,7 +1671,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r1.value == "int");
 			}
-			auto r2 = nonterminal("select!(true)(\"true\", \"false\")");
+			auto r2 = nonterminal("select!(true)(\"true\", \"false\")".s);
 			assert(r2.match);
 			assert(r2.rest == "");
 			static if(isMemoize){
@@ -1665,7 +1685,7 @@ template makeCompilers(bool isMemoize){
 		dg();
     }
 
-	Result!string typeName(string input){
+	Result!string typeName(stringp input){
 		return combinateConvert!(
 			combinateSequence!(
 				combinateChoice!(
@@ -1695,15 +1715,15 @@ template makeCompilers(bool isMemoize){
 
 	debug(dpegparser) unittest{
 		enum dg = {
-			auto r1 = typeName("int");
+			auto r1 = typeName("int".s);
 			assert(r1.match);
 			assert(r1.rest == "");
 			assert(r1.value == "int");
-			auto r2 = typeName("Tuple!(string, int)");
+			auto r2 = typeName("Tuple!(string, int)".s);
 			assert(r2.match);
 			assert(r2.rest == "");
 			assert(r2.value == "Tuple!(string, int)");
-			auto r3 = typeName("int[]");
+			auto r3 = typeName("int[]".s);
 			assert(r3.match);
 			assert(r3.rest == "");
 			assert(r3.value == "int[]");
@@ -1713,7 +1733,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	}
 
-	Result!string func(string input){
+	Result!string func(stringp input){
 		return combinateConvert!(
 			combinateSequence!(
 				combinateOption!(
@@ -1749,7 +1769,7 @@ template makeCompilers(bool isMemoize){
 					"}"
 				"}"
 				"return res;"
-			"}");
+			"}".s);
 			assert(r.match);
 			assert(r.rest == "");
 			assert(
@@ -1774,7 +1794,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	}
 
-	Result!string arch(string input){
+	Result!string arch(stringp input){
 		return combinateConvert!(
 			combinateSequence!(
 				combinateNone!(
@@ -1803,7 +1823,7 @@ template makeCompilers(bool isMemoize){
 
 	debug(dpegparser) unittest{
 		enum dg = {
-			auto r = arch("(a(i(u)e)o())");
+			auto r = arch("(a(i(u)e)o())".s);
 			assert(r.match);
 			assert(r.rest == "");
 			assert(r.value == "(a(i(u)e)o())");
@@ -1813,7 +1833,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	}
 
-	Result!string squareArch(string input){
+	Result!string squareArch(stringp input){
 		return combinateConvert!(
 			combinateSequence!(
 				combinateNone!(
@@ -1842,7 +1862,7 @@ template makeCompilers(bool isMemoize){
 
 	debug(dpegparser) unittest{
 		enum dg = {
-			auto r = squareArch("[a[i[u]e]o[]]");
+			auto r = squareArch("[a[i[u]e]o[]]".s);
 			assert(r.match);
 			assert(r.rest == "");
 			assert(r.value == "[a[i[u]e]o[]]");
@@ -1852,7 +1872,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	}
 
-	Result!string brace(string input){
+	Result!string brace(stringp input){
 		return combinateConvert!(
 			combinateSequence!(
 				combinateNone!(
@@ -1881,7 +1901,7 @@ template makeCompilers(bool isMemoize){
 
 	debug(dpegparser) unittest{
 		enum dg = {
-			auto r = brace("{a{i{u}e}o{}}");
+			auto r = brace("{a{i{u}e}o{}}".s);
 			assert(r.match);
 			assert(r.rest == "");
 			assert(r.value == "{a{i{u}e}o{}}");
@@ -1892,12 +1912,16 @@ template makeCompilers(bool isMemoize){
 	}
 }
 
-debug(dpegparser) pragma(msg, makeCompilers!false);
 debug(dpegparser) pragma(msg, makeCompilers!true);
+debug(dpegparser) pragma(msg, makeCompilers!false);
 
 debug(dpegparser) void main(){}
 
 private:
+
+stringp s(string str){
+    return stringp(str);
+}
 
 string mkString(string[] strs, string sep = ""){
 	string res;
@@ -1912,6 +1936,7 @@ string mkString(string[] strs, string sep = ""){
 		}
 	}
 	return res;
+	//cocomadefpsgatacaihituy,hanaidar,na
 }
 
 template ResultType(alias R){
@@ -2006,8 +2031,10 @@ dchar decode(string str, ref size_t i){
 debug(dpegparser) public:
 
 unittest{
-    struct parser{
+    struct exp{
         static mixin dpeg!q{
+            int root = addExp;
+
             int addExp = mulExp (("+" / "-")  addExp)? >> (int lhs, Option!(Tuple!(string, int)) rhs){
                 if(rhs.some){
                     final switch(rhs.value[0]){
@@ -2043,21 +2070,24 @@ unittest{
                 }
                 return result;
             };
-
-            None A = B $;
-
-            None B = ^"a" ^B ^"a" / ^"a";
         };
     }
 
-	assert( parser.addExp("5*8+3*20").value == 100);
-	assert( parser.addExp("5*(8+3)*20").value == 1100);
-	assert( parser.A("a").match);
-	assert( parser.A("aaa").match);
-	assert(!parser.A("aaaaa").match);
-	assert( parser.A("aaaaaaa").match);
-	assert(!parser.A("aaaaaaaaa").match);
-	assert(!parser.A("aaaaaaaaaaa").match);
-	assert(!parser.A("aaaaaaaaaaaaa").match);
-    assert( parser.A("aaaaaaaaaaaaaaa").match);
+    struct recursive{
+        static mixin dpeg!q{
+            None root = A $;
+            None A = ^"a" ^A ^"a" / ^"a";
+        };
+    }
+
+	assert( exp.parse("5*8+3*20") == 100);
+	assert( exp.parse("5*(8+3)*20") == 1100);
+	assert( recursive.root("a".s).match);
+	assert( recursive.root("aaa".s).match);
+	assert(!recursive.root("aaaaa".s).match);
+	assert( recursive.root("aaaaaaa".s).match);
+	assert(!recursive.root("aaaaaaaaa".s).match);
+	assert(!recursive.root("aaaaaaaaaaa".s).match);
+	assert(!recursive.root("aaaaaaaaaaaaa".s).match);
+    assert( recursive.root("aaaaaaaaaaaaaaa".s).match);
 }
