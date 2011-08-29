@@ -773,12 +773,12 @@ struct Error{
 	}
 }
 
-mixin template dpegWithoutMemoize(string src){
-	mixin(makeCompilers!false.defs(src.s).value);
+string dpegWithoutMemoize(string file = __FILE__, int line = __LINE__)(string src){
+    return makeCompilers!false.parse!(file, line)(src);
 }
 
-mixin template dpeg(string src){
-	mixin(makeCompilers!true.defs(src.s).value);
+string dpeg(string file = __FILE__, int line = __LINE__)(string src){
+    return makeCompilers!true.parse!(file, line)(src);
 }
 
 template getSource(string src){
@@ -787,15 +787,15 @@ template getSource(string src){
 
 template makeCompilers(bool isMemoize){
     enum prefix =
-    "auto parse(string input){"
+    "auto parse(string file = __FILE__, int line = __LINE__)(string input){"
         "auto res = memoizeInput!root(stringp(input));"
         "if(res.match){"
             "return res.value;"
         "}else{"
             "if(__ctfe){"
-                "assert(false, to!string(res.error.line) ~ q{:} ~ to!string(res.error.column) ~ q{:error } ~ res.error.need ~ q{ is needed});"
+                "assert(false, file ~ q{: } ~ to!string(line + res.error.line - 1) ~ q{: } ~ to!string(res.error.column) ~ q{: error } ~ res.error.need ~ q{ is needed});"
             "}else{"
-                "throw new Exception(to!string(res.error.line) ~ q{:} ~ to!string(res.error.column) ~ q{:error } ~ res.error.need ~ q{ is needed});"
+                "throw new Exception(to!string(res.error.column) ~ q{: error } ~ res.error.need ~ q{ is needed}, file, line + res.error.line - 1);"
             "}"
         "}"
     "}"
@@ -806,6 +806,15 @@ template makeCompilers(bool isMemoize){
 	string fix(string parser){
 		return isMemoize ? "memoizeInput!(" ~ parser ~ ")" : parser;
 	}
+
+    auto parse(string file = __FILE__, int line = __LINE__)(string input){
+        auto res = defs(stringp(input));
+        if(res.match){
+            return res.value;
+        }else{
+            assert(false, file ~ q{: } ~ to!string(line + res.error.line - 1) ~ q{: } ~ to!string(res.error.column) ~ q{: error } ~ res.error.need ~ q{ is needed});
+        }
+    }
 
 	Result!string defs(stringp input){
 		return combinateConvert!(
@@ -2204,7 +2213,7 @@ debug(dpegparser) public:
 
 unittest{
     struct exp{
-        static mixin dpeg!q{
+        static mixin(dpeg(q{
             int root = addExp $;
 
             int addExp = mulExp (("+" / "-")  addExp)? >> (int lhs, Option!(Tuple!(string, int)) rhs){
@@ -2242,14 +2251,14 @@ unittest{
                 }
                 return result;
             };
-        };
+        }));
     }
 
     struct recursive{
-        static mixin dpeg!q{
+        static mixin(dpeg(q{
             None root = A $;
             None A = ^"a" ^A ^"a" / ^"a";
-        };
+        }));
     }
 
 	assert( exp.parse("5*8+3*20") == 100);
@@ -2257,7 +2266,9 @@ unittest{
 	try{
 	    exp.parse("5*(8+3)20");
 	}catch(Exception e){
-	    assert(e.msg == "1:8:error EOF is needed");
+	    assert(e.msg == "8: error EOF is needed");
+        assert(e.file == __FILE__);
+        assert(e.line == __LINE__-4);
 	}
 	assert( recursive.isMatch("a"));
 	assert( recursive.isMatch("aaa"));
