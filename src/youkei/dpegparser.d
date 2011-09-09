@@ -771,6 +771,118 @@ struct Error{
         debug(dpegparser_ct) static assert(dg());
         dg();
 	}
+
+	/* parseIdent */ version(all){
+	    alias combinateConvert!(
+            combinateSequence!(
+                combinateChoice!(
+                    parseString!"_",
+                    parseCharRange!('a','z'),
+                    parseCharRange!('A','Z')
+                ),
+                combinateMore0!(
+                    combinateChoice!(
+                        parseString!"_",
+                        parseCharRange!('a','z'),
+                        parseCharRange!('A','Z'),
+                        parseCharRange!('0','9')
+                    )
+                )
+            ),
+            function(string ahead, string[] atail){
+                string res = ahead;
+                foreach(lchar; atail){
+                    res ~= lchar;
+                }
+                return res;
+            }
+        ) parseIdent;
+	}
+
+    debug(dpegparser) unittest{
+        enum dg = {
+            auto r0 = parseIdent("hoge".s);
+            assert(r0.match);
+            assert(r0.rest == "");
+            assert(r0.value == "hoge");
+            auto r1 = parseIdent("_x".s);
+            assert(r1.match);
+            assert(r1.rest == "");
+            assert(r1.value == "_x");
+            auto r2 = parseIdent("_0".s);
+            assert(r2.match);
+            assert(r2.rest == "");
+            assert(r2.value == "_0");
+            auto r3 = parseIdent("0".s);
+            assert(!r3.match);
+            assert(r3.rest == "");
+            assert(r3.error.line == 1);
+            assert(r3.error.column == 1);
+            auto r4 = parseIdent("あ".s);
+            assert(!r4.match);
+            assert(r4.rest == "");
+            assert(r4.error.line == 1);
+            assert(r4.error.column == 1);
+            return true;
+        };
+        debug(dpegparser_ct) static assert(dg());
+        dg();
+    }
+
+    /* parseStringLiteral */ version(all){
+        alias combinateConvert!(
+            combinateSequence!(
+                combinateNone!(parseString!"\""),
+                combinateMore0!(
+                    combinateNot!(parseString!"\""),
+                    combinateChoice!(
+                        parseEscapeSequence,
+                        parseAnyChar
+                    )
+                ),
+                combinateNone!(parseString!"\"")
+            ),
+            function(string achars){
+                string res;
+                foreach(lchar; achars){
+                    res ~= lchar;
+                }
+                return res;
+            }
+        ) parseStringLiteral;
+    }
+
+    debug(dpegparser) unittest{
+        enum dg = {
+            return true;
+        };
+        debug(dpegparser_ct) static assert(dg());
+        dg();
+    }
+
+    debug(dpegparser) unittest{
+        enum dg = {
+            return true;
+        };
+        debug(dpegparser_ct) static assert(dg());
+        dg();
+    }
+
+    debug(dpegparser) unittest{
+        enum dg = {
+            return true;
+        };
+        debug(dpegparser_ct) static assert(dg());
+        dg();
+    }
+
+    debug(dpegparser) unittest{
+        enum dg = {
+            return true;
+        };
+        debug(dpegparser_ct) static assert(dg());
+        dg();
+    }
 }
 
 string dpegWithoutMemoize(string file = __FILE__, int line = __LINE__)(string src){
@@ -1511,7 +1623,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r2.value == "parseCharRange!('a','z')");
 			}
-			auto r3 = usefulLit("@space".s);
+			auto r3 = usefulLit("space_p".s);
 			assert(r3.match);
 			assert(r3.rest == "");
 			static if(isMemoize){
@@ -1519,7 +1631,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r3.value == "parseSpace");
 			}
-			auto r4 = usefulLit("@es".s);
+			auto r4 = usefulLit("es".s);
 			assert(r4.match);
 			assert(r4.rest == "");
 			static if(isMemoize){
@@ -1527,7 +1639,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r4.value == "parseEscapeSequence");
 			}
-			auto r5 = usefulLit("@a".s);
+			auto r5 = usefulLit("a".s);
 			assert(r5.match);
 			assert(r5.rest == "");
 			static if(isMemoize){
@@ -1535,7 +1647,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r5.value == "parseAnyChar");
 			}
-			auto r6 = usefulLit("@s".s);
+			auto r6 = usefulLit("s".s);
 			assert(r6.match);
 			assert(r6.rest == "");
 			static if(isMemoize){
@@ -1551,7 +1663,7 @@ template makeCompilers(bool isMemoize){
 			}else{
 				assert(r7.value == "parseEOF");
 			}
-			auto rn = literal("###縺薙・繧ｳ繝｡繝ｳ繝医・陦ｨ遉ｺ縺輔ｌ縺ｾ縺帙ｓ###".s);
+			auto rn = literal("表が怖い噂のソフト".s);
 			assert(!rn.match);
 			return true;
 		};
@@ -1737,22 +1849,80 @@ template makeCompilers(bool isMemoize){
 
 	Result!string usefulLit(stringp input){
 		return combinateConvert!(
-			combinateChoice!(
-				parseString!"@space",
-				parseString!"@es",
-				parseString!"@a",
-				parseString!"@s",
-			),
+            combinateChoice!(
+                combinateSequence!(
+                    parseString!"ident_p",
+                    combinateChoice!(
+                        combinateAnd!parseSpace,
+                        combinateAnd!parseEOF
+                    )
+                ),
+                combinateSequence!(
+                    parseString!"strLit_p",
+                    combinateChoice!(
+                        combinateAnd!parseSpace,
+                        combinateAnd!parseEOF
+                    )
+                ),
+                combinateSequence!(
+                    parseString!"intLit_p",
+                    combinateChoice!(
+                        combinateAnd!parseSpace,
+                        combinateAnd!parseEOF
+                    )
+                ),
+                combinateSequence!(
+                    parseString!"space_p",
+                    combinateChoice!(
+                        combinateAnd!parseSpace,
+                        combinateAnd!parseEOF
+                    )
+                ),
+                combinateSequence!(
+                    parseString!"es",
+                    combinateChoice!(
+                        combinateAnd!parseSpace,
+                        combinateAnd!parseEOF
+                    )
+                ),
+                combinateSequence!(
+                    parseString!"a",
+                    combinateChoice!(
+                        combinateAnd!parseSpace,
+                        combinateAnd!parseEOF
+                    )
+                ),
+                combinateSequence!(
+                    parseString!"s",
+                    combinateChoice!(
+                        combinateAnd!parseSpace,
+                        combinateAnd!parseEOF
+                    )
+                )
+            ),
 			function(string str){
 				final switch(str){
-					case "@space":
+                    case "ident_p":{
+                        return fix("parseIdent");
+                    }
+                    case "strLit_p":{
+                        return fix("parseStringLiteral");
+                    }
+                    case "intLit_p":{
+                        return fix("parseIntLiteral");
+                    }
+					case "space_p":{
 						return fix("parseSpace");
-					case "@es":
+					}
+					case "es":{
 						return fix("parseEscapeSequence");
-					case "@a":
+					}
+					case "a":{
 						return fix("parseAnyChar");
-					case "@s":
+					}
+					case "s":{
 						return fix("parseSpaces");
+					}
 				}
 			}
 		)(input);
@@ -1760,38 +1930,76 @@ template makeCompilers(bool isMemoize){
 
     debug(dpegparser) unittest{
     	enum dg = {
-			auto r1 = usefulLit("@space".s);
-			assert(r1.match);
-			assert(r1.rest == "");
-			static if(isMemoize){
-				assert(r1.value == "memoizeInput!(parseSpace)");
-			} else{
-				assert(r1.value == "parseSpace");
+    	    {
+                auto r = usefulLit("space_p".s);
+                assert(r.match);
+                assert(r.rest == "");
+                static if(isMemoize){
+                    assert(r.value == "memoizeInput!(parseSpace)");
+                } else{
+                    assert(r.value == "parseSpace");
+                }
+    	    }
+    	    {
+                auto r = usefulLit("es".s);
+                assert(r.match);
+                assert(r.rest == "");
+                static if(isMemoize){
+                    assert(r.value == "memoizeInput!(parseEscapeSequence)");
+                }else{
+                    assert(r.value == "parseEscapeSequence");
+                }
+            }
+			{
+                auto r = usefulLit("a".s);
+                assert(r.match);
+                assert(r.rest == "");
+                static if(isMemoize){
+                    assert(r.value == "memoizeInput!(parseAnyChar)");
+                }else{
+                    assert(r.value == "parseAnyChar");
+                }
 			}
-			auto r2 = usefulLit("@es".s);
-			assert(r2.match);
-			assert(r2.rest == "");
-			static if(isMemoize){
-				assert(r2.value == "memoizeInput!(parseEscapeSequence)");
-			}else{
-				assert(r2.value == "parseEscapeSequence");
-			}
-			auto r3 = usefulLit("@a".s);
-			assert(r3.match);
-			assert(r3.rest == "");
-			static if(isMemoize){
-				assert(r3.value == "memoizeInput!(parseAnyChar)");
-			}else{
-				assert(r3.value == "parseAnyChar");
-			}
-			auto r4 = usefulLit("@s".s);
-			assert(r4.match);
-			assert(r4.rest == "");
-			static if(isMemoize){
-				assert(r4.value == "memoizeInput!(parseSpaces)");
-			}else{
-				assert(r4.value == "parseSpaces");
-			}
+			{
+                auto r = usefulLit("s".s);
+                assert(r.match);
+                assert(r.rest == "");
+                static if(isMemoize){
+                    assert(r.value == "memoizeInput!(parseSpaces)");
+                }else{
+                    assert(r.value == "parseSpaces");
+                }
+            }
+            {
+                auto r  = usefulLit("ident_p".s);
+                assert(r.match);
+                assert(r.rest == "");
+                static if(isMemoize){
+                    assert(r.value == "memoizeInput!(parseIdent)");
+                }else{
+                    assert(r.value == "parseIdent");
+                }
+            }
+            {
+                auto r = usefulLit("strLit_p".s);
+                assert(r.match);
+                assert(r.rest == "");
+                static if(isMemoize){
+                    assert(r.value == "memoizeInput!(parseStringLiteral)");
+                }else{
+                    assert(r.value == "parseStringLiteral");
+                }
+            }
+            {
+                auto r = usefulLit("intLit_p".s);
+                assert(r.match);
+                assert(r.rest == "");
+                static if(isMemoize){
+                    assert(r.value == "memoizeInput!(parseIntLiteral)");
+                }else{
+                    assert(r.value == "parseIntLiteral");
+                }
+            }
 			return true;
     	};
     	debug(dpegparser_ct) static assert(dg());
