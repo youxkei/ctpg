@@ -3,6 +3,7 @@ module youkei.dpegparser;
 import std.conv;
 import std.traits;
 import std.typecons;
+import std.typetuple;
 import std.functional;
 
 ReturnType!fun memoizeInput(alias fun)(stringp input){
@@ -492,13 +493,13 @@ struct Error{
 				static if(__traits(compiles, converter(r.value.field))){
 					res.value = converter(r.value.field);
 				}else{
-					assert(false, converter.stringof ~ " cannot call with argument type " ~ r.value.field.stringof);
+					assert(false, converter.stringof ~ " cannot call with argument type " ~ typeof(r.value.field).stringof);
 				}
 			}else{
 				static if(__traits(compiles, converter(r.value))){
 					res.value = converter(r.value);
 				}else{
-					assert(false, converter.stringof ~ " cannot call with argument type " ~ typeid(typeof(r.value)));
+					assert(false, converter.stringof ~ " cannot call with argument type " ~ typeof(r.value).stringof);
 				}
 			}
 			res.rest = r.rest;
@@ -577,6 +578,19 @@ struct Error{
 		};
 		debug(dpegparser_ct) static assert(dg());
 		dg();
+	}
+
+	Result!string combinateString(alias parser)(stringp input){
+		typeof(return) res;
+		auto r = parser(input);
+		if(r.match){
+			res.match = true;
+			res.value = flat(r.value);
+			res.rest = r.rest;
+		}else{
+			res.error = r.error;
+		}
+		return res;
 	}
 }
 
@@ -821,7 +835,7 @@ struct Error{
 	}
 
 	/* parseIdent */ version(all){
-		alias combinateConvert!(
+		alias combinateString!(
 			combinateSequence!(
 				combinateChoice!(
 					parseString!"_",
@@ -836,15 +850,17 @@ struct Error{
 						parseCharRange!('0','9')
 					)
 				)
-			),
-			function(string ahead, string[] atail){
-				string res = ahead;
-				foreach(lchar; atail){
-					res ~= lchar;
-				}
-				return res;
-			}
+			)
 		) parseIdent;
+	}
+
+	/* parseIdentChar */ version(all){
+		alias combinateChoice!(
+			parseString!"_",
+			parseCharRange!('a','z'),
+			parseCharRange!('A','Z'),
+			parseCharRange!('0','9')
+		) parseIdentChar;
 	}
 
 	debug(dpegparser) unittest{
@@ -878,7 +894,7 @@ struct Error{
 	}
 
 	/* parseStringLiteral */ version(all){
-		alias combinateConvert!(
+		alias combinateString!(
 			combinateSequence!(
 				combinateNone!(parseString!"\""),
 				combinateMore0!(
@@ -891,14 +907,7 @@ struct Error{
 					)
 				),
 				combinateNone!(parseString!"\"")
-			),
-			function(string[] achars){
-				string res;
-				foreach(lchar; achars){
-					res ~= lchar;
-				}
-				return res;
-			}
+			)
 		) parseStringLiteral;
 	}
 
@@ -1191,62 +1200,95 @@ template makeCompilers(bool isMemoize){
 		return combinateConvert!(
 			combinateSequence!(
 				choiceExp,
-				combinateOption!(
+				combinateMore0!(
 					combinateSequence!(
 						parseSpaces,
 						combinateNone!(
 							parseString!">>"
 						),
 						parseSpaces,
-						func
+						combinateChoice!(
+							func,
+							typeName
+						)
 					)
 				)
 			),
-			function(string choiceExp, Option!string func){
-				if(func.some){
-					return fix("combinateConvert!("~choiceExp~","~func.value~")");
-				}else{
-					return choiceExp;
+			function(string achoiceExp, string[] afuncs){
+				string lres = achoiceExp;
+				foreach(lfunc; afuncs){
+					lres = fix("combinateConvert!(" ~ lres ~ "," ~ lfunc ~ ")");
 				}
+				return lres;
 			}
 		)(input);
 	}
 
 	debug(dpegparser) unittest{
 		enum dg = {
-			auto r = convExp(q{^"hello" $ >> {return false;}}.s);
-			assert(r.match);
-			assert(r.rest == "");
-			static if(isMemoize){
-				assert(
-					r.value ==
-					"memoizeInput!(combinateConvert!("
-						"memoizeInput!(combinateSequence!("
-							"memoizeInput!(combinateNone!("
-								"memoizeInput!(parseString!\"hello\")"
+			{
+				auto r = convExp(q{^"hello" $ >> {return false;}}.s);
+				assert(r.match);
+				assert(r.rest == "");
+				static if(isMemoize){
+					assert(
+						r.value ==
+						"memoizeInput!(combinateConvert!("
+							"memoizeInput!(combinateSequence!("
+								"memoizeInput!(combinateNone!("
+									"memoizeInput!(parseString!\"hello\")"
+								")),"
+								"memoizeInput!(parseEOF)"
 							")),"
-							"memoizeInput!(parseEOF)"
-						")),"
-						"function(){"
-							"return false;"
-						"}"
-					"))"
-				);
-			}else{
-				assert(
-					r.value ==
-					"combinateConvert!("
-						"combinateSequence!("
-							"combinateNone!("
-								"parseString!\"hello\""
+							"function(){"
+								"return false;"
+							"}"
+						"))"
+					);
+				}else{
+					assert(
+						r.value ==
+						"combinateConvert!("
+							"combinateSequence!("
+								"combinateNone!("
+									"parseString!\"hello\""
+								"),"
+								"parseEOF"
 							"),"
-							"parseEOF"
-						"),"
-						"function(){"
-							"return false;"
-						"}"
-					")"
-				);
+							"function(){"
+								"return false;"
+							"}"
+						")"
+					);
+				}
+			}
+			{
+				auto r = convExp(q{"hello" >> flat >> to!int}.s);
+				assert(r.match);
+				assert(r.rest == "");
+				static if(isMemoize){
+					assert(
+						r.value ==
+						"memoizeInput!(combinateConvert!("
+							"memoizeInput!(combinateConvert!("
+								"memoizeInput!(parseString!\"hello\"),"
+								"flat"
+							")),"
+							"to!int"
+						"))"
+					);
+				}else{
+					assert(
+						r.value ==
+						"combinateConvert!("
+							"combinateConvert!("
+								"parseString!\"hello\","
+								"flat"
+							"),"
+							"to!int"
+						")"
+					);
+				}
 			}
 			return true;
 		};
@@ -1583,14 +1625,18 @@ template makeCompilers(bool isMemoize){
 			),
 			function(Option!string op, string primaryExp){
 				final switch(op.value){
-					case "&":
-						return fix("combinateAnd!("~primaryExp~")");
-					case "!":
-						return fix("combinateNot!("~primaryExp~")");
-					case "^":
-						return fix("combinateNone!("~primaryExp~")");
-					case "":
+					case "&":{
+						return fix("combinateAnd!(" ~ primaryExp ~ ")");
+					}
+					case "!":{
+						return fix("combinateNot!(" ~ primaryExp ~ ")");
+					}
+					case "^":{
+						return fix("combinateNone!(" ~ primaryExp ~ ")");
+					}
+					case "":{
 						return primaryExp;
+					}
 				}
 			}
 		)(input);
@@ -1997,52 +2043,31 @@ template makeCompilers(bool isMemoize){
 			combinateChoice!(
 				combinateSequence!(
 					parseString!"ident_p",
-					combinateChoice!(
-						combinateAnd!parseSpace,
-						combinateAnd!parseEOF
-					)
+					combinateNot!parseIdentChar
 				),
 				combinateSequence!(
 					parseString!"strLit_p",
-					combinateChoice!(
-						combinateAnd!parseSpace,
-						combinateAnd!parseEOF
-					)
+					combinateNot!parseIdentChar
 				),
 				combinateSequence!(
 					parseString!"intLit_p",
-					combinateChoice!(
-						combinateAnd!parseSpace,
-						combinateAnd!parseEOF
-					)
+					combinateNot!parseIdentChar
 				),
 				combinateSequence!(
 					parseString!"space_p",
-					combinateChoice!(
-						combinateAnd!parseSpace,
-						combinateAnd!parseEOF
-					)
+					combinateNot!parseIdentChar
 				),
 				combinateSequence!(
 					parseString!"es",
-					combinateChoice!(
-						combinateAnd!parseSpace,
-						combinateAnd!parseEOF
-					)
+					combinateNot!parseIdentChar
 				),
 				combinateSequence!(
 					parseString!"a",
-					combinateChoice!(
-						combinateAnd!parseSpace,
-						combinateAnd!parseEOF
-					)
+					combinateNot!parseIdentChar
 				),
 				combinateSequence!(
 					parseString!"s",
-					combinateChoice!(
-						combinateAnd!parseSpace,
-						combinateAnd!parseEOF
-					)
+					combinateNot!parseIdentChar
 				)
 			),
 			function(string str){
@@ -2193,7 +2218,7 @@ template makeCompilers(bool isMemoize){
 		dg();
 	}
 
-	alias combinateConvert!(id,function(string id){return fix(id);}) nonterminal;
+	alias combinateConvert!(id, fix) nonterminal;
 
 	debug(dpegparser) unittest{
 		enum dg = {
@@ -2449,6 +2474,18 @@ template makeCompilers(bool isMemoize){
 debug(dpegparser) pragma(msg, makeCompilers!true);
 debug(dpegparser) pragma(msg, makeCompilers!false);
 
+string flat(Arg)(Arg aarg){
+	string lres;
+	static if(isTuple!Arg || isArray!Arg){
+		foreach(larg; aarg){
+			lres ~= flat(larg);
+		}
+	}else{
+		lres = to!string(aarg);
+	}
+	return lres;
+}
+
 debug(dpegparser) void main(){}
 
 private:
@@ -2470,7 +2507,26 @@ string mkString(string[] strs, string sep = ""){
 		}
 	}
 	return res;
-	//cocomadefpsgatacaihituy,hanaidar,na
+}
+
+debug(dpegparser) unittest{
+	enum dg = {
+		{
+			auto r = flat(tuple(1, "hello", tuple(2, "world")));
+			assert(r == "1hello2world");
+		}
+		{
+			auto r = flat(tuple([0, 1, 2], "hello", tuple([3, 4, 5], ["wor", "ld!!"]), ["!", "!"]));
+			assert(r == "012hello345world!!!!");
+		}
+		{
+			auto r = flat(tuple('表', 'が', '怖', 'い', '噂', 'の', 'ソ', 'フ', 'ト'));
+			assert(r == "表が怖い噂のソフト");
+		}
+		return true;
+	};
+	debug(dpegparser_ct) static assert(dg());
+	dg();
 }
 
 template ResultType(alias R){
@@ -2489,20 +2545,16 @@ template ParserType(alias parser){
 	}
 }
 
-template CombinateSequenceImplType(parsers...){
-	static if(staticLength!parsers == 1){
-		static if(isTuple!(ParserType!(parsers[0]))){
-			alias Result!(ParserType!(parsers[0])) CombinateSequenceImplType;
-		}else{
-			alias Result!(Tuple!(ParserType!(parsers[0]))) CombinateSequenceImplType;
-		}
+template flatTuple(arg){
+	static if(isTuple!arg){
+		alias arg.Types flatTuple;
 	}else{
-		static if(isTuple!(ParserType!(parsers[0]))){
-			alias Result!(Tuple!(ParserType!(parsers[0]).Types, ResultType!(CombinateSequenceImplType!(parsers[1..$])).Types)) CombinateSequenceImplType;
-		}else{
-			alias Result!(Tuple!(ParserType!(parsers[0]), ResultType!(CombinateSequenceImplType!(parsers[1..$])).Types)) CombinateSequenceImplType;
-		}
+		alias arg flatTuple;
 	}
+}
+
+template CombinateSequenceImplType(parsers...){
+	alias Result!(Tuple!(staticMap!(flatTuple, staticMap!(ParserType, parsers)))) CombinateSequenceImplType;
 }
 
 template UnTuple(E){
@@ -2522,11 +2574,7 @@ UnTuple!R unTuple(R)(R r){
 }
 
 template CommonParserType(parsers...){
-	static if(staticLength!parsers == 1){
-		alias ParserType!(parsers[0]) CommonParserType;
-	}else{
-		alias CommonType!(ParserType!(parsers[0]), CommonParserType!(parsers[1..$])) CommonParserType;
-	}
+	alias CommonType!(staticMap!(ParserType, parsers)) CommonParserType;
 }
 
 dchar decode(string str, ref size_t i){
@@ -2569,42 +2617,48 @@ unittest{
 		static mixin(dpeg(q{
 			int root = addExp $;
 
-			int addExp = mulExp (("+" / "-")  addExp)? >> (int lhs, Option!(Tuple!(string, int)) rhs){
+			int addExp = mulExp (("+" / "-") addExp)? >> (int lhs, Option!(Tuple!(string, int)) rhs){
 				if(rhs.some){
 					final switch(rhs.value[0]){
-						case "+":
+						case "+":{
 							return lhs + rhs.value[1];
-						case "-":
+						}
+						case "-":{
 							return lhs - rhs.value[1];
+						}
 					}
 				}else{
 					return lhs;
 				}
 			};
 
-			int mulExp = primary (("*" / "/")  mulExp)? >> (int lhs, Option!(Tuple!(string, int)) rhs){
+			int mulExp = primary (("*" / "/") mulExp)? >> (int lhs, Option!(Tuple!(string, int)) rhs){
 				if(rhs.some){
 					final switch(rhs.value[0]){
-						case "*":
+						case "*":{
 							return lhs * rhs.value[1];
-						case "/":
+						}
+						case "/":{
 							return lhs / rhs.value[1];
+						}
 					}
 				}else{
 					return lhs;
 				}
 			};
 
-			int primary = ^"(" addExp ^")" / num;
-
-			int num = [0-9]+ >> (string[] nums){
-				int result;
-				foreach(i, num;nums){
-					result = result * 10 + (num[0] - '0');
-				}
-				return result;
-			};
+			int primary = ^"(" addExp ^")" / intLit_p;
 		}));
+	}
+
+	assert(exp.parse("5*8+3*20") == 100);
+	assert(exp.parse("5*(8+3)*20") == 1100);
+	try{
+		exp.parse("5*(8+3)20");
+	}catch(Exception e){
+		assert(e.msg == "8: error EOF is needed");
+		assert(e.file == __FILE__);
+		assert(e.line == __LINE__-4);
 	}
 
 	struct recursive{
@@ -2614,15 +2668,6 @@ unittest{
 		}));
 	}
 
-	assert( exp.parse("5*8+3*20") == 100);
-	assert( exp.parse("5*(8+3)*20") == 1100);
-	try{
-		exp.parse("5*(8+3)20");
-	}catch(Exception e){
-		assert(e.msg == "8: error EOF is needed");
-		assert(e.file == __FILE__);
-		assert(e.line == __LINE__-4);
-	}
 	assert( recursive.isMatch("a"));
 	assert( recursive.isMatch("aaa"));
 	assert(!recursive.isMatch("aaaaa"));
