@@ -1,4 +1,4 @@
-module youkei.dpegparser;
+module youkei.ctpg;
 
 import std.conv;
 import std.traits;
@@ -25,11 +25,11 @@ struct stringp{
 		assert(column >= 0);
 	}
 
-	const immutable(char) opIndex(size_t i){
+	immutable(char) opIndex(size_t i)const @safe pure nothrow{
 		return str[i];
 	}
 
-	const typeof(this) opSlice(size_t x, size_t y){
+	typeof(this) opSlice(size_t x, size_t y)const @safe pure nothrow{
 		typeof(return) res;
 		res.str = str[x..y];
 		res.line = line;
@@ -45,19 +45,19 @@ struct stringp{
 		return res;
 	}
 
-	bool opEquals(T)(T rhs)if(is(T == string)){
+	bool opEquals(T)(T rhs)const pure @safe nothrow if(is(T == string)){
 		return str == rhs;
 	}
 
-	@property size_t length(){
+	size_t length()const pure @safe nothrow @property{
 		return str.length;
 	}
 
-	dchar decode(ref size_t i){
+	dchar decode(ref size_t i)const pure @safe nothrow{
 		return .decode(str, i);
 	}
 
-	@property string to(){
+	string to()pure @safe nothrow @property{
 		return str;
 	}
 
@@ -66,7 +66,7 @@ struct stringp{
 	int column = 1;
 }
 
-debug(dpegparser) unittest{
+debug(ctpg) unittest{
 	enum dg = {
 		auto s1 = "hoge".s;
 		assert(s1 == "hoge");
@@ -91,7 +91,7 @@ debug(dpegparser) unittest{
 		assert(s6.column == 1);
 		return true;
 	};
-	debug(dpegparser_ct) static assert(dg());
+	debug(ctpg_ct) static assert(dg());
 	dg();
 }
 
@@ -101,7 +101,7 @@ struct Result(T){
 	stringp rest;
 	Error error;
 
-	void opAssign(F)(Result!F rhs) if(isAssignable!(T, F)){
+	void opAssign(F)(Result!F rhs)pure @safe nothrow if(isAssignable!(T, F)){
 		match = rhs.match;
 		value = rhs.value;
 		rest = rhs.rest;
@@ -112,7 +112,7 @@ struct Result(T){
 struct Option(T){
 	T value;
 	bool some;
-	bool opCast(E)() if(is(E == bool)){
+	bool opCast(E)()const if(is(E == bool)){
 		return some;
 	}
 }
@@ -172,7 +172,7 @@ struct Error{
 		}
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			{
 				auto r = combinateSequence!(
@@ -223,7 +223,7 @@ struct Error{
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -251,7 +251,7 @@ struct Error{
 		}
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			alias combinateChoice!(parseString!"h",parseString!"w") p;
 			{
@@ -276,7 +276,7 @@ struct Error{
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -314,7 +314,7 @@ struct Error{
 		alias combinateMore!(1, parser, sep) combinateMore1;
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			{
 				alias combinateMore0!(parseString!"w") p;
@@ -350,7 +350,7 @@ struct Error{
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -367,7 +367,7 @@ struct Error{
 		return res;
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			alias combinateOption!(parseString!"w") p;
 			{
@@ -385,7 +385,7 @@ struct Error{
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -401,7 +401,7 @@ struct Error{
 		return res;
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			{
 				alias combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")) p;
@@ -429,7 +429,7 @@ struct Error{
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -442,7 +442,7 @@ struct Error{
 		return res;
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			alias combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))) p;
 			{
@@ -460,7 +460,7 @@ struct Error{
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -471,7 +471,7 @@ struct Error{
 		return res;
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			alias combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s"))) p;
 			auto r = p("wwws".s);
@@ -480,7 +480,7 @@ struct Error{
 			assert(r.value.mkString() == "ww");
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -492,14 +492,18 @@ struct Error{
 			static if(isTuple!(ParserType!parser)){
 				static if(__traits(compiles, converter(r.value.field))){
 					res.value = converter(r.value.field);
+				}else static if(__traits(compiles, new converter(r.value.field))){
+					res.value = new converter(r.value.field);
 				}else{
-					assert(false, converter.stringof ~ " cannot call with argument type " ~ typeof(r.value.field).stringof);
+					static assert(false, converter.mangleof ~ " cannot call with argument type " ~ typeof(r.value.field).stringof);
 				}
 			}else{
 				static if(__traits(compiles, converter(r.value))){
 					res.value = converter(r.value);
+				}else static if(__traits(compiles, new converter(r.value))){
+					res.value = new converter(r.value);
 				}else{
-					assert(false, converter.stringof ~ " cannot call with argument type " ~ typeof(r.value).stringof);
+					static assert(false, converter.mangleof ~ " cannot call with argument type " ~ typeof(r.value).stringof);
 				}
 			}
 			res.rest = r.rest;
@@ -509,11 +513,11 @@ struct Error{
 		return res;
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			alias combinateConvert!(
 				combinateMore1!(parseString!"w"),
-				function(string[] ws){
+				function(string[] ws)@safe pure nothrow{
 					return ws.length;
 				}
 			) p;
@@ -532,7 +536,7 @@ struct Error{
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -551,7 +555,7 @@ struct Error{
 		return res;
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			alias combinateConvert!(
 				combinateCheck!(
@@ -576,7 +580,7 @@ struct Error{
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -595,7 +599,7 @@ struct Error{
 }
 
 /*parsers*/version(all){
-	Result!(string) parseString(string str)(stringp input){
+	Result!(string) parseString(string str)(stringp input)pure @safe nothrow{
 		typeof(return) res;
 		if(!str.length){
 			res.match = true;
@@ -612,7 +616,7 @@ struct Error{
 		return res;
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r = parseString!"hello"("hello world".s);
 			assert(r.match);
@@ -626,11 +630,11 @@ struct Error{
 			assert(r1.error.column == 1);
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
-	Result!string parseCharRange(dchar low, dchar high)(stringp input){
+	Result!string parseCharRange(dchar low, dchar high)(stringp input)pure @safe nothrow{
 		typeof(return) res;
 		if(input.length > 0){
 			size_t i;
@@ -642,11 +646,11 @@ struct Error{
 				return res;
 			}
 		}
-		res.error = Error("c: '" ~ to!string(low) ~ "' <= c <= '" ~ to!string(high) ~ "'", input.line, input.column);
+		//res.error = Error("c: '" ~ to!string(low) ~ "' <= c <= '" ~ to!string(high) ~ "'", input.line, input.column);
 		return res;
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r = parseCharRange!('a', 'z')("hoge".s);
 			assert(r.match);
@@ -659,16 +663,16 @@ struct Error{
 			auto r3 = parseCharRange!('\u0100', '\U0010FFFF')("hello world".s);
 			assert(!r3.match);
 			assert(r3.rest == "");
-			assert(r3.error.need == "c: '\u0100' <= c <= '\U0010FFFF'");
-			assert(r3.error.line == 1);
-			assert(r3.error.column == 1);
+			//assert(r3.error.need == "c: '\u0100' <= c <= '\U0010FFFF'");
+			//assert(r3.error.line == 1);
+			//assert(r3.error.column == 1);
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
-	Result!string parseAnyChar(stringp input){
+	Result!string parseAnyChar(stringp input)pure @safe nothrow{
 		typeof(return) res;
 		res.rest = input;
 		if(input.length > 0){
@@ -683,7 +687,7 @@ struct Error{
 		return res;
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r = parseAnyChar("hoge".s);
 			assert(r.match);
@@ -708,11 +712,11 @@ struct Error{
 			assert(r5.error.column == 10);
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
-	Result!string parseEscapeSequence(stringp input){
+	Result!string parseEscapeSequence(stringp input)pure @safe nothrow{
 		typeof(return) res;
 		if(input.length > 0 && input[0] == '\\'){
 			res.match = true;
@@ -734,7 +738,7 @@ struct Error{
 		return res;
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r = parseEscapeSequence(`\"hoge`.s);
 			assert(r.match);
@@ -759,11 +763,11 @@ struct Error{
 			assert(r5.value == `\\`);
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
-	Result!string parseSpace(stringp input){
+	Result!string parseSpace(stringp input)pure @safe nothrow{
 		typeof(return) res;
 		if(input.length > 0 && (input[0] == ' ' || input[0] == '\n' || input[0] == '\t' || input[0] == '\r' || input[0] == '\f')){
 			res.match = true;
@@ -775,7 +779,7 @@ struct Error{
 		return res;
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r = parseSpace("\thoge".s);
 			assert(r.match);
@@ -789,13 +793,13 @@ struct Error{
 			assert(r1.error.column == 1);
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
 	alias combinateNone!(combinateMore0!parseSpace) parseSpaces;
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r1 = parseSpaces("\t \rhoge".s);
 			assert(r1.match);
@@ -805,11 +809,11 @@ struct Error{
 			assert(r2.rest == "hoge");
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
-	Result!None parseEOF(stringp input){
+	Result!None parseEOF(stringp input)pure @safe nothrow{
 		typeof(return) res;
 		if(input.length == 0){
 			res.match = true;
@@ -819,7 +823,7 @@ struct Error{
 		return res;
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r = parseEOF("".s);
 			assert(r.match);
@@ -830,7 +834,7 @@ struct Error{
 			assert(r1.error.column == 1);
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -863,7 +867,7 @@ struct Error{
 		) parseIdentChar;
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r0 = parseIdent("hoge".s);
 			assert(r0.match);
@@ -889,7 +893,7 @@ struct Error{
 			assert(r4.error.column == 1);
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -911,7 +915,7 @@ struct Error{
 		) parseStringLiteral;
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			{
 				auto r = parseStringLiteral(q{"表が怖い噂のソフト"}.s);
@@ -921,7 +925,7 @@ struct Error{
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -949,7 +953,7 @@ struct Error{
 		) parseIntLiteral;
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			{
 				auto r = parseIntLiteral(q{3141}.s);
@@ -971,23 +975,23 @@ struct Error{
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 }
@@ -1032,7 +1036,8 @@ template makeCompilers(bool isMemoize){
 		if(res.match){
 			return res.value;
 		}else{
-			assert(false, file ~ q{: } ~ to!string(line + res.error.line - 1) ~ q{: } ~ to!string(res.error.column) ~ q{: error } ~ res.error.need ~ q{ is needed});
+			assert(false);
+			//assert(false, file ~ q{: } ~ to!string(line + res.error.line - 1) ~ q{: } ~ to!string(res.error.column) ~ q{: error } ~ res.error.need ~ q{ is needed});
 		}
 	}
 
@@ -1053,7 +1058,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			string src = q{
 				bool hoge = ^"hello" $ >> {return false;};
@@ -1121,7 +1126,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	};
 
@@ -1150,7 +1155,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r = def(q{bool hoge = ^"hello" $ >> {return false;};}.s);
 			assert(r.match);
@@ -1192,7 +1197,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	};
 
@@ -1224,7 +1229,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			{
 				auto r = convExp(q{^"hello" $ >> {return false;}}.s);
@@ -1292,7 +1297,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1321,7 +1326,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r1 = choiceExp(`^$* / (&(!"a"))?`.s);
 			assert(r1.match);
@@ -1389,7 +1394,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1409,7 +1414,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r1 = seqExp("^$* (&(!$))?".s);
 			assert(r1.match);
@@ -1477,7 +1482,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1502,7 +1507,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r1 = optionExp("(&(!\"hello\"))?".s);
 			assert(r1.match);
@@ -1532,7 +1537,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1581,7 +1586,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r1 = postExp("^$*".s);
 			assert(r1.match);
@@ -1607,7 +1612,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1642,7 +1647,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r1 = preExp("^$".s);
 			assert(r1.match);
@@ -1664,7 +1669,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1684,7 +1689,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			static if(isMemoize){
 				auto r1 = primaryExp("(&(!$)?)".s);
@@ -1737,7 +1742,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1750,7 +1755,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			{
 				auto r = literal("\"hello\nworld\"".s);
@@ -1858,7 +1863,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1889,7 +1894,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r1 = stringLit("\"hello\nworld\" ".s);
 			assert(r1.match);
@@ -1903,7 +1908,7 @@ template makeCompilers(bool isMemoize){
 			assert(!r2.match);
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -1971,7 +1976,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r1 = rangeLit("[a-z]".s);
 			assert(r1.match);
@@ -2005,7 +2010,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -2020,7 +2025,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r1 = eofLit("$".s);
 			assert(r1.match);
@@ -2034,7 +2039,7 @@ template makeCompilers(bool isMemoize){
 			assert(!r2.match);
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -2098,7 +2103,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			{
 				auto r = usefulLit("space_p".s);
@@ -2172,7 +2177,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -2202,7 +2207,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r1 = id("int".s);
 			assert(r1.match);
@@ -2214,13 +2219,13 @@ template makeCompilers(bool isMemoize){
 			assert(r2.value == "select!(true)(\"true\", \"false\")");
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
 	alias combinateConvert!(id, fix) nonterminal;
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r1 = nonterminal("int".s);
 			assert(r1.match);
@@ -2240,7 +2245,7 @@ template makeCompilers(bool isMemoize){
 			}
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -2272,7 +2277,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r1 = typeName("int".s);
 			assert(r1.match);
@@ -2288,7 +2293,7 @@ template makeCompilers(bool isMemoize){
 			assert(r3.value == "int[]");
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -2313,7 +2318,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r = func(
 			"(int num, string code){"
@@ -2349,7 +2354,7 @@ template makeCompilers(bool isMemoize){
 			);
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -2380,7 +2385,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r = arch("(a(i(u)e)o())".s);
 			assert(r.match);
@@ -2388,7 +2393,7 @@ template makeCompilers(bool isMemoize){
 			assert(r.value == "(a(i(u)e)o())");
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -2419,7 +2424,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r = squareArch("[a[i[u]e]o[]]".s);
 			assert(r.match);
@@ -2427,7 +2432,7 @@ template makeCompilers(bool isMemoize){
 			assert(r.value == "[a[i[u]e]o[]]");
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 
@@ -2458,7 +2463,7 @@ template makeCompilers(bool isMemoize){
 		)(input);
 	}
 
-	debug(dpegparser) unittest{
+	debug(ctpg) unittest{
 		enum dg = {
 			auto r = brace("{a{i{u}e}o{}}".s);
 			assert(r.match);
@@ -2466,13 +2471,13 @@ template makeCompilers(bool isMemoize){
 			assert(r.value == "{a{i{u}e}o{}}");
 			return true;
 		};
-		debug(dpegparser_ct) static assert(dg());
+		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
 }
 
-debug(dpegparser) pragma(msg, makeCompilers!true);
-debug(dpegparser) pragma(msg, makeCompilers!false);
+debug(ctpg) pragma(msg, makeCompilers!true);
+debug(ctpg) pragma(msg, makeCompilers!false);
 
 string flat(Arg)(Arg aarg){
 	string lres;
@@ -2486,15 +2491,15 @@ string flat(Arg)(Arg aarg){
 	return lres;
 }
 
-debug(dpegparser) void main(){}
+debug(ctpg) void main(){}
 
 private:
 
-stringp s(string str){
+stringp s(string str)pure @safe nothrow{
 	return stringp(str);
 }
 
-string mkString(string[] strs, string sep = ""){
+string mkString(string[] strs, string sep = "")pure @safe nothrow{
 	string res;
 	foreach(i, str; strs){
 		if(i){
@@ -2509,7 +2514,7 @@ string mkString(string[] strs, string sep = ""){
 	return res;
 }
 
-debug(dpegparser) unittest{
+debug(ctpg) unittest{
 	enum dg = {
 		{
 			auto r = flat(tuple(1, "hello", tuple(2, "world")));
@@ -2525,7 +2530,7 @@ debug(dpegparser) unittest{
 		}
 		return true;
 	};
-	debug(dpegparser_ct) static assert(dg());
+	debug(ctpg_ct) static assert(dg());
 	dg();
 }
 
@@ -2577,7 +2582,7 @@ template CommonParserType(parsers...){
 	alias CommonType!(staticMap!(ParserType, parsers)) CommonParserType;
 }
 
-dchar decode(string str, ref size_t i){
+dchar decode(string str, ref size_t i)@safe pure nothrow{
 	dchar res;
 	if(!(str[i] & 0b_1000_0000)){
 		res = str[i];
@@ -2610,7 +2615,7 @@ dchar decode(string str, ref size_t i){
 	}
 }
 
-debug(dpegparser) public:
+debug(ctpg) public:
 
 unittest{
 	struct exp{
