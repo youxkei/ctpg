@@ -6,64 +6,86 @@ import std.typecons;
 import std.typetuple;
 import std.functional;
 
-ReturnType!fun memoizeInput(alias fun)(stringp input){
-	static ReturnType!fun[size_t] memo;
-	auto p = cast(size_t)input.str.ptr in memo;
-	if(p){
-		return *p;
-	}
-	auto res = fun(input);
-	memo[cast(size_t)input.str.ptr] = res;
-	return res;
-}
-
 alias Tuple!() None;
 
+
+ReturnType!Fun memoizeInput(alias Fun)(stringp ainput){
+	static ReturnType!Fun[size_t] lmemo;
+	auto lp = cast(size_t)ainput.str.ptr in lmemo;
+	if(lp){
+		return *lp;
+	}
+	auto lres = Fun(ainput);
+	lmemo[cast(size_t)ainput.str.ptr] = lres;
+	return lres;
+}
+
+
 struct stringp{
-	invariant(){
-		assert(line >= 0);
-		assert(column >= 0);
-	}
+	public{
+		string str;
+		int line = 1;
+		int column = 1;
 
-	immutable(char) opIndex(size_t i)const @safe pure nothrow{
-		return str[i];
-	}
 
-	typeof(this) opSlice(size_t x, size_t y)const @safe pure nothrow{
-		typeof(return) res;
-		res.str = str[x..y];
-		res.line = line;
-		res.column = column;
-		for(size_t i; i < x; i++){
-			if(str[i] == '\n'){
-				res.line++;
-				res.column = 1;
-			}else{
-				res.column++;
-			}
+		const @safe pure nothrow
+		immutable(char) opIndex(size_t ai){
+			return pstr[ai];
 		}
-		return res;
+
+
+		const @safe pure nothrow
+		typeof(this) opSlice(size_t ax, size_t ay){
+			typeof(return) lres;
+			lres.str = pstr[ax..ay];
+			lres.line = pline;
+			lres.column = pcolumn;
+			for(size_t li; li < ax; li++){
+				if(pstr[li] == '\n'){
+					lres.line++;
+					lres.column = 1;
+				}else{
+					lres.column++;
+				}
+			}
+			return lres;
+		}
+
+
+		const pure @safe nothrow
+		bool opEquals(T)(T arhs) if(is(T == string)){
+			return pstr == arhs;
+		}
+
+
+		const pure @safe nothrow @property
+		size_t length(){
+			return pstr.length;
+		}
+
+
+		const pure @safe nothrow
+		dchar decode(ref size_t ai){
+			return .decode(pstr, ai);
+		}
+
+
+		pure @safe nothrow @property
+		string to(){
+			return pstr;
+		}
 	}
 
-	bool opEquals(T)(T rhs)const pure @safe nothrow if(is(T == string)){
-		return str == rhs;
+	private{
+		invariant(){
+			assert(pline >= 0);
+			assert(pcolumn >= 0);
+		}
+		alias str pstr;
+		alias line pline;
+		alias column pcolumn;
 	}
 
-	size_t length()const pure @safe nothrow @property{
-		return str.length;
-	}
-
-	dchar decode(ref size_t i)const pure @safe nothrow{
-		return .decode(str, i);
-	}
-
-	string to()pure @safe nothrow @property{
-		return str;
-	}
-
-	string str;
-	int line = 1;
-	int column = 1;
 }
 
 debug(ctpg) unittest{
@@ -95,6 +117,7 @@ debug(ctpg) unittest{
 	dg();
 }
 
+
 struct Result(T){
 	bool match;
 	T value;
@@ -109,6 +132,7 @@ struct Result(T){
 	}
 }
 
+
 struct Option(T){
 	T value;
 	bool some;
@@ -116,6 +140,7 @@ struct Option(T){
 		return some;
 	}
 }
+
 
 struct Error{
 	invariant(){
@@ -127,6 +152,7 @@ struct Error{
 	int line;
 	int column;
 }
+
 
 /*combinators*/version(all){
 	UnTuple!(CombinateSequenceImplType!parsers) combinateSequence(parsers...)(stringp input){
@@ -598,6 +624,7 @@ struct Error{
 	}
 }
 
+
 /*parsers*/version(all){
 	Result!(string) parseString(string str)(stringp input)pure @safe nothrow{
 		typeof(return) res;
@@ -996,17 +1023,21 @@ struct Error{
 	}
 }
 
+
 string dpegWithoutMemoize(string file = __FILE__, int line = __LINE__)(string src){
 	return makeCompilers!false.parse!(file, line)(src);
 }
+
 
 string dpeg(string file = __FILE__, int line = __LINE__)(string src){
 	return makeCompilers!true.parse!(file, line)(src);
 }
 
+
 template getSource(string src){
 	enum getSource = makeCompilers!true.defs(src.s);
 }
+
 
 template makeCompilers(bool isMemoize){
 	enum prefix = q{
@@ -2476,8 +2507,10 @@ template makeCompilers(bool isMemoize){
 	}
 }
 
+
 debug(ctpg) pragma(msg, makeCompilers!true);
 debug(ctpg) pragma(msg, makeCompilers!false);
+
 
 string flat(Arg)(Arg aarg){
 	string lres;
@@ -2492,6 +2525,7 @@ string flat(Arg)(Arg aarg){
 }
 
 debug(ctpg) void main(){}
+
 
 private:
 
