@@ -9,7 +9,9 @@ import std.functional;
 alias Tuple!() None;
 alias void*[size_t][size_t][string] memo_t;
 
-version(none){
+version = memoize;
+
+version(memoize){
 	ReturnType!Func memoizeInput(alias Func)(stringp ainput, ref memo_t amemo){
 		auto lmemo0 = Func.mangleof in amemo;
 		if(lmemo0){
@@ -17,7 +19,8 @@ version(none){
 			if(lmemo1){
 				auto lmemo2 = ainput.column in *lmemo1;
 				if(lmemo2){
-					return *(cast(ReturnType!Func*)(*lmemo2));
+					void* lp = *lmemo2;
+					return *(cast(ReturnType!Func*)lp);
 				}
 			}
 		}
@@ -25,17 +28,7 @@ version(none){
 		amemo[Func.mangleof][ainput.line][ainput.column] = [lres].ptr;
 		return lres;
 	}
-}
-
-version(all){
-	ReturnType!Func memoizeInput(alias Func)(stringp ainput, ref memo_t amemo){
-		auto lres = Func(ainput, amemo);
-		amemo[Func.mangleof][ainput.line][ainput.column] = [lres].ptr;
-		return lres;
-	}
-}
-
-version(none){
+}else{
 	template memoizeInput(alias Func){
 		alias Func memoizeInput;
 	}
@@ -2474,23 +2467,30 @@ mixin ctpg!q{
 };
 
 unittest{
-	{
-		assert(parse!root("5*8+3*20") == 100);
-		assert(parse!root("5*(8+3)*20") == 1100);
-		try{
-			parse!root("5*(8+3)20");
-		}catch(Exception e){
-			assert(e.msg == "1: 8: error EOF is needed");
+	enum ldg = {
+		{
+			assert(parse!root("5*8+3*20") == 100);
+			assert(parse!root("5*(8+3)*20") == 1100);
+			if(!__ctfe){
+				try{
+					parse!root("5*(8+3)20");
+				}catch(Exception e){
+					assert(e.msg == "1: 8: error EOF is needed");
+				}
+			}
 		}
-	}
-	{
-		assert( isMatch!recursive("a"));
-		assert( isMatch!recursive("aaa"));
-		assert(!isMatch!recursive("aaaaa"));
-		assert( isMatch!recursive("aaaaaaa"));
-		assert(!isMatch!recursive("aaaaaaaaa"));
-		assert(!isMatch!recursive("aaaaaaaaaaa"));
-		assert(!isMatch!recursive("aaaaaaaaaaaaa"));
-		assert( isMatch!recursive("aaaaaaaaaaaaaaa"));
-	}
+		{
+			assert( isMatch!recursive("a"));
+			assert( isMatch!recursive("aaa"));
+			assert(!isMatch!recursive("aaaaa"));
+			assert( isMatch!recursive("aaaaaaa"));
+			assert(!isMatch!recursive("aaaaaaaaa"));
+			assert(!isMatch!recursive("aaaaaaaaaaa"));
+			assert(!isMatch!recursive("aaaaaaaaaaaaa"));
+			assert( isMatch!recursive("aaaaaaaaaaaaaaa"));
+		}
+		return true;
+	};
+	debug(ctpg_ct) static assert(ldg());
+	ldg();
 }
