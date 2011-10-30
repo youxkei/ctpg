@@ -102,7 +102,7 @@ struct stringp{
 
 debug(ctpg) unittest{
 	enum dg = {
-		auto s1 = "hoge".s;
+		auto s1 = stringp("hoge");
 		assert(s1 == "hoge");
 		assert(s1.line == 1);
 		assert(s1.column == 1);
@@ -114,12 +114,12 @@ debug(ctpg) unittest{
 		assert(s3 == "");
 		assert(s3.line == 1);
 		assert(s3.column == 5);
-		auto s4 = "メロスは激怒した。".s;
+		auto s4 = stringp("メロスは激怒した。");
 		auto s5 = s4[3..s4.length];
 		assert(s5 == "ロスは激怒した。");
 		assert(s5.line == 1);
 		assert(s5.column == 4);//TODO: column should be 2
-		auto s6 = ("hoge\npiyo".s)[5..9];
+		auto s6 = stringp("hoge\npiyo")[5..9];
 		assert(s6 == "piyo");
 		assert(s6.line == 2);
 		assert(s6.column == 1);
@@ -762,6 +762,8 @@ struct Error{
 			return lres;
 		}
 
+		alias parseAnyChar a;
+
 		debug(ctpg) unittest{
 			enum ldg = {
 				{
@@ -819,6 +821,8 @@ struct Error{
 			return lres;
 		}
 
+		alias parseEscapeSequence es;
+
 		debug(ctpg) unittest{
 			enum ldg = {
 				{
@@ -872,6 +876,8 @@ struct Error{
 			return lres;
 		}
 
+		alias parseSpace space_p;
+
 		debug(ctpg) unittest{
 			enum ldg = {
 				{
@@ -897,6 +903,8 @@ struct Error{
 
 	/* parseSpaces */ version(all){
 		alias combinateNone!(combinateMore0!parseSpace) parseSpaces;
+
+		alias parseSpaces s;
 
 		debug(ctpg) unittest{
 			enum ldg = {
@@ -959,6 +967,8 @@ struct Error{
 				combinateMore0!parseIdentChar
 			)
 		) parseIdent;
+
+		alias parseIdent ident_p;
 
 		alias combinateChoice!(
 			parseString!"_",
@@ -1025,6 +1035,8 @@ struct Error{
 			)
 		) parseStringLiteral;
 
+		alias parseStringLiteral strLit_p;
+
 		debug(ctpg) unittest{
 			enum ldg = {
 				{
@@ -1062,6 +1074,8 @@ struct Error{
 				}
 			)
 		) parseIntLiteral;
+
+		alias parseIntLiteral intLit_p;
 
 		debug(ctpg) unittest{
 			enum ldg = {
@@ -1156,7 +1170,7 @@ bool isMatch(alias Func)(string asrc){
 		debug(ctpg) unittest{
 			enum ldg = {
 				string lsrc = q{
-					bool hoge = ^"hello" $ >> {return false;};
+					bool hoge = !"hello" $ >> {return false;};
 					Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
 				};
 				auto lr = getResult!defs(lsrc);
@@ -1223,7 +1237,7 @@ bool isMatch(alias Func)(string asrc){
 
 		debug(ctpg) unittest{
 			enum ldg = {
-				auto lr = getResult!def(q{bool hoge = ^"hello" $ >> {return false;};});
+				auto lr = getResult!def(q{bool hoge = !"hello" $ >> {return false;};});
 				assert(lr.match);
 				assert(lr.rest == "");
 				assert(
@@ -1281,7 +1295,7 @@ bool isMatch(alias Func)(string asrc){
 		debug(ctpg) unittest{
 			enum ldg = {
 				{
-					auto lr = getResult!convExp(q{^"hello" $ >> {return false;}});
+					auto lr = getResult!convExp(q{!"hello" $ >> {return false;}});
 					assert(lr.match);
 					assert(lr.rest == "");
 					assert(
@@ -1350,7 +1364,7 @@ bool isMatch(alias Func)(string asrc){
 		debug(ctpg) unittest{
 			enum ldg = {
 				{
-					auto lr = getResult!choiceExp(`^$* / (&(!"a"))?`);
+					auto lr = getResult!choiceExp(`!$* / (&(^"a"))?`);
 					assert(lr.match);
 					assert(lr.rest == "");
 					assert(
@@ -1372,7 +1386,7 @@ bool isMatch(alias Func)(string asrc){
 					);
 				}
 				{
-					auto lr = getResult!choiceExp(`^"hello" $`);
+					auto lr = getResult!choiceExp(`!"hello" $`);
 					assert(lr.match);
 					assert(lr.rest == "");
 					assert(
@@ -1412,7 +1426,7 @@ bool isMatch(alias Func)(string asrc){
 		debug(ctpg) unittest{
 			enum ldg = {
 				{
-					auto lr = getResult!seqExp("^$* (&(!$))?");
+					auto lr = getResult!seqExp("!$* (&(^$))?");
 					assert(lr.match);
 					assert(lr.rest == "");
 					assert(
@@ -1434,7 +1448,7 @@ bool isMatch(alias Func)(string asrc){
 					);
 				}
 				{
-					enum lr = getResult!seqExp("^\"hello\" $");
+					enum lr = getResult!seqExp("!\"hello\" $");
 					assert(lr.match);
 					assert(lr.rest == "");
 					assert(
@@ -1478,7 +1492,7 @@ bool isMatch(alias Func)(string asrc){
 
 		debug(ctpg) unittest{
 			enum ldg = {
-				auto lr = getResult!optionExp("(&(!\"hello\"))?");
+				auto lr = getResult!optionExp("(&(^\"hello\"))?");
 				assert(lr.match);
 				assert(lr.rest == "");
 				assert(
@@ -1546,7 +1560,7 @@ bool isMatch(alias Func)(string asrc){
 
 		debug(ctpg) unittest{
 			enum ldg = {
-				auto lr = getResult!postExp("^$*");
+				auto lr = getResult!postExp("!$*");
 				assert(lr.match);
 				assert(lr.rest == "");
 				assert(
@@ -1583,10 +1597,10 @@ bool isMatch(alias Func)(string asrc){
 							return "memoizeInput!(combinateAnd!(" ~ aprimaryExp ~ "))";
 						}
 						case "!":{
-							return "memoizeInput!(combinateNot!(" ~ aprimaryExp ~ "))";
+							return "memoizeInput!(combinateNone!(" ~ aprimaryExp ~ "))";
 						}
 						case "^":{
-							return "memoizeInput!(combinateNone!(" ~ aprimaryExp ~ "))";
+							return "memoizeInput!(combinateNot!(" ~ aprimaryExp ~ "))";
 						}
 						case "":{
 							return aprimaryExp;
@@ -1598,7 +1612,7 @@ bool isMatch(alias Func)(string asrc){
 
 		debug(ctpg) unittest{
 			enum ldg = {
-				auto lr = getResult!preExp("^$");
+				auto lr = getResult!preExp("!$");
 				assert(lr.match);
 				assert(lr.rest == "");
 				assert(
@@ -1634,7 +1648,7 @@ bool isMatch(alias Func)(string asrc){
 		debug(ctpg) unittest{
 			enum ldg = {
 				{
-					auto lr = getResult!primaryExp("(&(!$)?)");
+					auto lr = getResult!primaryExp("(&(^$)?)");
 					assert(lr.match);
 					assert(lr.rest == "");
 					assert(
@@ -1676,8 +1690,7 @@ bool isMatch(alias Func)(string asrc){
 			return memoizeInput!(combinateChoice!(
 				memoizeInput!rangeLit,
 				memoizeInput!stringLit,
-				memoizeInput!eofLit,
-				memoizeInput!usefulLit
+				memoizeInput!eofLit
 			))(ainput, amemo);
 		}
 
@@ -1696,52 +1709,10 @@ bool isMatch(alias Func)(string asrc){
 					assert(lr.value == "memoizeInput!(parseCharRange!('a','z'))");
 				}
 				{
-					auto lr = getResult!usefulLit("space_p");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "memoizeInput!(parseSpace)");
-				}
-				{
-					auto lr = getResult!usefulLit("es");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "memoizeInput!(parseEscapeSequence)");
-				}
-				{
-					auto lr = getResult!usefulLit("a");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "memoizeInput!(parseAnyChar)");
-				}
-				{
-					auto lr = getResult!usefulLit("s");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "memoizeInput!(parseSpaces)");
-				}
-				{
 					auto lr = getResult!literal("$");
 					assert(lr.match);
 					assert(lr.rest == "");
 					assert(lr.value == "memoizeInput!(parseEOF)");
-				}
-				{
-					auto lr = getResult!literal("ident_p");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "memoizeInput!(parseIdent)");
-				}
-				{
-					auto lr = getResult!literal("strLit_p");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "memoizeInput!(parseStringLiteral)");
-				}
-				{
-					auto lr = getResult!literal("intLit_p");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "memoizeInput!(parseIntLiteral)");
 				}
 				{
 					auto lr = getResult!literal("表が怖い噂のソフト");
@@ -1917,118 +1888,6 @@ bool isMatch(alias Func)(string asrc){
 				{
 					auto lr = getResult!eofLit("#");
 					assert(!lr.match);
-				}
-				return true;
-			};
-			debug(ctpg_ct) static assert(ldg());
-			ldg();
-		}
-	}
-
-	/* usefulLit */ version(all){
-		Result!string usefulLit(stringp ainput, memo_t amemo){
-			return memoizeInput!(combinateConvert!(
-				memoizeInput!(combinateChoice!(
-					memoizeInput!(combinateSequence!(
-						memoizeInput!(parseString!"ident_p"),
-						memoizeInput!(combinateNot!parseIdentChar)
-					)),
-					memoizeInput!(combinateSequence!(
-						memoizeInput!(parseString!"strLit_p"),
-						memoizeInput!(combinateNot!parseIdentChar)
-					)),
-					memoizeInput!(combinateSequence!(
-						memoizeInput!(parseString!"intLit_p"),
-						memoizeInput!(combinateNot!parseIdentChar)
-					)),
-					memoizeInput!(combinateSequence!(
-						memoizeInput!(parseString!"space_p"),
-						memoizeInput!(combinateNot!parseIdentChar)
-					)),
-					memoizeInput!(combinateSequence!(
-						memoizeInput!(parseString!"es"),
-						memoizeInput!(combinateNot!parseIdentChar)
-					)),
-					memoizeInput!(combinateSequence!(
-						memoizeInput!(parseString!"a"),
-						memoizeInput!(combinateNot!parseIdentChar)
-					)),
-					memoizeInput!(combinateSequence!(
-						memoizeInput!(parseString!"s"),
-						memoizeInput!(combinateNot!parseIdentChar)
-					))
-				)),
-				function(string astr){
-					final switch(astr){
-						case "ident_p":{
-							return "memoizeInput!(parseIdent)";
-						}
-						case "strLit_p":{
-							return "memoizeInput!(parseStringLiteral)";
-						}
-						case "intLit_p":{
-							return "memoizeInput!(parseIntLiteral)";
-						}
-						case "space_p":{
-							return "memoizeInput!(parseSpace)";
-						}
-						case "es":{
-							return "memoizeInput!(parseEscapeSequence)";
-						}
-						case "a":{
-							return "memoizeInput!(parseAnyChar)";
-						}
-						case "s":{
-							return "memoizeInput!(parseSpaces)";
-						}
-					}
-				}
-			))(ainput, amemo);
-		}
-
-		debug(ctpg) unittest{
-			enum ldg = {
-				{
-					auto lr = getResult!usefulLit("space_p");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "memoizeInput!(parseSpace)");
-				}
-				{
-					auto lr = getResult!usefulLit("es");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "memoizeInput!(parseEscapeSequence)");
-				}
-				{
-					auto lr = getResult!usefulLit("a");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "memoizeInput!(parseAnyChar)");
-				}
-				{
-					auto lr = getResult!usefulLit("s");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "memoizeInput!(parseSpaces)");
-				}
-				{
-					auto lr = getResult!usefulLit("ident_p");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "memoizeInput!(parseIdent)");
-				}
-				{
-					auto lr = getResult!usefulLit("strLit_p");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "memoizeInput!(parseStringLiteral)");
-				}
-				{
-					auto lr = getResult!usefulLit("intLit_p");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "memoizeInput!(parseIntLiteral)");
 				}
 				return true;
 			};
@@ -2304,10 +2163,6 @@ debug(ctpg) void main(){}
 
 private:
 
-stringp s(string str)pure @safe nothrow{
-	return stringp(str);
-}
-
 string mkString(string[] strs, string sep = "")pure @safe nothrow{
 	string res;
 	foreach(i, str; strs){
@@ -2459,11 +2314,11 @@ mixin ctpg!q{
 		}
 	};
 
-	int primary = ^"(" addExp ^")" / intLit_p;
+	int primary = !"(" addExp !")" / intLit_p;
 
 	None recursive = A $;
 
-	None A = ^"a" ^A ^"a" / ^"a";
+	None A = !"a" !A !"a" / !"a";
 };
 
 unittest{
