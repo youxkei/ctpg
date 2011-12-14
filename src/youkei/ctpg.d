@@ -1,9 +1,13 @@
 module youkei.ctpg;
 
+import std.algorithm;
+import std.array;
 import std.conv;
+import std.range;
 import std.traits;
 import std.typecons;
 import std.typetuple;
+import std.utf;
 import std.functional;
 
 alias Tuple!() None;
@@ -12,8 +16,8 @@ alias void*[size_t][size_t][string] memo_t;
 version = memoize;
 
 version(memoize){
-	ReturnType!Func memoizeInput(alias Func)(stringp ainput, ref memo_t amemo){
-		auto lmemo0 = Func.mangleof in amemo;
+	ReturnType!tfunc memoizeInput(alias tfunc)(stringp ainput, ref memo_t amemo){
+		auto lmemo0 = tfunc.mangleof in amemo;
 		if(lmemo0){
 			auto lmemo1 = ainput.line in *lmemo0;
 			if(lmemo1){
@@ -24,8 +28,8 @@ version(memoize){
 				}
 			}
 		}
-		auto lres = Func(ainput, amemo);
-		amemo[Func.mangleof][ainput.line][ainput.column] = [lres].ptr;
+		auto lres = tfunc(ainput, amemo);
+		amemo[tfunc.mangleof][ainput.line][ainput.column] = [lres].ptr;
 		return lres;
 	}
 }else{
@@ -34,18 +38,39 @@ version(memoize){
 	}
 }
 
-struct stringp{
+struct PositionalRange(R)
+if(isForwardRange!R && isSomeChar!(ElementType!R)){
+	public{
+		R range;
+		size_t line = 1;
+		size_t column = 1;
+	}
+
+	private{
+		alias range prange;
+		alias line pline;
+		alias column pcolumn;
+	}
+}
+
+template isPositionalRange(R){
+	static if(is(R Unused == PositionalRange!T, T)){
+		enum isPositionalRange = true;
+	}else{
+		enum isPositionalRange = false;
+	}
+}
+
+version(none) struct stringp{
 	public{
 		string str;
 		int line = 1;
 		int column = 1;
 
-
 		const @safe pure nothrow
 		immutable(char) opIndex(size_t ai){
 			return pstr[ai];
 		}
-
 
 		const @safe pure nothrow
 		typeof(this) opSlice(size_t ax, size_t ay){
@@ -64,24 +89,20 @@ struct stringp{
 			return lres;
 		}
 
-
 		const pure @safe nothrow
 		bool opEquals(T)(T arhs) if(is(T == string)){
 			return pstr == arhs;
 		}
-
 
 		const pure @safe nothrow @property
 		size_t length(){
 			return pstr.length;
 		}
 
-
 		const pure @safe nothrow
-		dchar decode(ref size_t ai){
-			return .decode(pstr, ai);
+		dchar decode(){
+			return .decode(this);
 		}
-
 
 		pure @safe nothrow @property
 		string to(){
@@ -100,39 +121,39 @@ struct stringp{
 	}
 }
 
-debug(ctpg) unittest{
-	enum dg = {
-		auto s1 = stringp("hoge");
-		assert(s1 == "hoge");
-		assert(s1.line == 1);
-		assert(s1.column == 1);
-		auto s2 = s1[1..s1.length];
-		assert(s2 == "oge");
-		assert(s2.line == 1);
-		assert(s2.column == 2);
-		auto s3 = s2[s2.length..s2.length];
-		assert(s3 == "");
-		assert(s3.line == 1);
-		assert(s3.column == 5);
-		auto s4 = stringp("メロスは激怒した。");
-		auto s5 = s4[3..s4.length];
-		assert(s5 == "ロスは激怒した。");
-		assert(s5.line == 1);
-		assert(s5.column == 4);//TODO: column should be 2
-		auto s6 = stringp("hoge\npiyo")[5..9];
-		assert(s6 == "piyo");
-		assert(s6.line == 2);
-		assert(s6.column == 1);
+version(none) debug(ctpg) unittest{
+	enum ldg = {
+		auto ls1 = stringp("hoge");
+		assert(ls1 == "hoge");
+		assert(ls1.line == 1);
+		assert(ls1.column == 1);
+		auto ls2 = s1[1..s1.length];
+		assert(ls2 == "oge");
+		assert(ls2.line == 1);
+		assert(ls2.column == 2);
+		auto ls3 = s2[s2.length..s2.length];
+		assert(ls3 == "");
+		assert(ls3.line == 1);
+		assert(ls3.column == 5);
+		auto ls4 = stringp("メロスは激怒した。");
+		auto ls5 = s4[3..s4.length];
+		assert(ls5 == "ロスは激怒した。");
+		assert(ls5.line == 1);
+		assert(ls5.column == 4);//TODO: column should be 2
+		auto ls6 = stringp("hoge\npiyo")[5..9];
+		assert(ls6 == "piyo");
+		assert(ls6.line == 2);
+		assert(ls6.column == 1);
 		return true;
 	};
 	debug(ctpg_ct) static assert(dg());
 	dg();
 }
 
-struct Result(T){
+struct Result(T, R){
 	bool match;
 	T value;
-	stringp rest;
+	PositionalRange!R rest;
 	Error error;
 
 	void opAssign(F)(Result!F rhs)pure @safe nothrow if(isAssignable!(T, F)){
@@ -162,7 +183,7 @@ struct Error{
 	int column;
 }
 
-/* combinators */ version(all){
+/* combinators */ version(none){
 	/* combinateSequence */ version(all){
 		UnTuple!(CombinateSequenceImplType!Parsers) combinateSequence(Parsers...)(stringp ainput, ref memo_t amemo){
 			static assert(staticLength!Parsers > 0);
@@ -660,39 +681,148 @@ struct Error{
 
 /* parsers */ version(all){
 	/* parseString */ version(all){
-		Result!(string) parseString(string str)(stringp ainput, ref memo_t amemo){
-			typeof(return) lres;
-			if(!str.length){
-				lres.match = true;
-				lres.rest = ainput;
-				return lres;
+		template parseString(string tstring) if(tstring.length > 0){
+			Result!(string, Range) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+				enum lbreadth = countBreadth(tstring);
+				enum lconvertedString = staticConvertString!(tstring, Range);
+				typeof(return) lresult;
+				static if(isSomeString!Range){
+					if(ainput.range.length >= lconvertedString.length && lconvertedString == ainput.range[0..lconvertedString.length]){
+						lresult.match = true;
+						lresult.value = tstring;
+						lresult.rest.range = ainput.range[lconvertedString.length..$];
+						lresult.rest.line = ainput.line + lbreadth.line;
+						lresult.rest.column = ainput.column + lbreadth.column;
+						return lresult;
+					}
+				}else{
+					foreach(lc; lconvertedString){
+						if(ainput.range.empty || !lc == ainput.range.front){
+							goto Lerror;
+						}else{
+							ainput.range.popFront;
+						}
+					}
+					lresult.match = true;
+					lresult.value = tstring;
+					lresult.rest.range = ainput.range;
+					lresult.rest.line = ainput.line + lbreadth.line;
+					lresult.rest.column = ainput.column + lbreadth.column;
+				}
+			Lerror:
+				lresult.error = Error('"' ~ tstring ~ '"', ainput.line, ainput.column);
+				return lresult;
 			}
-			if(ainput.length >= str.length && ainput[0..str.length] == str){
-				lres.match = true;
-				lres.value = str;
-				lres.rest = ainput[str.length..ainput.length];
-				return lres;
-			}
-			lres.error = Error('"' ~ str ~ '"', ainput.line, ainput.column);
-			return lres;
 		}
 
-		debug(ctpg) unittest{
+		version(all) debug(ctpg) unittest{
 			enum ldg = {
-				{
-					auto lr = getResult!(parseString!"hello")("hello world");
-					assert(lr.match);
-					assert(lr.rest == " world");
-					assert(lr.value == "hello");
-				}
-				{
-					auto lr = getResult!(parseString!"hello")("hllo world");
-					assert(!lr.match);
-					assert(lr.rest == "");
-					assert(lr.error.need == "\"hello\"");
-					assert(lr.error.line == 1);
-					assert(lr.error.column == 1);
-				}
+				version(all){{
+					auto lresult = getResult!(parseString!"hello")("hello world");
+					assert(lresult.match);
+					assert(lresult.rest.range == " world");
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 6);
+					assert(lresult.value == "hello");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseString!"今は昔、竹取の翁")("今は昔、竹取の翁といふ者ありけり。");
+					assert(lresult.match);
+					assert(lresult.rest.range == "といふ者ありけり。");
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 9);
+					assert(lresult.value == "今は昔、竹取の翁");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseString!"今は昔、竹取の翁")("今は昔、竹取の翁といふ者ありけり。"w);
+					assert(lresult.match);
+					assert(lresult.rest.range == "といふ者ありけり。"w);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 9);
+					assert(lresult.value == "今は昔、竹取の翁");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseString!"今は昔、竹取の翁")("今は昔、竹取の翁といふ者ありけり。"d);
+					assert(lresult.match);
+					assert(lresult.rest.range == "といふ者ありけり。"d);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 9);
+					assert(lresult.value == "今は昔、竹取の翁");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseString!"aaaaa")(repeat(cast(char)'a'));
+					assert(lresult.match);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 6);
+					assert(lresult.value == "aaaaa");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseString!"aaaaa")(repeat(cast(wchar)'a'));
+					assert(lresult.match);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 6);
+					assert(lresult.value == "aaaaa");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseString!"aaaaa")(repeat(cast(dchar)'a'));
+					assert(lresult.match);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 6);
+					assert(lresult.value == "aaaaa");
+				}}
+				version(all){{
+					struct TestRange1{
+						auto source = "今は昔、竹取の翁といふ者ありけり。";
+						@property char front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseString!"今は昔、竹取の翁")(TestRange1());
+					assert(lresult.match);
+					assert(lresult.rest.range.source == "といふ者ありけり。");
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 9);
+					assert(lresult.value == "今は昔、竹取の翁");
+				}}
+				version(all){{
+					struct TestRange2{
+						auto source = "今は昔、竹取の翁といふ者ありけり。"w;
+						@property wchar front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseString!"今は昔、竹取の翁")(TestRange2());
+					assert(lresult.match);
+					assert(lresult.rest.range.source == "といふ者ありけり。"w);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 9);
+					assert(lresult.value == "今は昔、竹取の翁");
+				}}
+				version(all){{
+					struct TestRange3{
+						auto source = "今は昔、竹取の翁といふ者ありけり。"d;
+						@property dchar front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseString!"今は昔、竹取の翁")(TestRange3());
+					assert(lresult.match);
+					assert(lresult.rest.range.source == "といふ者ありけり。"d);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 9);
+					assert(lresult.value == "今は昔、竹取の翁");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseString!"hello")("hllo world");
+					assert(!lresult.match);
+					assert(lresult.rest.range == "");
+					assert(lresult.error.need == "\"hello\"");
+					assert(lresult.error.line == 1);
+					assert(lresult.error.column == 1);
+				}}
 				return true;
 			};
 			debug(ctpg_ct) static assert(ldg());
@@ -701,7 +831,7 @@ struct Error{
 	}
 
 	/* parseCharRange */ version(all){
-		Result!string parseCharRange(dchar Low, dchar High)(stringp ainput, ref memo_t amemo){
+		version(none) Result!string parseCharRange(dchar Low, dchar High)(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			if(ainput.length > 0){
 				size_t li;
@@ -717,34 +847,58 @@ struct Error{
 			return lres;
 		}
 
+		template parseCharRange(dchar tlow, dchar thigh)if(tlow <= thigh){
+			Result!(string, Range) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
+				typeof(return) lresult;
+				static if(isSomeString!Range){
+					if(ainput.range.length){
+						size_t lidx;
+						dchar lc = ainput.range.decode(lidx);
+						if(tlow <= lc && lc <= thigh){
+							lresult.match = true;
+							lresult.value = to!string(lc);
+							lresult.rest.range = ainput.range[lidx..$];
+							lresult.rest.line = lc == '\n' ? ainput.line + 1 : ainput.line;
+							lresult.rest.column = lc == '\n' ? 0 : ainput.column + 1;
+							return lresult;
+						}
+					}
+				}
+				lresult.error = Error("c: '" ~ to!string(tlow) ~ "' <= c <= '" ~ to!string(thigh) ~ "'", ainput.line, ainput.column);
+				return lresult;
+			}
+		}
+
 		debug(ctpg) unittest{
 			enum ldg = {
-				{
+				version(all){{
 					auto lr = getResult!(parseCharRange!('a', 'z'))("hoge");
 					assert(lr.match);
-					assert(lr.rest == "oge");
+					assert(lr.rest.range == "oge");
 					assert(lr.value == "h");
-				}
-				{
+				}}
+				version(all){{
 					auto lr = getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("表が怖い噂のソフト");
 					assert(lr.match);
-					assert(lr.rest == "が怖い噂のソフト");
+					assert(lr.rest.range == "が怖い噂のソフト");
 					assert(lr.value == "表");
-				}
-				{
+				}}
+				version(all){{
 					auto lr = getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("hello world");
 					assert(!lr.match);
-					assert(lr.rest == "");
+					assert(lr.rest.range == "");
 					assert(lr.error.need == "c: '\u0100' <= c <= '\U0010FFFF'");
 					assert(lr.error.line == 1);
 					assert(lr.error.column == 1);
-				}
+				}}
 				return true;
 			};
 			debug(ctpg_ct) static assert(ldg());
 			ldg();
 		}
 	}
+
+	version(none){
 
 	/* parseAnyChar */ version(all){
 		Result!string parseAnyChar(stringp ainput, ref memo_t amemo){
@@ -1119,8 +1273,9 @@ struct Error{
 		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
+	}
 }
-
+version(none){
 mixin template ctpg(string Src){
 	mixin(parse!defs(Src));
 }
@@ -1128,22 +1283,20 @@ mixin template ctpg(string Src){
 template getSource(string Src){
 	enum getSource = getResult!defs(Src).value;
 }
-
-auto getResult(alias Func)(string asrc){
-	memo_t lmemo;
-	return Func(stringp(asrc), lmemo);
 }
 
+auto getResult(alias Func, Range)(Range ainput){
+	memo_t lmemo;
+	return Func.apply(PositionalRange!Range(ainput), lmemo);
+}
+
+version(none){
 auto parse(alias Func)(string asrc){
 	auto res = getResult!Func(asrc);
 	if(res.match){
 		return res.value;
 	}else{
-		if(__ctfe){
-			assert(false, to!string(res.error.line) ~ q{: } ~ to!string(res.error.column) ~ q{: error } ~ res.error.need ~ q{ is needed});
-		}else{
-			throw new Exception(to!string(res.error.line) ~ q{: } ~ to!string(res.error.column) ~ q{: error } ~ res.error.need ~ q{ is needed});
-		}
+		throw new Exception(to!string(res.error.line) ~ q{: } ~ to!string(res.error.column) ~ q{: error } ~ res.error.need ~ q{ is needed});
 	}
 }
 
@@ -2145,7 +2298,7 @@ bool isMatch(alias Func)(string asrc){
 	}
 }
 
-
+}
 string flat(Arg)(Arg aarg){
 	string lres;
 	static if(isTuple!Arg || isArray!Arg){
@@ -2163,7 +2316,7 @@ debug(ctpg) void main(){}
 
 private:
 
-string mkString(string[] strs, string sep = "")pure @safe nothrow{
+string mkString(string[] strs, string sep = ""){
 	string res;
 	foreach(i, str; strs){
 		if(i){
@@ -2196,6 +2349,70 @@ debug(ctpg) unittest{
 	};
 	debug(ctpg_ct) static assert(dg());
 	dg();
+}
+
+template staticConvertString(string tstring, T){
+	static if(is(T == string)){
+		alias tstring staticConvertString;
+	}else static if(is(T == wstring)){
+		enum staticConvertString = mixin("\"" ~ tstring ~ "\"w");
+	}else static if(is(T == dstring)){
+		enum staticConvertString = mixin("\"" ~ tstring ~ "\"d");
+	}else static if(isInputRange!T){
+		static if(is(Unqual!(ElementType!T) == char)){
+			alias tstring staticConvertString;
+		}else static if(is(Unqual!(ElementType!T) == wchar)){
+			enum staticConvertString = mixin("\"" ~ tstring ~ "\"w");
+		}else static if(is(Unqual!(ElementType!T) == dchar)){
+			enum staticConvertString = mixin("\"" ~ tstring ~ "\"d");
+		}else{
+			static assert(false);
+		}
+	}
+}
+
+debug(ctpg) unittest{
+	static assert(staticConvertString!("foobar", string) == "foobar");
+	static assert(staticConvertString!("foobar", wstring) == "foobar"w);
+	static assert(staticConvertString!("foobar", dstring) == "foobar"d);
+}
+
+Tuple!(size_t, "line", size_t, "column") countBreadth(string astring)in{
+	assert(astring.length > 0);
+}body{
+	typeof(return) lresult;
+	size_t lidx;
+	while(lidx < astring.length){
+		auto lc = decode(astring, lidx);
+		if(lc == '\n'){
+			lresult.line++;
+			lresult.column = 0;
+		}else{
+			lresult.column++;
+		}
+	}
+	return lresult;
+}
+
+debug(ctpg) unittest{
+	static assert({
+		{
+			auto lresult = countBreadth("これ\nとこれ");
+			assert(lresult.line == 1);
+			assert(lresult.column == 3);
+		}
+		{
+			auto lresult = countBreadth("これ\nとこれ\nとさらにこれ");
+			assert(lresult.line == 2);
+			assert(lresult.column == 6);
+		}
+		{
+			auto lresult = countBreadth("helloワールド");
+			assert(lresult.line == 0);
+			assert(lresult.column == 9);
+		}
+		return true;
+	}());
 }
 
 template ResultType(alias R){
@@ -2246,40 +2463,55 @@ template CommonParserType(parsers...){
 	alias CommonType!(staticMap!(ParserType, parsers)) CommonParserType;
 }
 
-dchar decode(string str, ref size_t i)@safe pure nothrow{
-	dchar res;
-	if(!(str[i] & 0b_1000_0000)){
-		res = str[i];
-		i+=1;
-		return res;
-	}else if(!(str[i] & 0b_0010_0000)){
-		res = str[i] & 0b_0001_1111;
-		res <<= 6;
-		res |= str[i+1] & 0b_0011_1111;
-		i+=2;
-		return res;
-	}else if(!(str[i] & 0b_0001_0000)){
-		res = str[i] & 0b_0000_1111;
-		res <<= 6;
-		res |= str[i+1] & 0b_0011_1111;
-		res <<= 6;
-		res |= str[i+2] & 0b_0011_1111;
-		i+=3;
-		return res;
-	}else{
-		res = str[i] & 0b_0000_0111;
-		res <<= 6;
-		res |= str[i+1] & 0b_0011_1111;
-		res <<= 6;
-		res |= str[i+2] & 0b_0011_1111;
-		res <<= 6;
-		res |= str[i+3] & 0b_0011_1111;
-		i+=4;
-		return res;
+version(none) dchar decode(Range)(ref Range arange){
+	static assert(isSomeChar!(Unqual!(ElementType!Range)));
+	static if(is(Unqual!(ElementType!Range) == char)){
+		dchar lresult;
+		if(!(arange.front & 0b_1000_0000)){
+			lresult = arange.front;
+			arange.popFront;
+			return lresult;
+		}else if(!(arange.front & 0b_0010_0000)){
+			lresult = arange.front & 0b_0001_1111;
+			lresult <<= 6;
+			arange.popFront;
+			lresult |= arange.front & 0b_0011_1111;
+			arange.popFront;
+			return lresult;
+		}else if(!(arange.front & 0b_0001_0000)){
+			lresult = arange.front & 0b_0001_1111;
+			lresult <<= 6;
+			arange.popFront;
+			lresult = arange.front & 0b_0001_1111;
+			lresult <<= 6;
+			arange.popFront;
+			lresult |= arange.front & 0b_0011_1111;
+			arange.popFront;
+			return lresult;
+		}else{
+			lresult = arange.front & 0b_0001_1111;
+			lresult <<= 6;
+			arange.popFront;
+			lresult = arange.front & 0b_0001_1111;
+			lresult <<= 6;
+			arange.popFront;
+			lresult = arange.front & 0b_0001_1111;
+			lresult <<= 6;
+			arange.popFront;
+			lresult |= arange.front & 0b_0011_1111;
+			arange.popFront;
+			return lresult;
+		}
+	}else static if(is(Unqual!(ElementType!Range) == wchar)){
+		static assert(false);
+	}else static if(is(Unqual!(ElementType!Range) == dchar)){
+		lresult = arange.front;
+		arange.popFront;
+		return lresult;
 	}
 }
 
-debug(ctpg) public:
+version(none) debug(ctpg) public:
 
 mixin ctpg!q{
 	int root = addExp $;
