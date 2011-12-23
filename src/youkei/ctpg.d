@@ -38,8 +38,9 @@ version(memoize){
 	}
 }
 
-struct PositionalRange(R)
-if(isForwardRange!R && isSomeChar!(ElementType!R)){
+struct PositionalRange(R){
+	static assert(isForwardRange!R && isSomeChar!(ElementType!R));
+
 	public{
 		R range;
 		size_t line = 1;
@@ -847,7 +848,8 @@ struct Error{
 			return lres;
 		}
 
-		template parseCharRange(dchar tlow, dchar thigh)if(tlow <= thigh){
+		template parseCharRange(dchar tlow, dchar thigh){
+			static assert(tlow <= thigh);
 			Result!(string, Range) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
 				typeof(return) lresult;
 				static if(isSomeString!Range){
@@ -859,10 +861,12 @@ struct Error{
 							lresult.value = to!string(lc);
 							lresult.rest.range = ainput.range[lidx..$];
 							lresult.rest.line = lc == '\n' ? ainput.line + 1 : ainput.line;
-							lresult.rest.column = lc == '\n' ? 0 : ainput.column + 1;
+							lresult.rest.column = lc == '\n' ? 1 : ainput.column + 1;
 							return lresult;
 						}
 					}
+				}else{
+					static assert(false);
 				}
 				lresult.error = Error("c: '" ~ to!string(tlow) ~ "' <= c <= '" ~ to!string(thigh) ~ "'", ainput.line, ainput.column);
 				return lresult;
@@ -898,10 +902,8 @@ struct Error{
 		}
 	}
 
-	version(none){
-
 	/* parseAnyChar */ version(all){
-		Result!string parseAnyChar(stringp ainput, ref memo_t amemo){
+		version(none) Result!string parseAnyChar(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			lres.rest = ainput;
 			if(ainput.length > 0){
@@ -916,35 +918,71 @@ struct Error{
 			return lres;
 		}
 
+		template parseAnyChar(){
+			Result!(string, Range) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
+				typeof(return) lresult;
+				static if(isSomeString!Range){
+					if(ainput.range.length){
+						size_t lidx;
+						dchar lc = ainput.range.decode(lidx);
+						lresult.match = true;
+						lresult.value = to!string(lc);
+						lresult.rest.range = ainput.range[lidx..$];
+						lresult.rest.line = lc == '\n' ? ainput.line + 1 : ainput.line;
+						lresult.rest.column = lc == '\n' ? 1 : ainput.column + 1;
+						return lresult;
+					}
+				}else{
+					static assert(false);
+				}
+				lresult.error = Error("any char", ainput.line, ainput.column);
+				return lresult;
+			}
+		}
+
 		alias parseAnyChar a;
 
 		debug(ctpg) unittest{
 			enum ldg = {
-				{
-					auto lr = getResult!parseAnyChar("hoge");
-					assert(lr.match);
-					assert(lr.rest == "oge");
-					assert(lr.value == "h");
-				}
-				{
-					auto lr = getResult!parseAnyChar("表が怖い噂のソフト");
-					assert(lr.match);
-					assert(lr.rest == "が怖い噂のソフト");
-					assert(lr.value == "表");
-				}
-				{
-					auto lr = getResult!parseAnyChar("独");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "独");
-				}
-				{
-					auto lr = getResult!parseAnyChar("");
-					assert(!lr.match);
-					assert(lr.error.need == "any char");
-					assert(lr.error.line == 1);
-					assert(lr.error.column == 1);
-				}
+				version(all){{
+					auto lresult = getResult!(parseAnyChar!())("hoge");
+					assert(lresult.match);
+					assert(lresult.rest.range == "oge");
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 2);
+					assert(lresult.value == "h");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseAnyChar!())("表が怖い噂のソフト");
+					assert(lresult.match);
+					assert(lresult.rest.range == "が怖い噂のソフト");
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 2);
+					assert(lresult.value == "表");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseAnyChar!())("独");
+					assert(lresult.match);
+					assert(lresult.rest.range == "");
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 2);
+					assert(lresult.value == "独");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseAnyChar!())("\nhoge");
+					assert(lresult.match);
+					assert(lresult.rest.range == "hoge");
+					assert(lresult.rest.line == 2);
+					assert(lresult.rest.column == 1);
+					assert(lresult.value == "\n");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseAnyChar!())("");
+					assert(!lresult.match);
+					assert(lresult.error.need == "any char");
+					assert(lresult.error.line == 1);
+					assert(lresult.error.column == 1);
+				}}
 				return true;
 			};
 			debug(ctpg_ct) static assert(ldg());
@@ -953,7 +991,7 @@ struct Error{
 	}
 
 	/* parseEscapeSequence */ version(all){
-		Result!string parseEscapeSequence(stringp ainput, ref memo_t amemo){
+		version(none) Result!string parseEscapeSequence(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			if(ainput.length > 0 && ainput[0] == '\\'){
 				lres.match = true;
@@ -975,47 +1013,466 @@ struct Error{
 			return lres;
 		}
 
+		template parseEscapeSequence(){
+			Result!(string, Range) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
+				typeof(return) lresult;
+				static if(isSomeString!Range){
+					if(ainput.range[0] == '\\'){
+						switch(ainput.range[1]){
+							case 'u':{
+								lresult.match = true;
+								lresult.value = to!string(ainput.range[0..6]);
+								lresult.rest.range = ainput.range[6..$];
+								lresult.rest.line = ainput.line;
+								lresult.rest.column = ainput.column + 6;
+								return lresult;
+							}
+							case 'U':{
+								lresult.match = true;
+								lresult.value = to!string(ainput.range[0..10]);
+								lresult.rest.range = ainput.range[10..$];
+								lresult.rest.line = ainput.line;
+								lresult.rest.column = ainput.column + 10;
+								return lresult;
+							}
+							case '\'':
+							case '"':
+							case '?':
+							case '\\':
+							case 'a':
+							case 'b':
+							case 'f':
+							case 'n':
+							case 'r':
+							case 't':
+							case 'v':{
+								lresult.match = true;
+								lresult.value = to!string(ainput.range[0..2]);
+								lresult.rest.range = ainput.range[2..$];
+								lresult.rest.line = ainput.line;
+								lresult.rest.column = ainput.column + 2;
+								return lresult;
+							}
+							default:{
+							}
+						}
+					}
+				}else{
+					auto lc1 = ainput.range.front;
+					if(lc1 == '\\'){
+						ainput.range.popFront;
+						auto lc2 = ainput.range.front;
+						switch(lc2){
+							case 'u':{
+								lresult.match = true;
+								ainput.range.popFront;
+								char[6] ldata;
+								ldata[0..2] = "\\u";
+								foreach(lidx; 2..6){
+									ldata[lidx] = cast(char)ainput.range.front;
+									ainput.range.popFront;
+								}
+								lresult.value = to!string(ldata);
+								lresult.rest.range = ainput.range;
+								lresult.rest.line = ainput.line;
+								lresult.rest.column = ainput.column + 6;
+								return lresult;
+							}
+							case 'U':{
+								lresult.match = true;
+								ainput.range.popFront;
+								char[10] ldata;
+								ldata[0..2] = "\\U";
+								foreach(lidx; 2..10){
+									ldata[lidx] = cast(char)ainput.range.front;
+									ainput.range.popFront;
+								}
+								lresult.value = to!string(ldata);
+								lresult.rest.range = ainput.range;
+								lresult.rest.line = ainput.line;
+								lresult.rest.column = ainput.column + 10;
+								return lresult;
+							}
+							case '\'':
+							case '"':
+							case '?':
+							case '\\':
+							case 'a':
+							case 'b':
+							case 'f':
+							case 'n':
+							case 'r':
+							case 't':
+							case 'v':{
+								lresult.match = true;
+								ainput.range.popFront;
+								lresult.value = "\\" ~ to!string(lc2);
+								lresult.rest.range = ainput.range;
+								lresult.rest.line = ainput.line;
+								lresult.rest.column = ainput.column + 2;
+								return lresult;
+							}
+							default:{
+							}
+						}
+					}
+				}
+				lresult.error = Error("escape sequence", ainput.line, ainput.column);
+				return lresult;
+			}
+		}
+
 		alias parseEscapeSequence es;
 
-		debug(ctpg) unittest{
+		version(all) debug(ctpg) unittest{
 			enum ldg = {
-				{
-					auto lr = getResult!parseEscapeSequence(`\"hoge`);
-					assert(lr.match);
-					assert(lr.rest == "hoge");
-					assert(lr.value == `\"`);
-				}
-				{
-					auto lr = getResult!parseEscapeSequence("\\U0010FFFF");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "\\U0010FFFF");
-				}
-				{
-					auto lr = getResult!parseEscapeSequence("\\u10FF");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "\\u10FF");
-				}
-				{
-					auto lr = getResult!parseEscapeSequence("欝");
-					assert(!lr.match);
-					assert(lr.error.need == "escape sequence");
-					assert(lr.error.line == 1);
-					assert(lr.error.column == 1);
-				}
-				{
-					auto lr = getResult!parseEscapeSequence(`\\`);
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == `\\`);
-				}
+				version(all){{
+					auto lresult = getResult!(parseEscapeSequence!())("\\\"hoge");
+					assert(lresult.match);
+					assert(lresult.rest.range == "hoge");
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 3);
+					assert(lresult.value == "\\\"");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseEscapeSequence!())("\\\"hoge"w);
+					assert(lresult.match);
+					assert(lresult.rest.range == "hoge"w);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 3);
+					assert(lresult.value == "\\\"");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseEscapeSequence!())("\\\"hoge"d);
+					assert(lresult.match);
+					assert(lresult.rest.range == "hoge"d);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 3);
+					assert(lresult.value == "\\\"");
+				}}
+				version(all){{
+					struct TestRange1{
+						auto source = "\\\"hoge";
+						@property char front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseEscapeSequence!())(TestRange1());
+					assert(lresult.match);
+					assert(lresult.rest.range.source == "hoge");
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 3);
+					assert(lresult.value == "\\\"");
+				}}
+				version(all){{
+					struct TestRange2{
+						auto source = "\\\"hoge"w;
+						@property wchar front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseEscapeSequence!())(TestRange2());
+					assert(lresult.match);
+					assert(lresult.rest.range.source == "hoge");
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 3);
+					assert(lresult.value == "\\\"");
+				}}
+				version(all){{
+					struct TestRange3{
+						auto source = "\\\"hoge"d;
+						@property dchar front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseEscapeSequence!())(TestRange3());
+					assert(lresult.match);
+					assert(lresult.rest.range.source == "hoge"d);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 3);
+					assert(lresult.value == "\\\"");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseEscapeSequence!())("\\U0010FFFFhoge");
+					assert(lresult.match);
+					assert(lresult.rest.range == "hoge");
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 11);
+					assert(lresult.value == "\\U0010FFFF");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseEscapeSequence!())("\\U0010FFFFhoge"w);
+					assert(lresult.match);
+					assert(lresult.rest.range == "hoge"w);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 11);
+					assert(lresult.value == "\\U0010FFFF");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseEscapeSequence!())("\\U0010FFFFhoge"d);
+					assert(lresult.match);
+					assert(lresult.rest.range == "hoge"d);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 11);
+					assert(lresult.value == "\\U0010FFFF");
+				}}
+				version(all){{
+					struct TestRange4{
+						auto source = "\\U0010FFFFhoge";
+						@property char front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseEscapeSequence!())(TestRange4());
+					assert(lresult.match);
+					assert(lresult.rest.range.source == "hoge");
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 11);
+					assert(lresult.value == "\\U0010FFFF");
+				}}
+				version(all){{
+					struct TestRange5{
+						auto source = "\\U0010FFFFhoge"w;
+						@property wchar front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseEscapeSequence!())(TestRange5());
+					assert(lresult.match);
+					assert(lresult.rest.range.source == "hoge"w);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 11);
+					assert(lresult.value == "\\U0010FFFF");
+				}}
+				version(all){{
+					struct TestRange6{
+						auto source = "\\U0010FFFFhoge"d;
+						@property dchar front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseEscapeSequence!())(TestRange6());
+					assert(lresult.match);
+					assert(lresult.rest.range.source == "hoge"d);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 11);
+					assert(lresult.value == "\\U0010FFFF");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseEscapeSequence!())("\\u10FFhoge");
+					assert(lresult.match);
+					assert(lresult.rest.range == "hoge");
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 7);
+					assert(lresult.value == "\\u10FF");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseEscapeSequence!())("\\u10FFhoge"w);
+					assert(lresult.match);
+					assert(lresult.rest.range == "hoge"w);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 7);
+					assert(lresult.value == "\\u10FF");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseEscapeSequence!())("\\u10FFhoge"d);
+					assert(lresult.match);
+					assert(lresult.rest.range == "hoge"d);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 7);
+					assert(lresult.value == "\\u10FF");
+				}}
+				version(all){{
+					struct TestRange7{
+						auto source = "\\u10FFhoge";
+						@property char front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseEscapeSequence!())(TestRange7());
+					assert(lresult.match);
+					assert(lresult.rest.range.source == "hoge");
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 7);
+					assert(lresult.value == "\\u10FF");
+				}}
+				version(all){{
+					struct TestRange8{
+						auto source = "\\u10FFhoge"w;
+						@property wchar front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseEscapeSequence!())(TestRange8());
+					assert(lresult.match);
+					assert(lresult.rest.range.source == "hoge"w);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 7);
+					assert(lresult.value == "\\u10FF");
+				}}
+				version(all){{
+					struct TestRange9{
+						auto source = "\\u10FFhoge"d;
+						@property dchar front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseEscapeSequence!())(TestRange9());
+					assert(lresult.match);
+					assert(lresult.rest.range.source == "hoge"d);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 7);
+					assert(lresult.value == "\\u10FF");
+				}}
+				version(all){{
+					auto lresult = getResult!(parseEscapeSequence!())(`\\hoge`);
+					assert(lresult.match);
+					assert(lresult.rest.range == "hoge");
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 3);
+					assert(lresult.value == `\\`);
+				}}
+				version(all){{
+					auto lresult = getResult!(parseEscapeSequence!())(`\\hoge`w);
+					assert(lresult.match);
+					assert(lresult.rest.range == "hoge"w);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 3);
+					assert(lresult.value == `\\`);
+				}}
+				version(all){{
+					auto lresult = getResult!(parseEscapeSequence!())(`\\hoge`d);
+					assert(lresult.match);
+					assert(lresult.rest.range == "hoge"d);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 3);
+					assert(lresult.value == `\\`);
+				}}
+				version(all){{
+					struct TestRange10{
+						auto source = `\\hoge`;
+						@property char front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseEscapeSequence!())(TestRange10());
+					assert(lresult.match);
+					assert(lresult.rest.range.source == "hoge");
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 3);
+					assert(lresult.value == `\\`);
+				}}
+				version(all){{
+					struct TestRange11{
+						auto source = `\thoge`w;
+						@property wchar front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseEscapeSequence!())(TestRange11());
+					assert(lresult.match);
+					assert(lresult.rest.range.source == "hoge"w);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 3);
+					assert(lresult.value == `\t`);
+				}}
+				version(all){{
+					struct TestRange12{
+						auto source = `\nhoge`d;
+						@property dchar front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseEscapeSequence!())(TestRange12());
+					assert(lresult.match);
+					assert(lresult.rest.range.source == "hoge"d);
+					assert(lresult.rest.line == 1);
+					assert(lresult.rest.column == 3);
+					assert(lresult.value == `\n`);
+				}}
+				version(all){{
+					auto lresult = getResult!(parseEscapeSequence!())("欝hoge");
+					assert(!lresult.match);
+					assert(lresult.error.need == "escape sequence");
+					assert(lresult.error.line == 1);
+					assert(lresult.error.column == 1);
+				}}
+				version(all){{
+					auto lresult = getResult!(parseEscapeSequence!())("欝hoge"w);
+					assert(!lresult.match);
+					assert(lresult.error.need == "escape sequence");
+					assert(lresult.error.line == 1);
+					assert(lresult.error.column == 1);
+				}}
+				version(all){{
+					auto lresult = getResult!(parseEscapeSequence!())("欝hoge"d);
+					assert(!lresult.match);
+					assert(lresult.error.need == "escape sequence");
+					assert(lresult.error.line == 1);
+					assert(lresult.error.column == 1);
+				}}
+				version(all){{
+					struct TestRange13{
+						auto source = "欝hoge";
+						@property char front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseEscapeSequence!())(TestRange13());
+					assert(!lresult.match);
+					assert(lresult.error.need == "escape sequence");
+					assert(lresult.error.line == 1);
+					assert(lresult.error.column == 1);
+				}}
+				version(all){{
+					struct TestRange14{
+						auto source = "欝hoge"w;
+						@property wchar front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseEscapeSequence!())(TestRange14());
+					assert(!lresult.match);
+					assert(lresult.error.need == "escape sequence");
+					assert(lresult.error.line == 1);
+					assert(lresult.error.column == 1);
+				}}
+				version(all){{
+					struct TestRange15{
+						auto source = "欝hoge"d;
+						@property dchar front(){ return source[0]; }
+						@property void popFront(){ source = source[1..$]; }
+						@property bool empty(){ return source.length == 0; }
+						@property typeof(this) save(){ return this; }
+					}
+					auto lresult = getResult!(parseEscapeSequence!())(TestRange15());
+					assert(!lresult.match);
+					assert(lresult.error.need == "escape sequence");
+					assert(lresult.error.line == 1);
+					assert(lresult.error.column == 1);
+				}}
 				return true;
 			};
 			debug(ctpg_ct) static assert(ldg());
 			ldg();
 		}
 	}
+
+	version(none){
 
 	/* parseSpace */ version(all){
 		Result!string parseSpace(stringp ainput, ref memo_t amemo){
@@ -1275,6 +1732,7 @@ struct Error{
 	}
 	}
 }
+
 version(none){
 mixin template ctpg(string Src){
 	mixin(parse!defs(Src));
