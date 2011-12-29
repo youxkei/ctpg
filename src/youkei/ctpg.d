@@ -1,3 +1,11 @@
+// Written in the D programming language.
+
+/*          Copyright youkei 2010 - 2012.
+ * Distributed under the Boost Software License, Version 1.0.
+ *    (See accompanying file LICENSE_1_0.txt or copy at
+ *          http://www.boost.org/LICENSE_1_0.txt)
+ */
+
 module youkei.ctpg;
 
 import std.algorithm;
@@ -45,6 +53,10 @@ struct PositionalRange(R){
 		R range;
 		size_t line = 1;
 		size_t column = 1;
+
+		typeof(this) save(){
+			return PositionalRange!R(prange.save, pline, pcolumn);
+		}
 	}
 
 	private{
@@ -151,17 +163,18 @@ version(none) debug(ctpg) unittest{
 	dg();
 }
 
-struct Result(T, R){
+struct Result(Range, T){
 	bool match;
 	T value;
-	PositionalRange!R rest;
+	PositionalRange!Range rest;
 	Error error;
 
-	void opAssign(F)(Result!F rhs)pure @safe nothrow if(isAssignable!(T, F)){
-		match = rhs.match;
-		value = rhs.value;
-		rest = rhs.rest;
-		error = rhs.error;
+	pure @safe nothrow
+	void opAssign(F)(Result!(Range, F) arhs)if(isAssignable!(T, F)){
+		match = arhs.match;
+		value = arhs.value;
+		rest = arhs.rest;
+		error = arhs.error;
 	}
 }
 
@@ -184,14 +197,21 @@ struct Error{
 	int column;
 }
 
-/* combinators */ version(none){
+/* combinators */ version(all){
 	/* combinateSequence */ version(all){
-		UnTuple!(CombinateSequenceImplType!Parsers) combinateSequence(Parsers...)(stringp ainput, ref memo_t amemo){
+		version(none) UnTuple!(CombinateSequenceImplType!Parsers) combinateSequence(Parsers...)(stringp ainput, ref memo_t amemo){
 			static assert(staticLength!Parsers > 0);
 			return unTuple(combinateSequenceImpl!Parsers(ainput, amemo));
 		}
 
-		private CombinateSequenceImplType!Parsers combinateSequenceImpl(Parsers...)(stringp ainput, ref memo_t amemo){
+		template combinateSequence(tparsers...){
+			static assert(tparsers.length > 0);
+			UnTuple!(Range, CombinateSequenceImplType!(Range, tparsers)) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+				return unTuple!Range(combinateSequenceImpl!(Range, tparsers)(ainput, amemo));
+			}
+		}
+
+		version(none) private CombinateSequenceImplType!Parsers combinateSequenceImpl(Parsers...)(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			static if(staticLength!Parsers == 1){
 				auto lr = Parsers[0](ainput, amemo);
@@ -231,55 +251,326 @@ struct Error{
 			return lres;
 		}
 
+		private CombinateSequenceImplType!(Range, tparsers) combinateSequenceImpl(Range, tparsers...)(PositionalRange!Range ainput, ref memo_t amemo){
+			typeof(return) lresult;
+			static if(tparsers.length == 1){
+				auto lr = tparsers[0].apply(ainput, amemo);
+				if(lr.match){
+					lresult.match = true;
+					static if(isTuple!(ParserType!(Range, tparsers[0]))){
+						lresult.value = lr.value;
+					}else{
+						lresult.value = tuple(lr.value);
+					}
+					lresult.rest = lr.rest;
+				}else{
+					lresult.error = lr.error;
+				}
+			}else{
+				auto lr1 = tparsers[0].apply(ainput, amemo);
+				if(lr1.match){
+					auto lr2 = combinateSequenceImpl!(Range, tparsers[1..$])(lr1.rest, amemo);
+					if(lr2.match){
+						lresult.match = true;
+						static if(isTuple!(ParserType!(Range, tparsers[0]))){
+							lresult.value = tuple(lr1.value.field, lr2.value.field);
+						}else{
+							lresult.value = tuple(lr1.value, lr2.value.field);
+						}
+						lresult.rest = lr2.rest;
+					}else{
+						lresult.error = lr2.error;
+					}
+				}else{
+					lresult.error = lr1.error;
+				}
+			}
+			return lresult;
+		}
+
 		debug(ctpg) unittest{
 			enum ldg = {
-				{
-					auto lr = getResult!(combinateSequence!(
-						parseString!("hello"),
-						parseString!("world")
-					))("helloworld");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value[0] == "hello");
-					assert(lr.value[1] == "world");
-				}
-				{
-					auto lr = getResult!(combinateSequence!(
-						combinateSequence!(
+				version(all){{
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world")
-						),
-						parseString!"!"
-					))("helloworld!");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value[0] == "hello");
-					assert(lr.value[1] == "world");
-					assert(lr.value[2] == "!");
-				}
-				{
-					auto lr = getResult!(combinateSequence!(
-						parseString!("hello"),
-						parseString!("world")
-					))("hellovvorld");
-					assert(!lr.match);
-					assert(lr.rest == "");
-					assert(lr.error.need == q{"world"});
-					assert(lr.error.line == 1);
-					assert(lr.error.column == 6);
-				}
-				{
-					auto lr = getResult!(combinateSequence!(
-						parseString!("hello"),
-						parseString!("world"),
-						parseString!("!")
-					))("helloworld?");
-					assert(!lr.match);
-					assert(lr.rest == "");
-					assert(lr.error.need == q{"!"});
-					assert(lr.error.line == 1);
-					assert(lr.error.column == 11);
-				}
+						))("helloworld");
+						assert(lresult.match);
+						assert(lresult.rest.range == "");
+						assert(lresult.value[0] == "hello");
+						assert(lresult.value[1] == "world");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world")
+						))("helloworld"w);
+						assert(lresult.match);
+						assert(lresult.rest.range == ""w);
+						assert(lresult.value[0] == "hello");
+						assert(lresult.value[1] == "world");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world")
+						))("helloworld"d);
+						assert(lresult.match);
+						assert(lresult.rest.range == ""d);
+						assert(lresult.value[0] == "hello");
+						assert(lresult.value[1] == "world");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world")
+						))(TestRange!"helloworld"());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "");
+						assert(lresult.value[0] == "hello");
+						assert(lresult.value[1] == "world");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world")
+						))(TestRange!"helloworld"w());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == ""w);
+						assert(lresult.value[0] == "hello");
+						assert(lresult.value[1] == "world");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world")
+						))(TestRange!"helloworld"d());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == ""d);
+						assert(lresult.value[0] == "hello");
+						assert(lresult.value[1] == "world");
+					}}
+				}}
+				version(all){{
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							combinateSequence!(
+								parseString!("hello"),
+								parseString!("world")
+							),
+							parseString!"!"
+						))("helloworld!");
+						assert(lresult.match);
+						assert(lresult.rest.range == "");
+						assert(lresult.value[0] == "hello");
+						assert(lresult.value[1] == "world");
+						assert(lresult.value[2] == "!");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							combinateSequence!(
+								parseString!("hello"),
+								parseString!("world")
+							),
+							parseString!"!"
+						))("helloworld!"w);
+						assert(lresult.match);
+						assert(lresult.rest.range == ""w);
+						assert(lresult.value[0] == "hello");
+						assert(lresult.value[1] == "world");
+						assert(lresult.value[2] == "!");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							combinateSequence!(
+								parseString!("hello"),
+								parseString!("world")
+							),
+							parseString!"!"
+						))("helloworld!"d);
+						assert(lresult.match);
+						assert(lresult.rest.range == ""d);
+						assert(lresult.value[0] == "hello");
+						assert(lresult.value[1] == "world");
+						assert(lresult.value[2] == "!");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							combinateSequence!(
+								parseString!("hello"),
+								parseString!("world")
+							),
+							parseString!"!"
+						))(TestRange!"helloworld!"());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "");
+						assert(lresult.value[0] == "hello");
+						assert(lresult.value[1] == "world");
+						assert(lresult.value[2] == "!");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							combinateSequence!(
+								parseString!("hello"),
+								parseString!("world")
+							),
+							parseString!"!"
+						))(TestRange!"helloworld!"w());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == ""w);
+						assert(lresult.value[0] == "hello");
+						assert(lresult.value[1] == "world");
+						assert(lresult.value[2] == "!");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							combinateSequence!(
+								parseString!("hello"),
+								parseString!("world")
+							),
+							parseString!"!"
+						))(TestRange!"helloworld!"d());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == ""d);
+						assert(lresult.value[0] == "hello");
+						assert(lresult.value[1] == "world");
+						assert(lresult.value[2] == "!");
+					}}
+				}}
+				version(all){{
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world")
+						))("hellovvorld");
+						assert(!lresult.match);
+						assert(lresult.rest.range == "");
+						assert(lresult.error.need == q{"world"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 6);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world")
+						))("hellovvorld"w);
+						assert(!lresult.match);
+						assert(lresult.rest.range == ""w);
+						assert(lresult.error.need == q{"world"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 6);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world")
+						))("hellovvorld"d);
+						assert(!lresult.match);
+						assert(lresult.rest.range == ""d);
+						assert(lresult.error.need == q{"world"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 6);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world")
+						))(TestRange!"hellovvorld"());
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"world"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 6);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world")
+						))(TestRange!"hellovvorld"w());
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"world"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 6);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world")
+						))(TestRange!"hellovvorld"d());
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"world"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 6);
+					}}
+				}}
+				version(all){{
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world"),
+							parseString!("!")
+						))("helloworld?");
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"!"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 11);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world"),
+							parseString!("!")
+						))("helloworld?"w);
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"!"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 11);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world"),
+							parseString!("!")
+						))("helloworld?"d);
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"!"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 11);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world"),
+							parseString!("!")
+						))(TestRange!"helloworld?"());
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"!"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 11);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world"),
+							parseString!("!")
+						))(TestRange!"helloworld?"w());
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"!"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 11);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateSequence!(
+							parseString!("hello"),
+							parseString!("world"),
+							parseString!("!")
+						))(TestRange!"helloworld?"d());
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"!"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 11);
+					}}
+				}}
 				return true;
 			};
 			debug(ctpg_ct) static assert(ldg());
@@ -288,53 +579,256 @@ struct Error{
 	}
 
 	/* combinateChoice */ version(all){
-		Result!(CommonParserType!Parsers) combinateChoice(Parsers...)(stringp ainput, ref memo_t amemo){
-			static assert(staticLength!Parsers > 0);
-			static if(staticLength!Parsers == 1){
-				return Parsers[0](ainput, amemo);
+		version(none) Result!(Range, CommonParserType!tparsers) combinateChoice(Range, tparsers...)(PositionalRange!Range ainput, ref memo_t amemo){
+			static assert(tparsers.length > 0);
+			static if(tparsers.length == 1){
+				return tparsers[0](ainput, amemo);
 			}else{
-				typeof(return) lres;
-				auto lr1 = Parsers[0](ainput, amemo);
+				typeof(return) lresult;
+				auto lr1 = tparsers[0](ainput.save, amemo);
 				if(lr1.match){
-					lres = lr1;
-					return lres;
+					lresult = lr1;
+					return lresult;
 				}else{
-					lres.error = lr1.error;
+					lresult.error = lr1.error;
 				}
-				auto lr2 = combinateChoice!(Parsers[1..$])(ainput, amemo);
+				auto lr2 = combinateChoice!(tparsers[1..$])(ainput, amemo);
 				if(lr2.match){
-					lres = lr2;
-					return lres;
+					lresult = lr2;
+					return lresult;
 				}else{
-					lres.error.need ~= " or " ~ lr2.error.need;
+					lresult.error.need ~= " or " ~ lr2.error.need;
 				}
-				return lres;
+				return lresult;
+			}
+		}
+
+		template combinateChoice(tparsers...){
+			Result!(Range, CommonParserType!(Range, tparsers)) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+				static assert(tparsers.length > 0);
+				static if(tparsers.length == 1){
+					return tparsers[0].apply(ainput, amemo);
+				}else{
+					typeof(return) lresult;
+					auto lr1 = tparsers[0].apply(ainput.save, amemo);
+					if(lr1.match){
+						lresult = lr1;
+						return lresult;
+					}else{
+						lresult.error = lr1.error;
+					}
+					auto lr2 = combinateChoice!(tparsers[1..$]).apply(ainput, amemo);
+					if(lr2.match){
+						lresult = lr2;
+						return lresult;
+					}else{
+						lresult.error.need ~= " or " ~ lr2.error.need;
+					}
+					return lresult;
+				}
 			}
 		}
 
 		debug(ctpg) unittest{
 			enum ldg = {
-				alias getResult!(combinateChoice!(parseString!"h",parseString!"w")) p;
-				{
-					auto lr = p("hw");
-					assert(lr.match);
-					assert(lr.rest == "w");
-					assert(lr.value == "h");
-				}
-				{
-					auto lr = p("w");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "w");
-				}
-				{
-					auto lr = p("");
-					assert(!lr.match);
-					assert(lr.rest == "");
-					assert(lr.error.need == q{"h" or "w"});
-					assert(lr.error.line == 1);
-					assert(lr.error.column == 1);
-				}
+				version(all){{
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))("hw");
+						assert(lresult.match);
+						assert(lresult.rest.range == "w");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "h");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))("hw"w);
+						assert(lresult.match);
+						assert(lresult.rest.range == "w"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "h");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))("hw"d);
+						assert(lresult.match);
+						assert(lresult.rest.range == "w"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "h");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))(TestRange!"hw"());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "w");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "h");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))(TestRange!"hw"w());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "w"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "h");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))(TestRange!"hw"d());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "w"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "h");
+					}}
+				}}
+				version(all){{
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))("w");
+						assert(lresult.match);
+						assert(lresult.rest.range == "");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "w");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))("w"w);
+						assert(lresult.match);
+						assert(lresult.rest.range == ""w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "w");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))("w"d);
+						assert(lresult.match);
+						assert(lresult.rest.range == ""d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "w");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))(TestRange!"wh"());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "h");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "w");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))(TestRange!"wh"w());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "h"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "w");
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))(TestRange!"wh"d());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "h"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "w");
+					}}
+				}}
+				version(all){{
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))("");
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"h" or "w"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))(""w);
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"h" or "w"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))(""d);
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"h" or "w"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))(TestRange!""());
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"h" or "w"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))(TestRange!""w());
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"h" or "w"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateChoice!(
+							parseString!"h",
+							parseString!"w"
+						))(TestRange!""d());
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"h" or "w"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+				}}
 				return true;
 			};
 			debug(ctpg_ct) static assert(ldg());
@@ -343,7 +837,7 @@ struct Error{
 	}
 
 	/* combinateMore */ version(all){
-		Result!(ParserType!Parser[]) combinateMore(int N, alias Parser, alias Sep = parseString!"")(stringp ainput, ref memo_t amemo){
+		version(none) Result!(ParserType!Parser[]) combinateMore(int N, alias Parser, alias Sep = parseNone!())(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			stringp lstr = ainput;
 			while(true){
@@ -369,48 +863,228 @@ struct Error{
 			return lres;
 		}
 
-		template combinateMore0(alias Parser, alias Sep = parseString!""){
-			alias combinateMore!(0, Parser, Sep) combinateMore0;
+		template combinateMore(int tn, alias tparser, alias tsep){
+			Result!(Range, ParserType!(Range, tparser)[]) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+				typeof(return) lresult;
+				PositionalRange!Range lrest = ainput;
+				while(true){
+					auto lr1 = tparser.apply(lrest, amemo);
+					if(lr1.match){
+						lresult.value = lresult.value ~ lr1.value;
+						lrest = lr1.rest;
+						auto lr2 = tsep.apply(lrest, amemo);
+						if(lr2.match){
+							lrest = lr2.rest;
+						}else{
+							break;
+						}
+					}else{
+						lresult.error = lr1.error;
+						break;
+					}
+				}
+				if(lresult.value.length >= tn){
+					lresult.match = true;
+					lresult.rest = lrest;
+				}
+				return lresult;
+			}
 		}
 
-		template combinateMore1(alias Parser, alias Sep = parseString!""){
-			alias combinateMore!(1, Parser, Sep) combinateMore1;
+		template combinateMore0(alias tparser, alias tsep = parseNone!()){
+			alias combinateMore!(0, tparser, tsep) combinateMore0;
+		}
+
+		template combinateMore1(alias tparser, alias tsep = parseNone!()){
+			alias combinateMore!(1, tparser, tsep) combinateMore1;
 		}
 
 		debug(ctpg) unittest{
 			enum ldg = {
-				{
-					alias getResult!(combinateMore0!(parseString!"w")) p;
-					{
-						auto lr = p("wwwwwwwww w");
-						assert(lr.match);
-						assert(lr.rest == " w");
-						assert(lr.value.mkString() == "wwwwwwwww");
-					}
-					{
-						auto lr = p(" w");
-						assert(lr.match);
-						assert(lr.rest == " w");
-						assert(lr.value.mkString == "");
-					}
-				}
-				{
-					alias getResult!(combinateMore1!(parseString!"w")) p;
-					{
-						auto lr = p("wwwwwwwww w");
-						assert(lr.match);
-						assert(lr.rest == " w");
-						assert(lr.value.mkString() == "wwwwwwwww");
-					}
-					{
-						auto lr = p(" w");
-						assert(!lr.match);
-						assert(lr.rest == "");
-						assert(lr.error.need == q{"w"});
-						assert(lr.error.line == 1);
-						assert(lr.error.column == 1);
-					}
-				}
+				version(all){{
+					version(all){{
+						version(all){{
+							auto lresult = getResult!(combinateMore0!(parseString!"w"))("wwwwwwwww w");
+							assert(lresult.match);
+							assert(lresult.rest.range == " w");
+							assert(lresult.rest.line == 1);
+							assert(lresult.rest.column == 10);
+							assert(lresult.value.mkString() == "wwwwwwwww");
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateMore0!(parseString!"w"))("wwwwwwwww w"w);
+							assert(lresult.match);
+							assert(lresult.rest.range == " w"w);
+							assert(lresult.rest.line == 1);
+							assert(lresult.rest.column == 10);
+							assert(lresult.value.mkString() == "wwwwwwwww");
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateMore0!(parseString!"w"))("wwwwwwwww w"d);
+							assert(lresult.match);
+							assert(lresult.rest.range == " w"d);
+							assert(lresult.rest.line == 1);
+							assert(lresult.rest.column == 10);
+							assert(lresult.value.mkString() == "wwwwwwwww");
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateMore0!(parseString!"w"))(TestRange!"wwwwwwwww w"());
+							assert(lresult.match);
+							assert(lresult.rest.range.source == " w");
+							assert(lresult.rest.line == 1);
+							assert(lresult.rest.column == 10);
+							assert(lresult.value.mkString() == "wwwwwwwww");
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateMore0!(parseString!"w"))(TestRange!"wwwwwwwww w"w());
+							assert(lresult.match);
+							assert(lresult.rest.range.source == " w"w);
+							assert(lresult.rest.line == 1);
+							assert(lresult.rest.column == 10);
+							assert(lresult.value.mkString() == "wwwwwwwww");
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateMore0!(parseString!"w"))(TestRange!"wwwwwwwww w"d());
+							assert(lresult.match);
+							assert(lresult.rest.range.source == " w"d);
+							assert(lresult.rest.line == 1);
+							assert(lresult.rest.column == 10);
+							assert(lresult.value.mkString() == "wwwwwwwww");
+						}}
+					}}
+					version(all){{
+						version(all){{
+							auto lresult = getResult!(combinateMore0!(parseString!"w"))(" w");
+							assert(lresult.match);
+							assert(lresult.rest.range == " w");
+							assert(lresult.rest.line == 1);
+							assert(lresult.rest.column == 1);
+							assert(lresult.value.mkString == "");
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateMore0!(parseString!"w"))(" w"w);
+							assert(lresult.match);
+							assert(lresult.rest.range == " w"w);
+							assert(lresult.rest.line == 1);
+							assert(lresult.rest.column == 1);
+							assert(lresult.value.mkString == "");
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateMore0!(parseString!"w"))(" w"d);
+							assert(lresult.match);
+							assert(lresult.rest.range == " w"d);
+							assert(lresult.rest.line == 1);
+							assert(lresult.rest.column == 1);
+							assert(lresult.value.mkString == "");
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateMore0!(parseString!"w"))(TestRange!" w"());
+							assert(lresult.match);
+							assert(lresult.rest.range.source == " w");
+							assert(lresult.rest.line == 1);
+							assert(lresult.rest.column == 1);
+							assert(lresult.value.mkString == "");
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateMore0!(parseString!"w"))(TestRange!" w"w());
+							assert(lresult.match);
+							assert(lresult.rest.range.source == " w"w);
+							assert(lresult.rest.line == 1);
+							assert(lresult.rest.column == 1);
+							assert(lresult.value.mkString == "");
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateMore0!(parseString!"w"))(TestRange!" w"d());
+							assert(lresult.match);
+							assert(lresult.rest.range.source == " w"d);
+							assert(lresult.rest.line == 1);
+							assert(lresult.rest.column == 1);
+							assert(lresult.value.mkString == "");
+						}}
+					}}
+				}}
+				version(all){{
+					version(all){{
+						version(all){{
+							auto lresult = getResult!(combinateMore1!(parseString!"w"))("wwwwwwwww w");
+							assert(lresult.match);
+							assert(lresult.rest.range == " w");
+							assert(lresult.value.mkString() == "wwwwwwwww");
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateMore1!(parseString!"w"))("wwwwwwwww w"w);
+							assert(lresult.match);
+							assert(lresult.rest.range == " w"w);
+							assert(lresult.value.mkString() == "wwwwwwwww");
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateMore1!(parseString!"w"))("wwwwwwwww w"d);
+							assert(lresult.match);
+							assert(lresult.rest.range == " w"d);
+							assert(lresult.value.mkString() == "wwwwwwwww");
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateMore1!(parseString!"w"))(TestRange!"wwwwwwwww w"());
+							assert(lresult.match);
+							assert(lresult.rest.range.source == " w");
+							assert(lresult.value.mkString() == "wwwwwwwww");
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateMore1!(parseString!"w"))(TestRange!"wwwwwwwww w"w());
+							assert(lresult.match);
+							assert(lresult.rest.range.source == " w"w);
+							assert(lresult.value.mkString() == "wwwwwwwww");
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateMore1!(parseString!"w"))(TestRange!"wwwwwwwww w"d());
+							assert(lresult.match);
+							assert(lresult.rest.range.source == " w"d);
+							assert(lresult.value.mkString() == "wwwwwwwww");
+						}}
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateMore1!(parseString!"w"))(" w");
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"w"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateMore1!(parseString!"w"))(" w"w);
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"w"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateMore1!(parseString!"w"))(" w"d);
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"w"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateMore1!(parseString!"w"))(TestRange!" w"());
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"w"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateMore1!(parseString!"w"))(TestRange!" w"w());
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"w"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(combinateMore1!(parseString!"w"))(TestRange!" w"d());
+						assert(!lresult.match);
+						assert(lresult.error.need == q{"w"});
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+				}}
 				return true;
 			};
 			debug(ctpg_ct) static assert(ldg());
@@ -418,7 +1092,7 @@ struct Error{
 		}
 	}
 
-	/* combinateOption */ version(all){
+	/* combinateOption */ version(none){
 		Result!(Option!(ParserType!Parser)) combinateOption(alias Parser)(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			lres.rest = ainput;
@@ -455,7 +1129,7 @@ struct Error{
 		}
 	}
 
-	/* combinateNone */ version(all){
+	/* combinateNone */ version(none){
 		Result!None combinateNone(alias Parser)(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			auto lr = Parser(ainput, amemo);
@@ -501,7 +1175,7 @@ struct Error{
 		}
 	}
 
-	/* combinateAnd */ version(all){
+	/* combinateAnd */ version(none){
 		Result!None combinateAnd(alias Parser)(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			lres.rest = ainput;
@@ -534,7 +1208,7 @@ struct Error{
 		}
 	}
 
-	/* combinateNot */ version(all){
+	/* combinateNot */ version(none){
 		Result!None combinateNot(alias Parser)(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			lres.rest = ainput;
@@ -556,7 +1230,7 @@ struct Error{
 		}
 	}
 
-	/* combinateConvert */ version(all){
+	/* combinateConvert */ version(none){
 		Result!(ReturnType!(Converter)) combinateConvert(alias Parser, alias Converter)(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			auto lr = Parser(ainput, amemo);
@@ -616,7 +1290,7 @@ struct Error{
 		}
 	}
 
-	/* combinateCheck */ version(all){
+	/* combinateCheck */ version(none){
 		Result!(ParserType!Parser) combinateCheck(alias Parser, alias Checker)(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			auto lr = Parser(ainput, amemo);
@@ -664,7 +1338,7 @@ struct Error{
 		}
 	}
 
-	/* combinateString */ version(all){
+	/* combinateString */ version(none){
 		Result!string combinateString(alias Parser)(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			auto lr = Parser(ainput, amemo);
@@ -681,9 +1355,72 @@ struct Error{
 }
 
 /* parsers */ version(all){
+	/* parseNone */ version(all){
+		template parseNone(){
+			Result!(Range, None) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+				typeof(return) lresult;
+				lresult.match = true;
+				lresult.rest = ainput;
+				return lresult;
+			}
+		}
+
+		debug(ctpg) unittest{
+			enum ldg = {
+				version(all){{
+					version(all){{
+						auto lresult = getResult!(parseNone!())("hoge");
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseNone!())("hoge"w);
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseNone!())("hoge"d);
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseNone!())(TestRange!"hoge"());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseNone!())(TestRange!"hoge"w());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseNone!())(TestRange!"hoge"d());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 1);
+					}}
+				}}
+				return true;
+			};
+			debug(ctpg_ct) static assert(ldg());
+			ldg();
+		}
+	}
+
 	/* parseString */ version(all){
 		template parseString(string tstring) if(tstring.length > 0){
-			Result!(string, Range) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+			Result!(Range, string) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
 				enum lbreadth = countBreadth(tstring);
 				enum lconvertedString = staticConvertString!(tstring, Range);
 				typeof(return) lresult;
@@ -698,7 +1435,7 @@ struct Error{
 					}
 				}else{
 					foreach(lc; lconvertedString){
-						if(ainput.range.empty || !lc == ainput.range.front){
+						if(ainput.range.empty || lc != ainput.range.front){
 							goto Lerror;
 						}else{
 							ainput.range.popFront;
@@ -716,105 +1453,180 @@ struct Error{
 			}
 		}
 
-		version(all) debug(ctpg) unittest{
+		debug(ctpg) unittest{
 			enum ldg = {
 				version(all){{
-					auto lresult = getResult!(parseString!"hello")("hello world");
-					assert(lresult.match);
-					assert(lresult.rest.range == " world");
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 6);
-					assert(lresult.value == "hello");
+					version(all){{
+						auto lresult = getResult!(parseString!"hello")("hello world");
+						assert(lresult.match);
+						assert(lresult.rest.range == " world");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 6);
+						assert(lresult.value == "hello");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"hello")("hello world"w);
+						assert(lresult.match);
+						assert(lresult.rest.range == " world"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 6);
+						assert(lresult.value == "hello");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"hello")("hello world"d);
+						assert(lresult.match);
+						assert(lresult.rest.range == " world"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 6);
+						assert(lresult.value == "hello");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"hello")(TestRange!"hello world"());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == " world");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 6);
+						assert(lresult.value == "hello");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"hello")(TestRange!"hello world"w());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == " world"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 6);
+						assert(lresult.value == "hello");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"hello")(TestRange!"hello world"d());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == " world"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 6);
+						assert(lresult.value == "hello");
+					}}
 				}}
 				version(all){{
-					auto lresult = getResult!(parseString!"今は昔、竹取の翁")("今は昔、竹取の翁といふ者ありけり。");
-					assert(lresult.match);
-					assert(lresult.rest.range == "といふ者ありけり。");
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 9);
-					assert(lresult.value == "今は昔、竹取の翁");
+					version(all){{
+						auto lresult = getResult!(parseString!"hello")("hello");
+						assert(lresult.match);
+						assert(lresult.rest.range == "");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 6);
+						assert(lresult.value == "hello");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"hello")("hello"w);
+						assert(lresult.match);
+						assert(lresult.rest.range == ""w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 6);
+						assert(lresult.value == "hello");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"hello")("hello"d);
+						assert(lresult.match);
+						assert(lresult.rest.range == ""d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 6);
+						assert(lresult.value == "hello");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"hello")(TestRange!"hello"());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 6);
+						assert(lresult.value == "hello");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"hello")(TestRange!"hello"w());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == ""w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 6);
+						assert(lresult.value == "hello");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"hello")(TestRange!"hello"d());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == ""d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 6);
+						assert(lresult.value == "hello");
+					}}
 				}}
 				version(all){{
-					auto lresult = getResult!(parseString!"今は昔、竹取の翁")("今は昔、竹取の翁といふ者ありけり。"w);
-					assert(lresult.match);
-					assert(lresult.rest.range == "といふ者ありけり。"w);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 9);
-					assert(lresult.value == "今は昔、竹取の翁");
+					version(all){{
+						auto lresult = getResult!(parseString!"今は昔、竹取の翁")("今は昔、竹取の翁といふ者ありけり。");
+						assert(lresult.match);
+						assert(lresult.rest.range == "といふ者ありけり。");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 9);
+						assert(lresult.value == "今は昔、竹取の翁");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"今は昔、竹取の翁")("今は昔、竹取の翁といふ者ありけり。"w);
+						assert(lresult.match);
+						assert(lresult.rest.range == "といふ者ありけり。"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 9);
+						assert(lresult.value == "今は昔、竹取の翁");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"今は昔、竹取の翁")("今は昔、竹取の翁といふ者ありけり。"d);
+						assert(lresult.match);
+						assert(lresult.rest.range == "といふ者ありけり。"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 9);
+						assert(lresult.value == "今は昔、竹取の翁");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"aaaaa")(repeat(cast(char)'a'));
+						assert(lresult.match);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 6);
+						assert(lresult.value == "aaaaa");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"aaaaa")(repeat(cast(wchar)'a'));
+						assert(lresult.match);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 6);
+						assert(lresult.value == "aaaaa");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"aaaaa")(repeat(cast(dchar)'a'));
+						assert(lresult.match);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 6);
+						assert(lresult.value == "aaaaa");
+					}}
 				}}
 				version(all){{
-					auto lresult = getResult!(parseString!"今は昔、竹取の翁")("今は昔、竹取の翁といふ者ありけり。"d);
-					assert(lresult.match);
-					assert(lresult.rest.range == "といふ者ありけり。"d);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 9);
-					assert(lresult.value == "今は昔、竹取の翁");
-				}}
-				version(all){{
-					auto lresult = getResult!(parseString!"aaaaa")(repeat(cast(char)'a'));
-					assert(lresult.match);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 6);
-					assert(lresult.value == "aaaaa");
-				}}
-				version(all){{
-					auto lresult = getResult!(parseString!"aaaaa")(repeat(cast(wchar)'a'));
-					assert(lresult.match);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 6);
-					assert(lresult.value == "aaaaa");
-				}}
-				version(all){{
-					auto lresult = getResult!(parseString!"aaaaa")(repeat(cast(dchar)'a'));
-					assert(lresult.match);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 6);
-					assert(lresult.value == "aaaaa");
-				}}
-				version(all){{
-					struct TestRange1{
-						auto source = "今は昔、竹取の翁といふ者ありけり。";
-						@property char front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseString!"今は昔、竹取の翁")(TestRange1());
-					assert(lresult.match);
-					assert(lresult.rest.range.source == "といふ者ありけり。");
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 9);
-					assert(lresult.value == "今は昔、竹取の翁");
-				}}
-				version(all){{
-					struct TestRange2{
-						auto source = "今は昔、竹取の翁といふ者ありけり。"w;
-						@property wchar front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseString!"今は昔、竹取の翁")(TestRange2());
-					assert(lresult.match);
-					assert(lresult.rest.range.source == "といふ者ありけり。"w);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 9);
-					assert(lresult.value == "今は昔、竹取の翁");
-				}}
-				version(all){{
-					struct TestRange3{
-						auto source = "今は昔、竹取の翁といふ者ありけり。"d;
-						@property dchar front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseString!"今は昔、竹取の翁")(TestRange3());
-					assert(lresult.match);
-					assert(lresult.rest.range.source == "といふ者ありけり。"d);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 9);
-					assert(lresult.value == "今は昔、竹取の翁");
+					version(all){{
+						auto lresult = getResult!(parseString!"今は昔、竹取の翁")(TestRange!"今は昔、竹取の翁といふ者ありけり。"());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "といふ者ありけり。");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 9);
+						assert(lresult.value == "今は昔、竹取の翁");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"今は昔、竹取の翁")(TestRange!"今は昔、竹取の翁といふ者ありけり。"w());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "といふ者ありけり。"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 9);
+						assert(lresult.value == "今は昔、竹取の翁");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseString!"今は昔、竹取の翁")(TestRange!"今は昔、竹取の翁といふ者ありけり。"d());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "といふ者ありけり。"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 9);
+						assert(lresult.value == "今は昔、竹取の翁");
+					}}
 				}}
 				version(all){{
 					auto lresult = getResult!(parseString!"hello")("hllo world");
@@ -850,7 +1662,7 @@ struct Error{
 
 		template parseCharRange(dchar tlow, dchar thigh){
 			static assert(tlow <= thigh);
-			Result!(string, Range) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
+			Result!(Range, string) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
 				typeof(return) lresult;
 				static if(isSomeString!Range){
 					if(ainput.range.length){
@@ -919,12 +1731,19 @@ struct Error{
 		}
 
 		template parseAnyChar(){
-			Result!(string, Range) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
+			Result!(Range, string) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
 				typeof(return) lresult;
 				static if(isSomeString!Range){
 					if(ainput.range.length){
 						size_t lidx;
-						dchar lc = ainput.range.decode(lidx);
+						static if(is(Range : const(dchar[]))){
+							dchar lc = ainput[0];
+							lidx = 1;
+						}else static if(is(Range : const(wchar[])) || is(Range : const(char[]))){
+							dchar lc = ainput.range.decode(lidx);
+						}else{
+							static assert(false);
+						}
 						lresult.match = true;
 						lresult.value = to!string(lc);
 						lresult.rest.range = ainput.range[lidx..$];
@@ -933,7 +1752,10 @@ struct Error{
 						return lresult;
 					}
 				}else{
-					static assert(false);
+					static if(is(ElementType!Range : char)){
+						auto lc = ainput.range.front;
+
+					}
 				}
 				lresult.error = Error("any char", ainput.line, ainput.column);
 				return lresult;
@@ -1014,7 +1836,7 @@ struct Error{
 		}
 
 		template parseEscapeSequence(){
-			Result!(string, Range) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
+			Result!(Range, string) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
 				typeof(return) lresult;
 				static if(isSomeString!Range){
 					if(ainput.range[0] == '\\'){
@@ -1124,346 +1946,322 @@ struct Error{
 
 		alias parseEscapeSequence es;
 
-		version(all) debug(ctpg) unittest{
+		debug(ctpg) unittest{
+			static assert(isRandomAccessRange!(TestRandomRange!"hoge"));
+
 			enum ldg = {
-				version(all){{
-					auto lresult = getResult!(parseEscapeSequence!())("\\\"hoge");
-					assert(lresult.match);
-					assert(lresult.rest.range == "hoge");
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 3);
-					assert(lresult.value == "\\\"");
+				/* \\hoge */ version(all){{
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())("\\\"hoge");
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == "\\\"");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())("\\\"hoge"w);
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == "\\\"");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())("\\\"hoge"d);
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == "\\\"");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRange!"\\\"hoge"());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == "\\\"");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRange!"\\\"hoge"w());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == "\\\"");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRange!"\\\"hoge"d());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == "\\\"");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!"\\\"hoge"());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == "\\\"");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!"\\\"hoge"w());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == "\\\"");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!"\\\"hoge"d());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == "\\\"");
+					}}
 				}}
-				version(all){{
-					auto lresult = getResult!(parseEscapeSequence!())("\\\"hoge"w);
-					assert(lresult.match);
-					assert(lresult.rest.range == "hoge"w);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 3);
-					assert(lresult.value == "\\\"");
+				/* \U0010FFFF */version(all){{
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())("\\U0010FFFFhoge");
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 11);
+						assert(lresult.value == "\\U0010FFFF");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())("\\U0010FFFFhoge"w);
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 11);
+						assert(lresult.value == "\\U0010FFFF");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())("\\U0010FFFFhoge"d);
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 11);
+						assert(lresult.value == "\\U0010FFFF");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRange!"\\U0010FFFFhoge"());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 11);
+						assert(lresult.value == "\\U0010FFFF");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRange!"\\U0010FFFFhoge"w());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 11);
+						assert(lresult.value == "\\U0010FFFF");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRange!"\\U0010FFFFhoge"d());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 11);
+						assert(lresult.value == "\\U0010FFFF");
+					}}
 				}}
-				version(all){{
-					auto lresult = getResult!(parseEscapeSequence!())("\\\"hoge"d);
-					assert(lresult.match);
-					assert(lresult.rest.range == "hoge"d);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 3);
-					assert(lresult.value == "\\\"");
+				/* /u10&& */ version(all){{
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())("\\u10FFhoge");
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 7);
+						assert(lresult.value == "\\u10FF");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())("\\u10FFhoge"w);
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 7);
+						assert(lresult.value == "\\u10FF");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())("\\u10FFhoge"d);
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 7);
+						assert(lresult.value == "\\u10FF");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRange!"\\u10FFhoge"());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 7);
+						assert(lresult.value == "\\u10FF");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRange!"\\u10FFhoge"w());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 7);
+						assert(lresult.value == "\\u10FF");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRange!"\\u10FFhoge"d());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 7);
+						assert(lresult.value == "\\u10FF");
+					}}
 				}}
-				version(all){{
-					struct TestRange1{
-						auto source = "\\\"hoge";
-						@property char front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseEscapeSequence!())(TestRange1());
-					assert(lresult.match);
-					assert(lresult.rest.range.source == "hoge");
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 3);
-					assert(lresult.value == "\\\"");
+				/* \nhoge */ version(all){{
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(`\\hoge`);
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == `\\`);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(`\\hoge`w);
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == `\\`);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(`\\hoge`d);
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == `\\`);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRange!`\\hoge`());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == `\\`);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRange!`\thoge`w());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == `\t`);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRange!`\nhoge`d());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == `\n`);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!`\\hoge`());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == `\\`);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!`\thoge`w());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == `\t`);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!`\nhoge`d());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 3);
+						assert(lresult.value == `\n`);
+					}}
 				}}
-				version(all){{
-					struct TestRange2{
-						auto source = "\\\"hoge"w;
-						@property wchar front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseEscapeSequence!())(TestRange2());
-					assert(lresult.match);
-					assert(lresult.rest.range.source == "hoge");
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 3);
-					assert(lresult.value == "\\\"");
-				}}
-				version(all){{
-					struct TestRange3{
-						auto source = "\\\"hoge"d;
-						@property dchar front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseEscapeSequence!())(TestRange3());
-					assert(lresult.match);
-					assert(lresult.rest.range.source == "hoge"d);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 3);
-					assert(lresult.value == "\\\"");
-				}}
-				version(all){{
-					auto lresult = getResult!(parseEscapeSequence!())("\\U0010FFFFhoge");
-					assert(lresult.match);
-					assert(lresult.rest.range == "hoge");
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 11);
-					assert(lresult.value == "\\U0010FFFF");
-				}}
-				version(all){{
-					auto lresult = getResult!(parseEscapeSequence!())("\\U0010FFFFhoge"w);
-					assert(lresult.match);
-					assert(lresult.rest.range == "hoge"w);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 11);
-					assert(lresult.value == "\\U0010FFFF");
-				}}
-				version(all){{
-					auto lresult = getResult!(parseEscapeSequence!())("\\U0010FFFFhoge"d);
-					assert(lresult.match);
-					assert(lresult.rest.range == "hoge"d);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 11);
-					assert(lresult.value == "\\U0010FFFF");
-				}}
-				version(all){{
-					struct TestRange4{
-						auto source = "\\U0010FFFFhoge";
-						@property char front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseEscapeSequence!())(TestRange4());
-					assert(lresult.match);
-					assert(lresult.rest.range.source == "hoge");
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 11);
-					assert(lresult.value == "\\U0010FFFF");
-				}}
-				version(all){{
-					struct TestRange5{
-						auto source = "\\U0010FFFFhoge"w;
-						@property wchar front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseEscapeSequence!())(TestRange5());
-					assert(lresult.match);
-					assert(lresult.rest.range.source == "hoge"w);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 11);
-					assert(lresult.value == "\\U0010FFFF");
-				}}
-				version(all){{
-					struct TestRange6{
-						auto source = "\\U0010FFFFhoge"d;
-						@property dchar front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseEscapeSequence!())(TestRange6());
-					assert(lresult.match);
-					assert(lresult.rest.range.source == "hoge"d);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 11);
-					assert(lresult.value == "\\U0010FFFF");
-				}}
-				version(all){{
-					auto lresult = getResult!(parseEscapeSequence!())("\\u10FFhoge");
-					assert(lresult.match);
-					assert(lresult.rest.range == "hoge");
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 7);
-					assert(lresult.value == "\\u10FF");
-				}}
-				version(all){{
-					auto lresult = getResult!(parseEscapeSequence!())("\\u10FFhoge"w);
-					assert(lresult.match);
-					assert(lresult.rest.range == "hoge"w);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 7);
-					assert(lresult.value == "\\u10FF");
-				}}
-				version(all){{
-					auto lresult = getResult!(parseEscapeSequence!())("\\u10FFhoge"d);
-					assert(lresult.match);
-					assert(lresult.rest.range == "hoge"d);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 7);
-					assert(lresult.value == "\\u10FF");
-				}}
-				version(all){{
-					struct TestRange7{
-						auto source = "\\u10FFhoge";
-						@property char front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseEscapeSequence!())(TestRange7());
-					assert(lresult.match);
-					assert(lresult.rest.range.source == "hoge");
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 7);
-					assert(lresult.value == "\\u10FF");
-				}}
-				version(all){{
-					struct TestRange8{
-						auto source = "\\u10FFhoge"w;
-						@property wchar front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseEscapeSequence!())(TestRange8());
-					assert(lresult.match);
-					assert(lresult.rest.range.source == "hoge"w);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 7);
-					assert(lresult.value == "\\u10FF");
-				}}
-				version(all){{
-					struct TestRange9{
-						auto source = "\\u10FFhoge"d;
-						@property dchar front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseEscapeSequence!())(TestRange9());
-					assert(lresult.match);
-					assert(lresult.rest.range.source == "hoge"d);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 7);
-					assert(lresult.value == "\\u10FF");
-				}}
-				version(all){{
-					auto lresult = getResult!(parseEscapeSequence!())(`\\hoge`);
-					assert(lresult.match);
-					assert(lresult.rest.range == "hoge");
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 3);
-					assert(lresult.value == `\\`);
-				}}
-				version(all){{
-					auto lresult = getResult!(parseEscapeSequence!())(`\\hoge`w);
-					assert(lresult.match);
-					assert(lresult.rest.range == "hoge"w);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 3);
-					assert(lresult.value == `\\`);
-				}}
-				version(all){{
-					auto lresult = getResult!(parseEscapeSequence!())(`\\hoge`d);
-					assert(lresult.match);
-					assert(lresult.rest.range == "hoge"d);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 3);
-					assert(lresult.value == `\\`);
-				}}
-				version(all){{
-					struct TestRange10{
-						auto source = `\\hoge`;
-						@property char front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseEscapeSequence!())(TestRange10());
-					assert(lresult.match);
-					assert(lresult.rest.range.source == "hoge");
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 3);
-					assert(lresult.value == `\\`);
-				}}
-				version(all){{
-					struct TestRange11{
-						auto source = `\thoge`w;
-						@property wchar front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseEscapeSequence!())(TestRange11());
-					assert(lresult.match);
-					assert(lresult.rest.range.source == "hoge"w);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 3);
-					assert(lresult.value == `\t`);
-				}}
-				version(all){{
-					struct TestRange12{
-						auto source = `\nhoge`d;
-						@property dchar front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseEscapeSequence!())(TestRange12());
-					assert(lresult.match);
-					assert(lresult.rest.range.source == "hoge"d);
-					assert(lresult.rest.line == 1);
-					assert(lresult.rest.column == 3);
-					assert(lresult.value == `\n`);
-				}}
-				version(all){{
-					auto lresult = getResult!(parseEscapeSequence!())("欝hoge");
-					assert(!lresult.match);
-					assert(lresult.error.need == "escape sequence");
-					assert(lresult.error.line == 1);
-					assert(lresult.error.column == 1);
-				}}
-				version(all){{
-					auto lresult = getResult!(parseEscapeSequence!())("欝hoge"w);
-					assert(!lresult.match);
-					assert(lresult.error.need == "escape sequence");
-					assert(lresult.error.line == 1);
-					assert(lresult.error.column == 1);
-				}}
-				version(all){{
-					auto lresult = getResult!(parseEscapeSequence!())("欝hoge"d);
-					assert(!lresult.match);
-					assert(lresult.error.need == "escape sequence");
-					assert(lresult.error.line == 1);
-					assert(lresult.error.column == 1);
-				}}
-				version(all){{
-					struct TestRange13{
-						auto source = "欝hoge";
-						@property char front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseEscapeSequence!())(TestRange13());
-					assert(!lresult.match);
-					assert(lresult.error.need == "escape sequence");
-					assert(lresult.error.line == 1);
-					assert(lresult.error.column == 1);
-				}}
-				version(all){{
-					struct TestRange14{
-						auto source = "欝hoge"w;
-						@property wchar front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseEscapeSequence!())(TestRange14());
-					assert(!lresult.match);
-					assert(lresult.error.need == "escape sequence");
-					assert(lresult.error.line == 1);
-					assert(lresult.error.column == 1);
-				}}
-				version(all){{
-					struct TestRange15{
-						auto source = "欝hoge"d;
-						@property dchar front(){ return source[0]; }
-						@property void popFront(){ source = source[1..$]; }
-						@property bool empty(){ return source.length == 0; }
-						@property typeof(this) save(){ return this; }
-					}
-					auto lresult = getResult!(parseEscapeSequence!())(TestRange15());
-					assert(!lresult.match);
-					assert(lresult.error.need == "escape sequence");
-					assert(lresult.error.line == 1);
-					assert(lresult.error.column == 1);
+				/* 欝hoge */ version(all){{
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())("欝hoge");
+						assert(!lresult.match);
+						assert(lresult.error.need == "escape sequence");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())("欝hoge"w);
+						assert(!lresult.match);
+						assert(lresult.error.need == "escape sequence");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())("欝hoge"d);
+						assert(!lresult.match);
+						assert(lresult.error.need == "escape sequence");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRange!"欝hoge"());
+						assert(!lresult.match);
+						assert(lresult.error.need == "escape sequence");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRange!"欝hoge"w());
+						assert(!lresult.match);
+						assert(lresult.error.need == "escape sequence");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRange!"欝hoge"d());
+						assert(!lresult.match);
+						assert(lresult.error.need == "escape sequence");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!"欝hoge"());
+						assert(!lresult.match);
+						assert(lresult.error.need == "escape sequence");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!"欝hoge"w());
+						assert(!lresult.match);
+						assert(lresult.error.need == "escape sequence");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!"欝hoge"d());
+						assert(!lresult.match);
+						assert(lresult.error.need == "escape sequence");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
 				}}
 				return true;
 			};
@@ -1472,10 +2270,8 @@ struct Error{
 		}
 	}
 
-	version(none){
-
 	/* parseSpace */ version(all){
-		Result!string parseSpace(stringp ainput, ref memo_t amemo){
+		version(none) Result!string parseSpace(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			if(ainput.length > 0 && (ainput[0] == ' ' || ainput[0] == '\n' || ainput[0] == '\t' || ainput[0] == '\r' || ainput[0] == '\f')){
 				lres.match = true;
@@ -1487,24 +2283,135 @@ struct Error{
 			return lres;
 		}
 
+		template parseSpace(){
+			Result!(Range, string) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
+				typeof(return) lresult;
+				static if(isSomeString!Range){
+					if(ainput.range.length > 0 && (ainput.range[0] == ' ' || ainput.range[0] == '\n' || ainput.range[0] == '\t' || ainput.range[0] == '\r' || ainput.range[0] == '\f')){
+						lresult.match = true;
+						lresult.value = to!string(ainput.range[0..1]);
+						lresult.rest.range = ainput.range[1..$];
+						lresult.rest.line = (ainput.range[0] == '\n' ? ainput.line + 1 : ainput.line);
+						lresult.rest.column = (ainput.range[0] == '\n' ? 1 : ainput.column + 1);
+						return lresult;
+					}
+				}else{
+					if(!ainput.range.empty){
+						Unqual!(ElementType!Range) lc = ainput.range.front;
+						if(lc == ' ' || lc == '\n' || lc == '\t' || lc == '\r' || lc == '\f'){
+							lresult.match = true;
+							lresult.value = to!string(lc);
+							ainput.range.popFront;
+							lresult.rest.range = ainput.range;
+							lresult.rest.line = (lc == '\n' ? ainput.line + 1 : ainput.line);
+							lresult.rest.column = (lc == '\n' ? 1 : ainput.column + 1);
+							return lresult;
+						}
+					}
+				}
+				lresult.error = Error("space", ainput.line, ainput.column);
+				return lresult;
+			}
+		}
+
 		alias parseSpace space_p;
 
 		debug(ctpg) unittest{
 			enum ldg = {
-				{
-					auto lr = getResult!parseSpace("\thoge");
-					assert(lr.match);
-					assert(lr.rest == "hoge");
-					assert(lr.value == "\t");
-				}
-				{
-					auto lr = getResult!parseSpace("hoge");
-					assert(!lr.match);
-					assert(lr.rest == "");
-					assert(lr.error.need == "space");
-					assert(lr.error.line == 1);
-					assert(lr.error.column == 1);
-				}
+				/* "\thoge" */ version(all){{
+					version(all){{
+						auto lresult = getResult!(parseSpace!())("\thoge");
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "\t");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseSpace!())("\thoge"w);
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "\t");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseSpace!())("\thoge"d);
+						assert(lresult.match);
+						assert(lresult.rest.range == "hoge"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "\t");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseSpace!())(TestRange!"\thoge"());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge");
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "\t");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseSpace!())(TestRange!"\thoge"w());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge"w);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "\t");
+					}}
+					version(all){{
+						auto lresult = getResult!(parseSpace!())(TestRange!"\thoge"d());
+						assert(lresult.match);
+						assert(lresult.rest.range.source == "hoge"d);
+						assert(lresult.rest.line == 1);
+						assert(lresult.rest.column == 2);
+						assert(lresult.value == "\t");
+					}}
+				}}
+				/* hoge */ version(all){{
+					version(all){{
+						auto lresult = getResult!(parseSpace!())("hoge");
+						assert(!lresult.match);
+						assert(lresult.error.need == "space");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseSpace!())("hoge"w);
+						assert(!lresult.match);
+						assert(lresult.error.need == "space");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseSpace!())("hoge"d);
+						assert(!lresult.match);
+						assert(lresult.error.need == "space");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseSpace!())(TestRange!"hoge"());
+						assert(!lresult.match);
+						assert(lresult.error.need == "space");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseSpace!())(TestRange!"hoge"w());
+						assert(!lresult.match);
+						assert(lresult.error.need == "space");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseSpace!())(TestRange!"hoge"d());
+						assert(!lresult.match);
+						assert(lresult.error.need == "space");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+				}}
 				return true;
 			};
 			debug(ctpg_ct) static assert(ldg());
@@ -1512,7 +2419,7 @@ struct Error{
 		}
 	}
 
-	/* parseSpaces */ version(all){
+	/* parseSpaces */ version(none){
 		alias combinateNone!(combinateMore0!parseSpace) parseSpaces;
 
 		alias parseSpaces s;
@@ -1537,7 +2444,7 @@ struct Error{
 	}
 
 	/* parseEOF */ version(all){
-		Result!None parseEOF(stringp ainput, ref memo_t amemo){
+		version(none) Result!None parseEOF(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			if(ainput.length == 0){
 				lres.match = true;
@@ -1547,19 +2454,90 @@ struct Error{
 			return lres;
 		}
 
+		template parseEOF(){
+			Result!(Range, None) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
+				typeof(return) lresult;
+				if(ainput.range.empty){
+					lresult.match = true;
+				}else{
+					lresult.error = Error("EOF", ainput.line, ainput.column);
+				}
+				return lresult;
+			}
+		}
+
 		debug(ctpg) unittest{
 			enum ldg = {
-				{
-					auto lr = getResult!parseEOF("");
-					assert(lr.match);
-				}
-				{
-					auto lr = getResult!parseEOF("hoge");
-					assert(!lr.match);
-					assert(lr.error.need == "EOF");
-					assert(lr.error.line == 1);
-					assert(lr.error.column == 1);
-				}
+				/* "" */ version(all){{
+					version(all){{
+						auto lresult = getResult!(parseEOF!())("");
+						assert(lresult.match);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEOF!())(""w);
+						assert(lresult.match);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEOF!())(""d);
+						assert(lresult.match);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEOF!())(TestRange!""());
+						assert(lresult.match);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEOF!())(TestRange!""w());
+						assert(lresult.match);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEOF!())(TestRange!""d());
+						assert(lresult.match);
+					}}
+				}}
+				/* hoge */ version(all){{
+					version(all){{
+						auto lresult = getResult!(parseEOF!())("hoge");
+						assert(!lresult.match);
+						assert(lresult.error.need == "EOF");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEOF!())("hoge"w);
+						assert(!lresult.match);
+						assert(lresult.error.need == "EOF");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEOF!())("hoge"d);
+						assert(!lresult.match);
+						assert(lresult.error.need == "EOF");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEOF!())(TestRange!"hoge"());
+						assert(!lresult.match);
+						assert(lresult.error.need == "EOF");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEOF!())(TestRange!"hoge"w());
+						assert(!lresult.match);
+						assert(lresult.error.need == "EOF");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+					version(all){{
+						auto lresult = getResult!(parseEOF!())(TestRange!"hoge"d());
+						assert(!lresult.match);
+						assert(lresult.error.need == "EOF");
+						assert(lresult.error.line == 1);
+						assert(lresult.error.column == 1);
+					}}
+				}}
 				return true;
 			};
 			debug(ctpg_ct) static assert(ldg());
@@ -1567,7 +2545,7 @@ struct Error{
 		}
 	}
 
-	/* parseIdent */ version(all){
+	/* parseIdent */ version(none){
 		alias combinateString!(
 			combinateSequence!(
 				combinateChoice!(
@@ -1629,7 +2607,7 @@ struct Error{
 		}
 	}
 
-	/* parseStringLiteral */ version(all){
+	/* parseStringLiteral */ version(none){
 		alias combinateString!(
 			combinateSequence!(
 				combinateNone!(parseString!"\""),
@@ -1663,7 +2641,7 @@ struct Error{
 		}
 	}
 
-	/* parseIntLiteral */ version(all){
+	/* parseIntLiteral */ version(none){
 		alias combinateChoice!(
 			combinateConvert!(
 				combinateNone!(parseString!"0"),
@@ -1715,6 +2693,7 @@ struct Error{
 		}
 	}
 
+
 	debug(ctpg) unittest{
 		enum dg = {
 			return true;
@@ -1730,7 +2709,7 @@ struct Error{
 		debug(ctpg_ct) static assert(dg());
 		dg();
 	}
-	}
+
 }
 
 version(none){
@@ -2774,6 +3753,26 @@ debug(ctpg) void main(){}
 
 private:
 
+debug(ctpg) struct TestRange(alias str){
+	typeof(str) source = str;
+	@property typeof(source[0]) front(){ return source[0]; }
+	@property void popFront(){ source = source[1..$]; }
+	@property bool empty(){ return source.length == 0; }
+	@property typeof(this) save(){ return this; }
+}
+
+debug(ctpg) struct TestRandomRange(alias str){
+	typeof(str) source = str;
+	@property typeof(source[0]) front(){ return source[0]; }
+	@property typeof(source[0]) back(){ return source[$]; }
+	@property void popFront(){ source = source[1..$]; }
+	@property void popBack(){ source = source[0..$-1]; }
+	@property bool empty(){ return source.length == 0; }
+	@property typeof(this) save(){ return this; }
+	@property size_t length(){ return source.length; };
+	typeof(source[0]) opIndex(size_t lidx){ return source[lidx]; }
+}
+
 string mkString(string[] strs, string sep = ""){
 	string res;
 	foreach(i, str; strs){
@@ -2873,20 +3872,77 @@ debug(ctpg) unittest{
 	}());
 }
 
-template ResultType(alias R){
-	static if(is(R Unused == Result!E, E)){
+template ResultType(Range, alias R){
+	static if(is(R Unused == Result!(Range, E), E)){
 		alias E ResultType;
 	}else{
 		static assert(false);
 	}
 }
 
-template ParserType(alias parser){
+debug(ctpg) unittest{
+	static assert(is(ResultType!(string, Result!(string, int)) == int));
+	static assert(is(ResultType!(wstring, Result!(wstring, int)) == int));
+	static assert(is(ResultType!(dstring, Result!(dstring, int)) == int));
+	static assert(is(ResultType!(string, Result!(string, long)) == long));
+	static assert(is(ResultType!(wstring, Result!(wstring, long)) == long));
+	static assert(is(ResultType!(dstring, Result!(dstring, long)) == long));
+}
+
+version(none) template ParserType(alias parser){
 	static if(is(ReturnType!parser Unused == Result!(T), T)){
 		alias T ParserType;
 	}else{
 		static assert(false);
 	}
+}
+
+template ParsersTypeTuple(Range, tparsers...){
+	static if(tparsers.length == 1){
+		static if(is(ReturnType!(tparsers[0].apply!(Range)) Unused == Result!(Range, T), T)){
+			alias Tuple!T ParsersTypeTuple;
+		}else{
+			static assert(false);
+		}
+	}else static if(tparsers.length > 1){
+		static if(is(ReturnType!(tparsers[0].apply!(Range)) Unused == Result!(Range, T), T)){
+			alias Tuple!(T, ParsersTypeTuple!(Range, tparsers[1..$]).Types) ParsersTypeTuple;
+		}
+	}else{
+		static assert(false);
+	}
+}
+
+debug(ctpg) unittest{
+	static assert(is(ParsersTypeTuple!(string, parseString!"a", parseString!"a") == Tuple!(string, string)));
+	static assert(is(ParsersTypeTuple!(string, parseString!"a") == Tuple!(string)));
+	static assert(is(ParsersTypeTuple!(wstring, parseString!"a", parseString!"a") == Tuple!(string, string)));
+	static assert(is(ParsersTypeTuple!(wstring, parseString!"a") == Tuple!(string)));
+	static assert(is(ParsersTypeTuple!(dstring, parseString!"a", parseString!"a") == Tuple!(string, string)));
+	static assert(is(ParsersTypeTuple!(dstring, parseString!"a") == Tuple!(string)));
+	static assert(is(ParsersTypeTuple!(TestRange!"", parseString!"a", parseString!"a") == Tuple!(string, string)));
+	static assert(is(ParsersTypeTuple!(TestRange!"", parseString!"a") == Tuple!(string)));
+	static assert(is(ParsersTypeTuple!(TestRange!""w, parseString!"a", parseString!"a") == Tuple!(string, string)));
+	static assert(is(ParsersTypeTuple!(TestRange!""w, parseString!"a") == Tuple!(string)));
+	static assert(is(ParsersTypeTuple!(TestRange!""d, parseString!"a", parseString!"a") == Tuple!(string, string)));
+	static assert(is(ParsersTypeTuple!(TestRange!""d, parseString!"a") == Tuple!(string)));
+}
+
+template ParserType(Range, alias tparser){
+	static if(is(ReturnType!(tparser.apply!(Range)) Unused == Result!(Range, T), T)){
+		alias T ParserType;
+	}else{
+		static assert(false);
+	}
+}
+
+debug(ctpg) unittest{
+	static assert(is(ParserType!(string, parseString!"a") == string));
+	static assert(is(ParserType!(wstring, parseString!"a") == string));
+	static assert(is(ParserType!(dstring, parseString!"a") == string));
+	static assert(is(ParserType!(TestRange!"", parseString!"a") == string));
+	static assert(is(ParserType!(TestRange!""w, parseString!"a") == string));
+	static assert(is(ParserType!(TestRange!""d, parseString!"a") == string));
 }
 
 template flatTuple(arg){
@@ -2897,28 +3953,60 @@ template flatTuple(arg){
 	}
 }
 
-template CombinateSequenceImplType(parsers...){
-	alias Result!(Tuple!(staticMap!(flatTuple, staticMap!(ParserType, parsers)))) CombinateSequenceImplType;
+debug(ctpg) unittest{
+	static assert(is(flatTuple!(Tuple!(string, string)) == TypeTuple!(string, string)));
+	static assert(is(flatTuple!(string) == string));
 }
 
-template UnTuple(E){
-	static if(staticLength!(ResultType!E.Types) == 1){
-		alias Result!(ResultType!E.Types[0]) UnTuple;
+version(none) template CombinateSequenceImplType(Range, tparsers...){
+	alias Result!(Tuple!(staticMap!(flatTuple, staticMap!(ParserType, tparsers)))) CombinateSequenceImplType;
+}
+
+template CombinateSequenceImplType(Range, tparsers...){
+	alias Result!(Range, Tuple!(staticMap!(flatTuple, ParsersTypeTuple!(Range, tparsers).Types))) CombinateSequenceImplType;
+}
+
+debug(ctpg) unittest{
+	static assert(is(CombinateSequenceImplType!(string, parseString!"a", parseString!"a") == Result!(string, Tuple!(string, string))));
+	static assert(is(CombinateSequenceImplType!(wstring, parseString!"a", parseString!"a") == Result!(wstring, Tuple!(string, string))));
+	static assert(is(CombinateSequenceImplType!(dstring, parseString!"a", parseString!"a") == Result!(dstring, Tuple!(string, string))));
+	static assert(is(CombinateSequenceImplType!(TestRange!"", parseString!"a", parseString!"a") == Result!(TestRange!"", Tuple!(string, string))));
+	static assert(is(CombinateSequenceImplType!(TestRange!""w, parseString!"a", parseString!"a") == Result!(TestRange!""w, Tuple!(string, string))));
+	static assert(is(CombinateSequenceImplType!(TestRange!""d, parseString!"a", parseString!"a") == Result!(TestRange!""d, Tuple!(string, string))));
+}
+
+template UnTuple(Range, E){
+	static if(ResultType!(Range, E).Types.length == 1){
+		alias Result!(ResultType!(Range, E).Types[0]) UnTuple;
 	}else{
 		alias E UnTuple;
 	}
 }
 
-UnTuple!R unTuple(R)(R r){
-	static if(staticLength!(ResultType!R.Types) == 1){
+UnTuple!(Range, R) unTuple(Range, R)(R r){
+	static if(ResultType!(Range, R).Types.length == 1){
 		return Result!(ResultType!R.Types[0])(r.match, r.value[0], r.rest, r.error);
 	}else{
 		return r;
 	}
 }
 
-template CommonParserType(parsers...){
+version(none) template CommonParserType(parsers...){
 	alias CommonType!(staticMap!(ParserType, parsers)) CommonParserType;
+}
+
+template CommonParserType(Range, tparsers...){
+	static if(tparsers.length == 1){
+		alias ParserType!(Range, tparsers[0]) CommonParserType;
+	}else static if(tparsers.length > 1){
+		alias CommonType!(ParserType!(Range, tparsers[0]), CommonParserType!(Range, tparsers[1..$])) CommonParserType;
+	}else{
+		static assert(false);
+	}
+}
+
+debug(ctpg) unittest{
+	static assert(is(CommonParserType!(string, parseString!"a", parseString!"a") == string));
 }
 
 version(none) dchar decode(Range)(ref Range arange){
