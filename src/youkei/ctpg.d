@@ -11,6 +11,7 @@ module youkei.ctpg;
 import std.algorithm;
 import std.array;
 import std.conv;
+import std.math;
 import std.range;
 import std.traits;
 import std.typecons;
@@ -41,8 +42,8 @@ version(memoize){
 		return lres;
 	}
 }else{
-	template memoizeInput(alias Func){
-		alias Func memoizeInput;
+	template memoizeInput(alias tfunc){
+		alias tfunc memoizeInput;
 	}
 }
 
@@ -66,232 +67,167 @@ struct PositionalRange(R){
 	}
 }
 
-template isPositionalRange(R){
-	static if(is(R Unused == PositionalRange!T, T)){
-		enum isPositionalRange = true;
-	}else{
-		enum isPositionalRange = false;
-	}
-}
-
-version(none) struct stringp{
-	public{
-		string str;
-		int line = 1;
-		int column = 1;
-
-		const @safe pure nothrow
-		immutable(char) opIndex(size_t ai){
-			return pstr[ai];
-		}
-
-		const @safe pure nothrow
-		typeof(this) opSlice(size_t ax, size_t ay){
-			typeof(return) lres;
-			lres.str = pstr[ax..ay];
-			lres.line = pline;
-			lres.column = pcolumn;
-			for(size_t li; li < ax; li++){
-				if(pstr[li] == '\n'){
-					lres.line++;
-					lres.column = 1;
-				}else{
-					lres.column++;
-				}
-			}
-			return lres;
-		}
-
-		const pure @safe nothrow
-		bool opEquals(T)(T arhs) if(is(T == string)){
-			return pstr == arhs;
-		}
-
-		const pure @safe nothrow @property
-		size_t length(){
-			return pstr.length;
-		}
-
-		const pure @safe nothrow
-		dchar decode(){
-			return .decode(this);
-		}
-
-		pure @safe nothrow @property
-		string to(){
-			return pstr;
-		}
-	}
-
-	private{
-		invariant(){
-			assert(pline >= 0);
-			assert(pcolumn >= 0);
-		}
-		alias str pstr;
-		alias line pline;
-		alias column pcolumn;
-	}
-}
-
-version(none) debug(ctpg) unittest{
-	enum ldg = {
-		auto ls1 = stringp("hoge");
-		assert(ls1 == "hoge");
-		assert(ls1.line == 1);
-		assert(ls1.column == 1);
-		auto ls2 = s1[1..s1.length];
-		assert(ls2 == "oge");
-		assert(ls2.line == 1);
-		assert(ls2.column == 2);
-		auto ls3 = s2[s2.length..s2.length];
-		assert(ls3 == "");
-		assert(ls3.line == 1);
-		assert(ls3.column == 5);
-		auto ls4 = stringp("メロスは激怒した。");
-		auto ls5 = s4[3..s4.length];
-		assert(ls5 == "ロスは激怒した。");
-		assert(ls5.line == 1);
-		assert(ls5.column == 4);//TODO: column should be 2
-		auto ls6 = stringp("hoge\npiyo")[5..9];
-		assert(ls6 == "piyo");
-		assert(ls6.line == 2);
-		assert(ls6.column == 1);
-		return true;
-	};
-	debug(ctpg_ct) static assert(dg());
-	dg();
-}
-
 struct Result(Range, T){
-	bool match;
-	T value;
-	PositionalRange!Range rest;
-	Error error;
-
-	pure @safe nothrow
-	void opAssign(F)(Result!(Range, F) arhs)if(isAssignable!(T, F)){
-		match = arhs.match;
-		value = arhs.value;
-		rest = arhs.rest;
-		error = arhs.error;
+	private{
+		alias match pmatch;
+		alias value pvalue;
+		alias rest prest;
+		alias error perror;
 	}
-}
 
-struct Option(T){
-	T value;
-	bool some;
-	bool opCast(E)()const if(is(E == bool)){
-		return some;
+	public{
+		bool match;
+		T value;
+		PositionalRange!Range rest;
+		Error error;
+
+		pure @safe nothrow
+		void opAssign(F)(Result!(Range, F) arhs)if(isAssignable!(T, F)){
+			pmatch = arhs.match;
+			pvalue = arhs.value;
+			prest = arhs.rest;
+			perror = arhs.error;
+		}
 	}
 }
 
 struct Error{
 	invariant(){
-		assert(line >= 1);
-		assert(column >= 1);
+		assert(pline >= 1);
+		assert(pcolumn >= 1);
 	}
 
-	string need;
-	int line;
-	int column;
+	private{
+		alias need pneed;
+		alias line pline;
+		alias column pcolumn;
+	}
+
+	public{
+		string need;
+		int line;
+		int column;
+	}
 }
 
 /* combinators */ version(all){
-	/* combinateSequence */ version(all){
-		version(none) UnTuple!(CombinateSequenceImplType!Parsers) combinateSequence(Parsers...)(stringp ainput, ref memo_t amemo){
-			static assert(staticLength!Parsers > 0);
-			return unTuple(combinateSequenceImpl!Parsers(ainput, amemo));
-		}
-
-		template combinateSequence(tparsers...){
-			static assert(tparsers.length > 0);
-			UnTuple!(Range, CombinateSequenceImplType!(Range, tparsers)) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
-				return unTuple!Range(combinateSequenceImpl!(Range, tparsers)(ainput, amemo));
-			}
-		}
-
-		version(none) private CombinateSequenceImplType!Parsers combinateSequenceImpl(Parsers...)(stringp ainput, ref memo_t amemo){
-			typeof(return) lres;
-			static if(staticLength!Parsers == 1){
-				auto lr = Parsers[0](ainput, amemo);
-				if(lr.match){
-					lres.match = true;
-					static if(isTuple!(ParserType!(Parsers[0]))){
-						lres.value = lr.value;
-					}else{
-						lres.value = tuple(lr.value);
-					}
-					lres.rest = lr.rest;
-				}else{
-					lres.error = lr.error;
-				}
-			}else{
-				static if(!__traits(compiles, {auto lr1 = Parsers[0](ainput, amemo);})){
-					static assert(false);
-				}
-				auto lr1 = Parsers[0](ainput, amemo);
-				if(lr1.match){
-					auto lr2 = combinateSequenceImpl!(Parsers[1..$])(lr1.rest, amemo);
-					if(lr2.match){
-						lres.match = true;
-						static if(isTuple!(ParserType!(Parsers[0]))){
-							lres.value = tuple(lr1.value.field, lr2.value.field);
-						}else{
-							lres.value = tuple(lr1.value, lr2.value.field);
-						}
-						lres.rest = lr2.rest;
-					}else{
-						lres.error = lr2.error;
-					}
-				}else{
-					lres.error = lr1.error;
-				}
-			}
-			return lres;
-		}
-
-		private CombinateSequenceImplType!(Range, tparsers) combinateSequenceImpl(Range, tparsers...)(PositionalRange!Range ainput, ref memo_t amemo){
-			typeof(return) lresult;
-			static if(tparsers.length == 1){
-				auto lr = tparsers[0].apply(ainput, amemo);
-				if(lr.match){
-					lresult.match = true;
-					static if(isTuple!(ParserType!(Range, tparsers[0]))){
-						lresult.value = lr.value;
-					}else{
-						lresult.value = tuple(lr.value);
-					}
+	/* combinateUnTuple */ version(all){
+		template combinateUnTuple(alias tparser){
+			alias UnTuple!(ParserType!tparser) ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+				typeof(return) lresult;
+				auto lr = tparser.apply(ainput, amemo);
+				static if(isTuple!(ParserType!tparser) && ParserType!tparser.Types.length == 1){
+					lresult.match = lr.match;
+					lresult.value = lr.value[0];
 					lresult.rest = lr.rest;
-				}else{
 					lresult.error = lr.error;
-				}
-			}else{
-				auto lr1 = tparsers[0].apply(ainput, amemo);
-				if(lr1.match){
-					auto lr2 = combinateSequenceImpl!(Range, tparsers[1..$])(lr1.rest, amemo);
-					if(lr2.match){
-						lresult.match = true;
-						static if(isTuple!(ParserType!(Range, tparsers[0]))){
-							lresult.value = tuple(lr1.value.field, lr2.value.field);
-						}else{
-							lresult.value = tuple(lr1.value, lr2.value.field);
-						}
-						lresult.rest = lr2.rest;
-					}else{
-						lresult.error = lr2.error;
-					}
 				}else{
-					lresult.error = lr1.error;
+					lresult = lr;
 				}
+				return lresult;
 			}
-			return lresult;
 		}
 
 		debug(ctpg) unittest{
 			enum ldg = {
-				version(all){{
-					version(all){{
+				assert(getResult!(combinateUnTuple!(TestParser!int))("").value == 0);
+				assert(getResult!(combinateUnTuple!(TestParser!long))("").value == 0);
+				assert(getResult!(combinateUnTuple!(TestParser!string))("").value == "");
+				assert(getResult!(combinateUnTuple!(TestParser!wstring))("").value == ""w);
+				assert(getResult!(combinateUnTuple!(TestParser!dstring))("").value == ""d);
+				assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(int))))("").value == 0);
+				assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(int, int))))("").value == tuple(0, 0));
+				assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int)))))("").value == tuple(0));
+				assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int)))))("").value == tuple(0, 0));
+				assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int), int))))("").value == tuple(tuple(0, 0), 0));
+				return true;
+			};
+			debug(ctpg_ct) static assert(ldg());
+			ldg();
+		}
+	}
+
+	/* combinateString */ version(all){
+		version(none) Result!string combinateString(alias Parser)(stringp ainput, ref memo_t amemo){
+			typeof(return) lr;
+			auto lr = Parser(ainput, amemo);
+			if(lr.match){
+				lres.match = true;
+				lres.value = flat(lr.value);
+				lres.rest = lr.rest;
+			}else{
+				lres.error = lr.error;
+			}
+			return lres;
+		}
+
+		template combinateString(alias tparser){
+			alias string ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+				typeof(return) lresult;
+				auto lr = tparser.apply(ainput, amemo);
+				if(lr.match){
+					lresult.match = true;
+					lresult.value = flat(lr.value);
+					lresult.rest = lr.rest;
+				}else{
+					lresult.error = lr.error;
+				}
+				return lresult;
+			}
+		}
+	}
+
+	/* combinateSequence */ version(all){
+		template combinateSequence(tparsers...){
+			alias combinateUnTuple!(combinateSequenceImpl!(tparsers)) combinateSequence;
+		}
+
+		private template combinateSequenceImpl(tparsers...){
+			alias CombinateSequenceImplType!(tparsers) ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+				typeof(return) lresult;
+				static if(tparsers.length == 1){
+					auto lr = tparsers[0].apply(ainput, amemo);
+					if(lr.match){
+						lresult.match = true;
+						static if(isTuple!(ParserType!(tparsers[0]))){
+							lresult.value = lr.value;
+						}else{
+							lresult.value = tuple(lr.value);
+						}
+						lresult.rest = lr.rest;
+					}else{
+						lresult.error = lr.error;
+					}
+				}else{
+					auto lr1 = tparsers[0].apply(ainput, amemo);
+					if(lr1.match){
+						auto lr2 = combinateSequenceImpl!(tparsers[1..$]).apply(lr1.rest, amemo);
+						if(lr2.match){
+							lresult.match = true;
+							static if(isTuple!(ParserType!(tparsers[0]))){
+								lresult.value = tuple(lr1.value.field, lr2.value.field);
+							}else{
+								lresult.value = tuple(lr1.value, lr2.value.field);
+							}
+							lresult.rest = lr2.rest;
+						}else{
+							lresult.error = lr2.error;
+						}
+					}else{
+						lresult.error = lr1.error;
+					}
+				}
+				return lresult;
+			}
+		}
+
+		debug(ctpg) unittest{
+			enum ldg = {
+				/* "hello" "world"       <= "helloworld"  */ version(all){{
+					/* string      */version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world")
@@ -301,7 +237,7 @@ struct Error{
 						assert(lresult.value[0] == "hello");
 						assert(lresult.value[1] == "world");
 					}}
-					version(all){{
+					/* wstring     */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world")
@@ -311,7 +247,7 @@ struct Error{
 						assert(lresult.value[0] == "hello");
 						assert(lresult.value[1] == "world");
 					}}
-					version(all){{
+					/* dstring     */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world")
@@ -321,7 +257,7 @@ struct Error{
 						assert(lresult.value[0] == "hello");
 						assert(lresult.value[1] == "world");
 					}}
-					version(all){{
+					/* Range!char  */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world")
@@ -331,7 +267,7 @@ struct Error{
 						assert(lresult.value[0] == "hello");
 						assert(lresult.value[1] == "world");
 					}}
-					version(all){{
+					/* Range!wchar */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world")
@@ -341,7 +277,7 @@ struct Error{
 						assert(lresult.value[0] == "hello");
 						assert(lresult.value[1] == "world");
 					}}
-					version(all){{
+					/* Range!dchar */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world")
@@ -352,8 +288,8 @@ struct Error{
 						assert(lresult.value[1] == "world");
 					}}
 				}}
-				version(all){{
-					version(all){{
+				/* ("hello" "world") "!" <= "helloworld!" */ version(all){{
+					/* string      */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							combinateSequence!(
 								parseString!("hello"),
@@ -367,7 +303,7 @@ struct Error{
 						assert(lresult.value[1] == "world");
 						assert(lresult.value[2] == "!");
 					}}
-					version(all){{
+					/* wstring     */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							combinateSequence!(
 								parseString!("hello"),
@@ -381,7 +317,7 @@ struct Error{
 						assert(lresult.value[1] == "world");
 						assert(lresult.value[2] == "!");
 					}}
-					version(all){{
+					/* dstring     */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							combinateSequence!(
 								parseString!("hello"),
@@ -395,7 +331,7 @@ struct Error{
 						assert(lresult.value[1] == "world");
 						assert(lresult.value[2] == "!");
 					}}
-					version(all){{
+					/* Range!char  */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							combinateSequence!(
 								parseString!("hello"),
@@ -409,7 +345,7 @@ struct Error{
 						assert(lresult.value[1] == "world");
 						assert(lresult.value[2] == "!");
 					}}
-					version(all){{
+					/* Range!wchar */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							combinateSequence!(
 								parseString!("hello"),
@@ -423,7 +359,7 @@ struct Error{
 						assert(lresult.value[1] == "world");
 						assert(lresult.value[2] == "!");
 					}}
-					version(all){{
+					/* Range!dchar */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							combinateSequence!(
 								parseString!("hello"),
@@ -438,8 +374,8 @@ struct Error{
 						assert(lresult.value[2] == "!");
 					}}
 				}}
-				version(all){{
-					version(all){{
+				/* "hello" "world"       <= "hellovvorld" */ version(all){{
+					/* string      */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world")
@@ -450,7 +386,7 @@ struct Error{
 						assert(lresult.error.line == 1);
 						assert(lresult.error.column == 6);
 					}}
-					version(all){{
+					/* wstring     */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world")
@@ -461,7 +397,7 @@ struct Error{
 						assert(lresult.error.line == 1);
 						assert(lresult.error.column == 6);
 					}}
-					version(all){{
+					/* dstring     */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world")
@@ -472,7 +408,7 @@ struct Error{
 						assert(lresult.error.line == 1);
 						assert(lresult.error.column == 6);
 					}}
-					version(all){{
+					/* Range!char  */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world")
@@ -482,7 +418,7 @@ struct Error{
 						assert(lresult.error.line == 1);
 						assert(lresult.error.column == 6);
 					}}
-					version(all){{
+					/* Range!wchar */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world")
@@ -492,7 +428,7 @@ struct Error{
 						assert(lresult.error.line == 1);
 						assert(lresult.error.column == 6);
 					}}
-					version(all){{
+					/* Range!dchar */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world")
@@ -503,8 +439,8 @@ struct Error{
 						assert(lresult.error.column == 6);
 					}}
 				}}
-				version(all){{
-					version(all){{
+				/* "hello" "world" "!"   <= "helloworld?" */ version(all){{
+					/* string      */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world"),
@@ -515,7 +451,7 @@ struct Error{
 						assert(lresult.error.line == 1);
 						assert(lresult.error.column == 11);
 					}}
-					version(all){{
+					/* wstring     */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world"),
@@ -526,7 +462,7 @@ struct Error{
 						assert(lresult.error.line == 1);
 						assert(lresult.error.column == 11);
 					}}
-					version(all){{
+					/* dstring     */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world"),
@@ -537,7 +473,7 @@ struct Error{
 						assert(lresult.error.line == 1);
 						assert(lresult.error.column == 11);
 					}}
-					version(all){{
+					/* Range!char  */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world"),
@@ -548,7 +484,7 @@ struct Error{
 						assert(lresult.error.line == 1);
 						assert(lresult.error.column == 11);
 					}}
-					version(all){{
+					/* Range!wchar */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world"),
@@ -559,7 +495,7 @@ struct Error{
 						assert(lresult.error.line == 1);
 						assert(lresult.error.column == 11);
 					}}
-					version(all){{
+					/* Range!dchar */ version(all){{
 						auto lresult = getResult!(combinateSequence!(
 							parseString!("hello"),
 							parseString!("world"),
@@ -579,32 +515,9 @@ struct Error{
 	}
 
 	/* combinateChoice */ version(all){
-		version(none) Result!(Range, CommonParserType!tparsers) combinateChoice(Range, tparsers...)(PositionalRange!Range ainput, ref memo_t amemo){
-			static assert(tparsers.length > 0);
-			static if(tparsers.length == 1){
-				return tparsers[0](ainput, amemo);
-			}else{
-				typeof(return) lresult;
-				auto lr1 = tparsers[0](ainput.save, amemo);
-				if(lr1.match){
-					lresult = lr1;
-					return lresult;
-				}else{
-					lresult.error = lr1.error;
-				}
-				auto lr2 = combinateChoice!(tparsers[1..$])(ainput, amemo);
-				if(lr2.match){
-					lresult = lr2;
-					return lresult;
-				}else{
-					lresult.error.need ~= " or " ~ lr2.error.need;
-				}
-				return lresult;
-			}
-		}
-
 		template combinateChoice(tparsers...){
-			Result!(Range, CommonParserType!(Range, tparsers)) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+			alias CommonParserType!(tparsers) ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
 				static assert(tparsers.length > 0);
 				static if(tparsers.length == 1){
 					return tparsers[0].apply(ainput, amemo);
@@ -631,8 +544,8 @@ struct Error{
 
 		debug(ctpg) unittest{
 			enum ldg = {
-				version(all){{
-					version(all){{
+				/* "h" / "w" <= "hw" */ version(all){{
+					/* string      */ version(all){{
 						auto lresult = getResult!(combinateChoice!(
 							parseString!"h",
 							parseString!"w"
@@ -643,7 +556,7 @@ struct Error{
 						assert(lresult.rest.column == 2);
 						assert(lresult.value == "h");
 					}}
-					version(all){{
+					/* wstring     */ version(all){{
 						auto lresult = getResult!(combinateChoice!(
 							parseString!"h",
 							parseString!"w"
@@ -654,7 +567,7 @@ struct Error{
 						assert(lresult.rest.column == 2);
 						assert(lresult.value == "h");
 					}}
-					version(all){{
+					/* dstring     */ version(all){{
 						auto lresult = getResult!(combinateChoice!(
 							parseString!"h",
 							parseString!"w"
@@ -665,7 +578,7 @@ struct Error{
 						assert(lresult.rest.column == 2);
 						assert(lresult.value == "h");
 					}}
-					version(all){{
+					/* Range!char  */ version(all){{
 						auto lresult = getResult!(combinateChoice!(
 							parseString!"h",
 							parseString!"w"
@@ -676,7 +589,7 @@ struct Error{
 						assert(lresult.rest.column == 2);
 						assert(lresult.value == "h");
 					}}
-					version(all){{
+					/* Range!wchar */ version(all){{
 						auto lresult = getResult!(combinateChoice!(
 							parseString!"h",
 							parseString!"w"
@@ -687,7 +600,7 @@ struct Error{
 						assert(lresult.rest.column == 2);
 						assert(lresult.value == "h");
 					}}
-					version(all){{
+					/* Range!dchar */ version(all){{
 						auto lresult = getResult!(combinateChoice!(
 							parseString!"h",
 							parseString!"w"
@@ -864,7 +777,8 @@ struct Error{
 		}
 
 		template combinateMore(int tn, alias tparser, alias tsep){
-			Result!(Range, ParserType!(Range, tparser)[]) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+			alias ParserType!(tparser)[] ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
 				typeof(return) lresult;
 				PositionalRange!Range lrest = ainput;
 				while(true){
@@ -904,185 +818,187 @@ struct Error{
 				version(all){{
 					version(all){{
 						version(all){{
-							auto lresult = getResult!(combinateMore0!(parseString!"w"))("wwwwwwwww w");
+							auto lresult = getResult!(combinateString!(combinateMore0!(parseString!"w")))("wwwwwwwww w");
 							assert(lresult.match);
 							assert(lresult.rest.range == " w");
 							assert(lresult.rest.line == 1);
 							assert(lresult.rest.column == 10);
-							assert(lresult.value.mkString() == "wwwwwwwww");
+							assert(lresult.value == "wwwwwwwww");
 						}}
 						version(all){{
-							auto lresult = getResult!(combinateMore0!(parseString!"w"))("wwwwwwwww w"w);
+							auto lresult = getResult!(combinateString!(combinateMore0!(parseString!"w")))("wwwwwwwww w"w);
 							assert(lresult.match);
 							assert(lresult.rest.range == " w"w);
 							assert(lresult.rest.line == 1);
 							assert(lresult.rest.column == 10);
-							assert(lresult.value.mkString() == "wwwwwwwww");
+							assert(lresult.value == "wwwwwwwww");
 						}}
 						version(all){{
-							auto lresult = getResult!(combinateMore0!(parseString!"w"))("wwwwwwwww w"d);
+							auto lresult = getResult!(combinateString!(combinateMore0!(parseString!"w")))("wwwwwwwww w"d);
 							assert(lresult.match);
 							assert(lresult.rest.range == " w"d);
 							assert(lresult.rest.line == 1);
 							assert(lresult.rest.column == 10);
-							assert(lresult.value.mkString() == "wwwwwwwww");
+							assert(lresult.value == "wwwwwwwww");
 						}}
 						version(all){{
-							auto lresult = getResult!(combinateMore0!(parseString!"w"))(TestRange!"wwwwwwwww w"());
+							auto lresult = getResult!(combinateString!(combinateMore0!(parseString!"w")))(TestRange!"wwwwwwwww w"());
 							assert(lresult.match);
 							assert(lresult.rest.range.source == " w");
 							assert(lresult.rest.line == 1);
 							assert(lresult.rest.column == 10);
-							assert(lresult.value.mkString() == "wwwwwwwww");
+							assert(lresult.value == "wwwwwwwww");
 						}}
 						version(all){{
-							auto lresult = getResult!(combinateMore0!(parseString!"w"))(TestRange!"wwwwwwwww w"w());
+							auto lresult = getResult!(combinateString!(combinateMore0!(parseString!"w")))(TestRange!"wwwwwwwww w"w());
 							assert(lresult.match);
 							assert(lresult.rest.range.source == " w"w);
 							assert(lresult.rest.line == 1);
 							assert(lresult.rest.column == 10);
-							assert(lresult.value.mkString() == "wwwwwwwww");
+							assert(lresult.value == "wwwwwwwww");
 						}}
 						version(all){{
-							auto lresult = getResult!(combinateMore0!(parseString!"w"))(TestRange!"wwwwwwwww w"d());
+							auto lresult = getResult!(combinateString!(combinateMore0!(parseString!"w")))(TestRange!"wwwwwwwww w"d());
 							assert(lresult.match);
 							assert(lresult.rest.range.source == " w"d);
 							assert(lresult.rest.line == 1);
 							assert(lresult.rest.column == 10);
-							assert(lresult.value.mkString() == "wwwwwwwww");
+							assert(lresult.value == "wwwwwwwww");
 						}}
 					}}
 					version(all){{
 						version(all){{
-							auto lresult = getResult!(combinateMore0!(parseString!"w"))(" w");
+							auto lresult = getResult!(combinateString!(combinateMore0!(parseString!"w")))(" w");
 							assert(lresult.match);
 							assert(lresult.rest.range == " w");
 							assert(lresult.rest.line == 1);
 							assert(lresult.rest.column == 1);
-							assert(lresult.value.mkString == "");
+							assert(lresult.value == "");
 						}}
 						version(all){{
-							auto lresult = getResult!(combinateMore0!(parseString!"w"))(" w"w);
+							auto lresult = getResult!(combinateString!(combinateMore0!(parseString!"w")))(" w"w);
 							assert(lresult.match);
 							assert(lresult.rest.range == " w"w);
 							assert(lresult.rest.line == 1);
 							assert(lresult.rest.column == 1);
-							assert(lresult.value.mkString == "");
+							assert(lresult.value == "");
 						}}
 						version(all){{
-							auto lresult = getResult!(combinateMore0!(parseString!"w"))(" w"d);
+							auto lresult = getResult!(combinateString!(combinateMore0!(parseString!"w")))(" w"d);
 							assert(lresult.match);
 							assert(lresult.rest.range == " w"d);
 							assert(lresult.rest.line == 1);
 							assert(lresult.rest.column == 1);
-							assert(lresult.value.mkString == "");
+							assert(lresult.value == "");
 						}}
 						version(all){{
-							auto lresult = getResult!(combinateMore0!(parseString!"w"))(TestRange!" w"());
+							auto lresult = getResult!(combinateString!(combinateMore0!(parseString!"w")))(TestRange!" w"());
 							assert(lresult.match);
 							assert(lresult.rest.range.source == " w");
 							assert(lresult.rest.line == 1);
 							assert(lresult.rest.column == 1);
-							assert(lresult.value.mkString == "");
+							assert(lresult.value == "");
 						}}
 						version(all){{
-							auto lresult = getResult!(combinateMore0!(parseString!"w"))(TestRange!" w"w());
+							auto lresult = getResult!(combinateString!(combinateMore0!(parseString!"w")))(TestRange!" w"w());
 							assert(lresult.match);
 							assert(lresult.rest.range.source == " w"w);
 							assert(lresult.rest.line == 1);
 							assert(lresult.rest.column == 1);
-							assert(lresult.value.mkString == "");
+							assert(lresult.value == "");
 						}}
 						version(all){{
-							auto lresult = getResult!(combinateMore0!(parseString!"w"))(TestRange!" w"d());
+							auto lresult = getResult!(combinateString!(combinateMore0!(parseString!"w")))(TestRange!" w"d());
 							assert(lresult.match);
 							assert(lresult.rest.range.source == " w"d);
 							assert(lresult.rest.line == 1);
 							assert(lresult.rest.column == 1);
-							assert(lresult.value.mkString == "");
+							assert(lresult.value == "");
 						}}
 					}}
 				}}
 				version(all){{
 					version(all){{
 						version(all){{
-							auto lresult = getResult!(combinateMore1!(parseString!"w"))("wwwwwwwww w");
+							auto lresult = getResult!(combinateString!(combinateMore1!(parseString!"w")))("wwwwwwwww w");
 							assert(lresult.match);
 							assert(lresult.rest.range == " w");
-							assert(lresult.value.mkString() == "wwwwwwwww");
+							assert(lresult.value == "wwwwwwwww");
 						}}
 						version(all){{
-							auto lresult = getResult!(combinateMore1!(parseString!"w"))("wwwwwwwww w"w);
+							auto lresult = getResult!(combinateString!(combinateMore1!(parseString!"w")))("wwwwwwwww w"w);
 							assert(lresult.match);
 							assert(lresult.rest.range == " w"w);
-							assert(lresult.value.mkString() == "wwwwwwwww");
+							assert(lresult.value == "wwwwwwwww");
 						}}
 						version(all){{
-							auto lresult = getResult!(combinateMore1!(parseString!"w"))("wwwwwwwww w"d);
+							auto lresult = getResult!(combinateString!(combinateMore1!(parseString!"w")))("wwwwwwwww w"d);
 							assert(lresult.match);
 							assert(lresult.rest.range == " w"d);
-							assert(lresult.value.mkString() == "wwwwwwwww");
+							assert(lresult.value == "wwwwwwwww");
 						}}
 						version(all){{
-							auto lresult = getResult!(combinateMore1!(parseString!"w"))(TestRange!"wwwwwwwww w"());
+							auto lresult = getResult!(combinateString!(combinateMore1!(parseString!"w")))(TestRange!"wwwwwwwww w"());
 							assert(lresult.match);
 							assert(lresult.rest.range.source == " w");
-							assert(lresult.value.mkString() == "wwwwwwwww");
+							assert(lresult.value == "wwwwwwwww");
 						}}
 						version(all){{
-							auto lresult = getResult!(combinateMore1!(parseString!"w"))(TestRange!"wwwwwwwww w"w());
+							auto lresult = getResult!(combinateString!(combinateMore1!(parseString!"w")))(TestRange!"wwwwwwwww w"w());
 							assert(lresult.match);
 							assert(lresult.rest.range.source == " w"w);
-							assert(lresult.value.mkString() == "wwwwwwwww");
+							assert(lresult.value == "wwwwwwwww");
 						}}
 						version(all){{
-							auto lresult = getResult!(combinateMore1!(parseString!"w"))(TestRange!"wwwwwwwww w"d());
+							auto lresult = getResult!(combinateString!(combinateMore1!(parseString!"w")))(TestRange!"wwwwwwwww w"d());
 							assert(lresult.match);
 							assert(lresult.rest.range.source == " w"d);
-							assert(lresult.value.mkString() == "wwwwwwwww");
+							assert(lresult.value == "wwwwwwwww");
 						}}
 					}}
 					version(all){{
-						auto lresult = getResult!(combinateMore1!(parseString!"w"))(" w");
-						assert(!lresult.match);
-						assert(lresult.error.need == q{"w"});
-						assert(lresult.error.line == 1);
-						assert(lresult.error.column == 1);
-					}}
-					version(all){{
-						auto lresult = getResult!(combinateMore1!(parseString!"w"))(" w"w);
-						assert(!lresult.match);
-						assert(lresult.error.need == q{"w"});
-						assert(lresult.error.line == 1);
-						assert(lresult.error.column == 1);
-					}}
-					version(all){{
-						auto lresult = getResult!(combinateMore1!(parseString!"w"))(" w"d);
-						assert(!lresult.match);
-						assert(lresult.error.need == q{"w"});
-						assert(lresult.error.line == 1);
-						assert(lresult.error.column == 1);
-					}}
-					version(all){{
-						auto lresult = getResult!(combinateMore1!(parseString!"w"))(TestRange!" w"());
-						assert(!lresult.match);
-						assert(lresult.error.need == q{"w"});
-						assert(lresult.error.line == 1);
-						assert(lresult.error.column == 1);
-					}}
-					version(all){{
-						auto lresult = getResult!(combinateMore1!(parseString!"w"))(TestRange!" w"w());
-						assert(!lresult.match);
-						assert(lresult.error.need == q{"w"});
-						assert(lresult.error.line == 1);
-						assert(lresult.error.column == 1);
-					}}
-					version(all){{
-						auto lresult = getResult!(combinateMore1!(parseString!"w"))(TestRange!" w"d());
-						assert(!lresult.match);
-						assert(lresult.error.need == q{"w"});
-						assert(lresult.error.line == 1);
-						assert(lresult.error.column == 1);
+						version(all){{
+							auto lresult = getResult!(combinateString!(combinateMore1!(parseString!"w")))(" w");
+							assert(!lresult.match);
+							assert(lresult.error.need == q{"w"});
+							assert(lresult.error.line == 1);
+							assert(lresult.error.column == 1);
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateString!(combinateMore1!(parseString!"w")))(" w"w);
+							assert(!lresult.match);
+							assert(lresult.error.need == q{"w"});
+							assert(lresult.error.line == 1);
+							assert(lresult.error.column == 1);
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateString!(combinateMore1!(parseString!"w")))(" w"d);
+							assert(!lresult.match);
+							assert(lresult.error.need == q{"w"});
+							assert(lresult.error.line == 1);
+							assert(lresult.error.column == 1);
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateString!(combinateMore1!(parseString!"w")))(TestRange!" w"());
+							assert(!lresult.match);
+							assert(lresult.error.need == q{"w"});
+							assert(lresult.error.line == 1);
+							assert(lresult.error.column == 1);
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateString!(combinateMore1!(parseString!"w")))(TestRange!" w"w());
+							assert(!lresult.match);
+							assert(lresult.error.need == q{"w"});
+							assert(lresult.error.line == 1);
+							assert(lresult.error.column == 1);
+						}}
+						version(all){{
+							auto lresult = getResult!(combinateString!(combinateMore1!(parseString!"w")))(TestRange!" w"d());
+							assert(!lresult.match);
+							assert(lresult.error.need == q{"w"});
+							assert(lresult.error.line == 1);
+							assert(lresult.error.column == 1);
+						}}
 					}}
 				}}
 				return true;
@@ -1092,8 +1008,8 @@ struct Error{
 		}
 	}
 
-	/* combinateOption */ version(none){
-		Result!(Option!(ParserType!Parser)) combinateOption(alias Parser)(stringp ainput, ref memo_t amemo){
+	/* combinateOption */ version(all){
+		version(none) Result!(Option!(ParserType!Parser)) combinateOption(alias Parser)(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			lres.rest = ainput;
 			lres.match = true;
@@ -1106,22 +1022,36 @@ struct Error{
 			return lres;
 		}
 
+		template combinateOption(alias tparser){
+			alias Nullable!(ParserType!tparser) ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+				typeof(return) lresult;
+				lresult.match = true;
+				auto lr = tparser.apply(ainput.save, amemo);
+				if(lr.match){
+					lresult.value = lr.value;
+					lresult.rest = lr.rest;
+				}else{
+					lresult.rest = ainput;
+				}
+				return lresult;
+			}
+		}
+
 		debug(ctpg) unittest{
 			enum ldg = {
-				alias getResult!(combinateOption!(parseString!"w")) p;
-				{
-					auto lr = p("w");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value.some);
-					assert(lr.value.value == "w");
-				}
-				{
-					auto lr = p("");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(!lr.value.some);
-				}
+				version(all){{
+					auto lresult = getResult!(combinateOption!(parseString!"w"))("w");
+					assert(lresult.match);
+					assert(!lresult.value.isNull);
+					assert(lresult.value == "w");
+				}}
+				version(all){{
+					auto lresult = getResult!(combinateOption!(parseString!"w"))("hoge");
+					assert(lresult.match);
+					assert(lresult.rest.range == "hoge");
+					assert(lresult.value.isNull);
+				}}
 				return true;
 			};
 			debug(ctpg_ct) static assert(ldg());
@@ -1129,8 +1059,8 @@ struct Error{
 		}
 	}
 
-	/* combinateNone */ version(none){
-		Result!None combinateNone(alias Parser)(stringp ainput, ref memo_t amemo){
+	/* combinateNone */ version(all){
+		version(none) Result!None combinateNone(alias Parser)(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			auto lr = Parser(ainput, amemo);
 			if(lr.match){
@@ -1142,32 +1072,44 @@ struct Error{
 			return lres;
 		}
 
+		template combinateNone(alias tparser){
+			alias None ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+				typeof(return) lresult;
+				auto lr = tparser.apply(ainput, amemo);
+				if(lr.match){
+					lresult.match = true;
+					lresult.rest = lr.rest;
+				}else{
+					lresult.error = lr.error;
+				}
+				return lresult;
+			}
+		}
+
 		debug(ctpg) unittest{
 			enum ldg = {
-				{
-					alias getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")"))) p;
-					auto lr = p("(w)");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == "w");
-				}
-				{
-					auto lr = getResult!(combinateNone!(parseString!"w"))("a");
-					assert(!lr.match);
-					assert(lr.rest == "");
-					assert(lr.error.need == q{"w"});
-					assert(lr.error.line == 1);
-					assert(lr.error.column == 1);
-				}
-				{
-					alias getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")"))) p;
-					auto lr = p("(w}");
-					assert(!lr.match);
-					assert(lr.rest == "");
-					assert(lr.error.need == q{")"});
-					assert(lr.error.line == 1);
-					assert(lr.error.column == 3);
-				}
+				version(all){{
+					auto lresult = getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)");
+					assert(lresult.match);
+					assert(lresult.rest.range == "");
+					assert(lresult.value == "w");
+				}}
+				version(all){{
+					auto lresult = getResult!(combinateNone!(parseString!"w"))("a");
+					assert(!lresult.match);
+					assert(lresult.error.need == q{"w"});
+					assert(lresult.error.line == 1);
+					assert(lresult.error.column == 1);
+				}}
+				version(all){{
+					auto lresult = getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w}");
+					assert(!lresult.match);
+					assert(lresult.rest.range == "");
+					assert(lresult.error.need == q{")"});
+					assert(lresult.error.line == 1);
+					assert(lresult.error.column == 3);
+				}}
 				return true;
 			};
 			debug(ctpg_ct) static assert(ldg());
@@ -1175,8 +1117,8 @@ struct Error{
 		}
 	}
 
-	/* combinateAnd */ version(none){
-		Result!None combinateAnd(alias Parser)(stringp ainput, ref memo_t amemo){
+	/* combinateAnd */ version(all){
+		version(none) Result!None combinateAnd(alias Parser)(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			lres.rest = ainput;
 			auto lr = Parser(ainput, amemo);
@@ -1185,22 +1127,33 @@ struct Error{
 			return lres;
 		}
 
+		template combinateAnd(alias tparser){
+			alias None ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+				typeof(return) lresult;
+				lresult.rest = ainput;
+				auto lr = tparser.apply(ainput.save, amemo);
+				lresult.match = lr.match;
+				lresult.error = lr.error;
+				return lresult;
+			}
+		}
+
 		debug(ctpg) unittest{
 			enum ldg = {
-				alias getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))) p;
-				{
-					auto lr = p("www");
-					assert(lr.match);
-					assert(lr.rest == "w");
-					assert(lr.value.mkString() == "ww");
-				}
-				{
-					auto lr = p("w");
-					assert(!lr.match);
-					assert(lr.error.need == q{"w"});
-					assert(lr.error.line == 1);
-					assert(lr.error.column == 2);
-				}
+				version(all){{
+					auto lresult = getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("www");
+					assert(lresult.match);
+					assert(lresult.rest.range == "w");
+					assert(lresult.value == "ww");
+				}}
+				version(all){{
+					auto lresult = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))))("w");
+					assert(!lresult.match);
+					assert(lresult.error.need == q{"w"});
+					assert(lresult.error.line == 1);
+					assert(lresult.error.column == 2);
+				}}
 				return true;
 			};
 			debug(ctpg_ct) static assert(ldg());
@@ -1208,21 +1161,30 @@ struct Error{
 		}
 	}
 
-	/* combinateNot */ version(none){
-		Result!None combinateNot(alias Parser)(stringp ainput, ref memo_t amemo){
+	/* combinateNot */ version(all){
+		version(none) Result!None combinateNot(alias Parser)(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			lres.rest = ainput;
 			lres.match = !Parser(ainput, amemo).match;
 			return lres;
 		}
 
+		template combinateNot(alias tparser){
+			alias None ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+				typeof(return) lresult;
+				lresult.rest = ainput;
+				lresult.match = !tparser.apply(ainput.save, amemo).match;
+				return lresult;
+			}
+		}
+
 		debug(ctpg) unittest{
 			enum ldg = {
-				alias getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))) p;
-				auto lr = p("wwws");
-				assert(lr.match);
-				assert(lr.rest == "ws");
-				assert(lr.value.mkString() == "ww");
+				auto lresult = getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))("wwws");
+				assert(lresult.match);
+				assert(lresult.rest.range == "ws");
+				assert(lresult.value == "ww");
 				return true;
 			};
 			debug(ctpg_ct) static assert(ldg());
@@ -1230,8 +1192,8 @@ struct Error{
 		}
 	}
 
-	/* combinateConvert */ version(none){
-		Result!(ReturnType!(Converter)) combinateConvert(alias Parser, alias Converter)(stringp ainput, ref memo_t amemo){
+	/* combinateConvert */ version(all){
+		version(none) Result!(ReturnType!(Converter)) combinateConvert(alias Parser, alias Converter)(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			auto lr = Parser(ainput, amemo);
 			if(lr.match){
@@ -1260,29 +1222,67 @@ struct Error{
 			return lres;
 		}
 
+		template combinateConvert(alias tparser, alias tconverter){
+			alias ReturnType!tconverter ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+				typeof(return) lresult;
+				auto lr = tparser.apply(ainput, amemo);
+				if(lr.match){
+					lresult.match = true;
+					static if(isTuple!(ParserType!tparser)){
+						static if(__traits(compiles, tconverter(lr.value.field))){
+							lresult.value = tconverter(lr.value.field);
+						}else static if(__traits(compiles, new tconverter(lr.value.field))){
+							lresult.value = new tconverter(lr.value.field);
+						}else{
+							static assert(false, tconverter.mangleof ~ " cannot call with argument type " ~ typeof(lr.value.field).stringof);
+						}
+					}else{
+						static if(__traits(compiles, tconverter(lr.value))){
+							lresult.value = tconverter(lr.value);
+						}else static if(__traits(compiles, new tconverter(lr.value))){
+							lresult.value = new tconverter(lr.value);
+						}else{
+							static assert(false, tconverter.mangleof ~ " cannot call with argument type " ~ typeof(lr.value).stringof);
+						}
+					}
+					lresult.rest = lr.rest;
+				}else{
+					lresult.error = lr.error;
+				}
+				return lresult;
+			}
+		}
+
 		debug(ctpg) unittest{
 			enum ldg = {
-				alias getResult!(
-					combinateConvert!(
-						combinateMore1!(parseString!"w"),
-						function(string[] ws)@safe pure nothrow{
-							return ws.length;
-						}
-					)
-				) p;
-				{
-					auto lr = p("www");
-					assert(lr.match);
-					assert(lr.rest == "");
-					assert(lr.value == 3);
-				}
-				{
-					auto lr = p("a");
-					assert(!lr.match);
-					assert(lr.error.need == q{"w"});
-					assert(lr.error.line == 1);
-					assert(lr.error.column == 1);
-				}
+				version(all){{
+					auto lresult = getResult!(
+						combinateConvert!(
+							combinateMore1!(parseString!"w"),
+							function(string[] ws)@safe pure nothrow{
+								return ws.length;
+							}
+						)
+					)("www");
+					assert(lresult.match);
+					assert(lresult.rest.range == "");
+					assert(lresult.value == 3);
+				}}
+				version(all){{
+					auto lresult = getResult!(
+						combinateConvert!(
+							combinateMore1!(parseString!"w"),
+							function(string[] ws)@safe pure nothrow{
+								return ws.length;
+							}
+						)
+					)("a");
+					assert(!lresult.match);
+					assert(lresult.error.need == q{"w"});
+					assert(lresult.error.line == 1);
+					assert(lresult.error.column == 1);
+				}}
 				return true;
 			};
 			debug(ctpg_ct) static assert(ldg());
@@ -1290,8 +1290,8 @@ struct Error{
 		}
 	}
 
-	/* combinateCheck */ version(none){
-		Result!(ParserType!Parser) combinateCheck(alias Parser, alias Checker)(stringp ainput, ref memo_t amemo){
+	/* combinateCheck */ version(all){
+		version(none) Result!(ParserType!Parser) combinateCheck(alias Parser, alias Checker)(stringp ainput, ref memo_t amemo){
 			typeof(return) lres;
 			auto lr = Parser(ainput, amemo);
 			if(lr.match){
@@ -1306,50 +1306,61 @@ struct Error{
 			return lres;
 		}
 
+		template combinateCheck(alias tparser, alias tchecker){
+			alias ParserType!tparser ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+				typeof(return) lresult;
+				auto lr = tparser.apply(ainput, amemo);
+				if(lr.match){
+					if(tchecker(lr.value)){
+						lresult = lr;
+					}else{
+						lresult.error = Error("passing check", ainput.line, ainput.column);
+					}
+				}else{
+					lresult.error = lr.error;
+				}
+				return lresult;
+			}
+		}
+
 		debug(ctpg) unittest{
 			enum ldg = {
-				alias getResult!(
-					combinateConvert!(
-						combinateCheck!(
-							combinateMore!(0, parseString!"w"),
-							function(string[] ws){
-								return ws.length == 5;
-							}
-						),
-						function(string[] ws){
-							return ws.mkString();
-						}
-					)
-				) p;
-				{
-					auto lr = p("wwwww");
-					assert(lr.match);
-					assert(lr.value == "wwwww");
-					assert(lr.rest == "");
-				}
-				{
-					auto lr = p("wwww");
-					assert(!lr.match);
-				}
+				version(all){{
+					auto lresult = getResult!(
+						combinateString!(
+							combinateCheck!(
+								combinateMore0!(parseString!"w"),
+								function(string[] ws){
+									return ws.length == 5;
+								}
+							)
+						)
+					)("wwwww");
+					assert(lresult.match);
+					assert(lresult.value == "wwwww");
+					assert(lresult.rest.range == "");
+				}}
+				version(all){{
+					auto lresult = getResult!(
+						combinateString!(
+							combinateCheck!(
+								combinateMore0!(parseString!"w"),
+								function(string[] ws){
+									return ws.length == 5;
+								}
+							)
+						)
+					)("wwww");
+					assert(!lresult.match);
+					assert(lresult.error.need == "passing check");
+					assert(lresult.error.line == 1);
+					assert(lresult.error.column == 1);
+				}}
 				return true;
 			};
 			debug(ctpg_ct) static assert(ldg());
 			ldg();
-		}
-	}
-
-	/* combinateString */ version(none){
-		Result!string combinateString(alias Parser)(stringp ainput, ref memo_t amemo){
-			typeof(return) lres;
-			auto lr = Parser(ainput, amemo);
-			if(lr.match){
-				lres.match = true;
-				lres.value = flat(lr.value);
-				lres.rest = lr.rest;
-			}else{
-				lres.error = lr.error;
-			}
-			return lres;
 		}
 	}
 }
@@ -1357,7 +1368,8 @@ struct Error{
 /* parsers */ version(all){
 	/* parseNone */ version(all){
 		template parseNone(){
-			Result!(Range, None) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+			alias None ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
 				typeof(return) lresult;
 				lresult.match = true;
 				lresult.rest = ainput;
@@ -1420,7 +1432,8 @@ struct Error{
 
 	/* parseString */ version(all){
 		template parseString(string tstring) if(tstring.length > 0){
-			Result!(Range, string) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+			alias string ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
 				enum lbreadth = countBreadth(tstring);
 				enum lconvertedString = staticConvertString!(tstring, Range);
 				typeof(return) lresult;
@@ -1662,7 +1675,8 @@ struct Error{
 
 		template parseCharRange(dchar tlow, dchar thigh){
 			static assert(tlow <= thigh);
-			Result!(Range, string) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
+			alias string ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
 				typeof(return) lresult;
 				static if(isSomeString!Range){
 					if(ainput.range.length){
@@ -1731,7 +1745,8 @@ struct Error{
 		}
 
 		template parseAnyChar(){
-			Result!(Range, string) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
+			alias string ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
 				typeof(return) lresult;
 				static if(isSomeString!Range){
 					if(ainput.range.length){
@@ -1762,7 +1777,7 @@ struct Error{
 			}
 		}
 
-		alias parseAnyChar a;
+		version(none) alias parseAnyChar a;
 
 		debug(ctpg) unittest{
 			enum ldg = {
@@ -1836,7 +1851,8 @@ struct Error{
 		}
 
 		template parseEscapeSequence(){
-			Result!(Range, string) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
+			alias string ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
 				typeof(return) lresult;
 				static if(isSomeString!Range){
 					if(ainput.range[0] == '\\'){
@@ -1944,11 +1960,9 @@ struct Error{
 			}
 		}
 
-		alias parseEscapeSequence es;
+		version(none) alias parseEscapeSequence es;
 
 		debug(ctpg) unittest{
-			static assert(isRandomAccessRange!(TestRandomRange!"hoge"));
-
 			enum ldg = {
 				/* \\hoge */ version(all){{
 					version(all){{
@@ -1993,30 +2007,6 @@ struct Error{
 					}}
 					version(all){{
 						auto lresult = getResult!(parseEscapeSequence!())(TestRange!"\\\"hoge"d());
-						assert(lresult.match);
-						assert(lresult.rest.range.source == "hoge"d);
-						assert(lresult.rest.line == 1);
-						assert(lresult.rest.column == 3);
-						assert(lresult.value == "\\\"");
-					}}
-					version(all){{
-						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!"\\\"hoge"());
-						assert(lresult.match);
-						assert(lresult.rest.range.source == "hoge");
-						assert(lresult.rest.line == 1);
-						assert(lresult.rest.column == 3);
-						assert(lresult.value == "\\\"");
-					}}
-					version(all){{
-						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!"\\\"hoge"w());
-						assert(lresult.match);
-						assert(lresult.rest.range.source == "hoge");
-						assert(lresult.rest.line == 1);
-						assert(lresult.rest.column == 3);
-						assert(lresult.value == "\\\"");
-					}}
-					version(all){{
-						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!"\\\"hoge"d());
 						assert(lresult.match);
 						assert(lresult.rest.range.source == "hoge"d);
 						assert(lresult.rest.line == 1);
@@ -2173,30 +2163,6 @@ struct Error{
 						assert(lresult.rest.column == 3);
 						assert(lresult.value == `\n`);
 					}}
-					version(all){{
-						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!`\\hoge`());
-						assert(lresult.match);
-						assert(lresult.rest.range.source == "hoge");
-						assert(lresult.rest.line == 1);
-						assert(lresult.rest.column == 3);
-						assert(lresult.value == `\\`);
-					}}
-					version(all){{
-						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!`\thoge`w());
-						assert(lresult.match);
-						assert(lresult.rest.range.source == "hoge"w);
-						assert(lresult.rest.line == 1);
-						assert(lresult.rest.column == 3);
-						assert(lresult.value == `\t`);
-					}}
-					version(all){{
-						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!`\nhoge`d());
-						assert(lresult.match);
-						assert(lresult.rest.range.source == "hoge"d);
-						assert(lresult.rest.line == 1);
-						assert(lresult.rest.column == 3);
-						assert(lresult.value == `\n`);
-					}}
 				}}
 				/* 欝hoge */ version(all){{
 					version(all){{
@@ -2241,27 +2207,6 @@ struct Error{
 						assert(lresult.error.line == 1);
 						assert(lresult.error.column == 1);
 					}}
-					version(all){{
-						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!"欝hoge"());
-						assert(!lresult.match);
-						assert(lresult.error.need == "escape sequence");
-						assert(lresult.error.line == 1);
-						assert(lresult.error.column == 1);
-					}}
-					version(all){{
-						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!"欝hoge"w());
-						assert(!lresult.match);
-						assert(lresult.error.need == "escape sequence");
-						assert(lresult.error.line == 1);
-						assert(lresult.error.column == 1);
-					}}
-					version(all){{
-						auto lresult = getResult!(parseEscapeSequence!())(TestRandomRange!"欝hoge"d());
-						assert(!lresult.match);
-						assert(lresult.error.need == "escape sequence");
-						assert(lresult.error.line == 1);
-						assert(lresult.error.column == 1);
-					}}
 				}}
 				return true;
 			};
@@ -2284,7 +2229,8 @@ struct Error{
 		}
 
 		template parseSpace(){
-			Result!(Range, string) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
+			alias string ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
 				typeof(return) lresult;
 				static if(isSomeString!Range){
 					if(ainput.range.length > 0 && (ainput.range[0] == ' ' || ainput.range[0] == '\n' || ainput.range[0] == '\t' || ainput.range[0] == '\r' || ainput.range[0] == '\f')){
@@ -2314,7 +2260,7 @@ struct Error{
 			}
 		}
 
-		alias parseSpace space_p;
+		version(none) alias parseSpace space_p;
 
 		debug(ctpg) unittest{
 			enum ldg = {
@@ -2455,7 +2401,8 @@ struct Error{
 		}
 
 		template parseEOF(){
-			Result!(Range, None) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
+			alias None ResultType;
+			Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, memo_t amemo){
 				typeof(return) lresult;
 				if(ainput.range.empty){
 					lresult.match = true;
@@ -3736,6 +3683,7 @@ bool isMatch(alias Func)(string asrc){
 }
 
 }
+
 string flat(Arg)(Arg aarg){
 	string lres;
 	static if(isTuple!Arg || isArray!Arg){
@@ -3753,7 +3701,15 @@ debug(ctpg) void main(){}
 
 private:
 
-debug(ctpg) struct TestRange(alias str){
+debug(ctpg) version(unittest) template TestParser(T){
+	alias T ResultType;
+	Result!(Range, ResultType) apply(Range)(PositionalRange!Range ainput, ref memo_t amemo){
+		typeof(return) lresult;
+		return lresult;
+	}
+}
+
+debug(ctpg) version(unittest) struct TestRange(alias str){
 	typeof(str) source = str;
 	@property typeof(source[0]) front(){ return source[0]; }
 	@property void popFront(){ source = source[1..$]; }
@@ -3761,7 +3717,7 @@ debug(ctpg) struct TestRange(alias str){
 	@property typeof(this) save(){ return this; }
 }
 
-debug(ctpg) struct TestRandomRange(alias str){
+debug(ctpg) version(none) struct TestRandomRange(alias str){
 	typeof(str) source = str;
 	@property typeof(source[0]) front(){ return source[0]; }
 	@property typeof(source[0]) back(){ return source[$]; }
@@ -3872,7 +3828,7 @@ debug(ctpg) unittest{
 	}());
 }
 
-template ResultType(Range, alias R){
+version(none) template ResultType(alias R){
 	static if(is(R Unused == Result!(Range, E), E)){
 		alias E ResultType;
 	}else{
@@ -3880,7 +3836,7 @@ template ResultType(Range, alias R){
 	}
 }
 
-debug(ctpg) unittest{
+version(none) debug(ctpg) unittest{
 	static assert(is(ResultType!(string, Result!(string, int)) == int));
 	static assert(is(ResultType!(wstring, Result!(wstring, int)) == int));
 	static assert(is(ResultType!(dstring, Result!(dstring, int)) == int));
@@ -3897,7 +3853,7 @@ version(none) template ParserType(alias parser){
 	}
 }
 
-template ParsersTypeTuple(Range, tparsers...){
+version(none) template ParsersTypeTuple(Range, tparsers...){
 	static if(tparsers.length == 1){
 		static if(is(ReturnType!(tparsers[0].apply!(Range)) Unused == Result!(Range, T), T)){
 			alias Tuple!T ParsersTypeTuple;
@@ -3913,7 +3869,7 @@ template ParsersTypeTuple(Range, tparsers...){
 	}
 }
 
-debug(ctpg) unittest{
+version(none) debug(ctpg) unittest{
 	static assert(is(ParsersTypeTuple!(string, parseString!"a", parseString!"a") == Tuple!(string, string)));
 	static assert(is(ParsersTypeTuple!(string, parseString!"a") == Tuple!(string)));
 	static assert(is(ParsersTypeTuple!(wstring, parseString!"a", parseString!"a") == Tuple!(string, string)));
@@ -3928,7 +3884,7 @@ debug(ctpg) unittest{
 	static assert(is(ParsersTypeTuple!(TestRange!""d, parseString!"a") == Tuple!(string)));
 }
 
-template ParserType(Range, alias tparser){
+version(none) template ParserType(Range, alias tparser){
 	static if(is(ReturnType!(tparser.apply!(Range)) Unused == Result!(Range, T), T)){
 		alias T ParserType;
 	}else{
@@ -3936,7 +3892,15 @@ template ParserType(Range, alias tparser){
 	}
 }
 
-debug(ctpg) unittest{
+template ParserType(alias tparser){
+	static if(is(tparser.ResultType)){
+		alias tparser.ResultType ParserType;
+	}else{
+		static assert(false);
+	}
+}
+
+version(none) debug(ctpg) unittest{
 	static assert(is(ParserType!(string, parseString!"a") == string));
 	static assert(is(ParserType!(wstring, parseString!"a") == string));
 	static assert(is(ParserType!(dstring, parseString!"a") == string));
@@ -3945,28 +3909,40 @@ debug(ctpg) unittest{
 	static assert(is(ParserType!(TestRange!""d, parseString!"a") == string));
 }
 
-template flatTuple(arg){
-	static if(isTuple!arg){
-		alias arg.Types flatTuple;
+debug(ctpg) unittest{
+	static assert(is(ParserType!(parseString!"a") == string));
+	static assert(is(ParserType!(TestParser!int) == int));
+	static assert(is(ParserType!(TestParser!long) == long));
+
+}
+
+template flatTuple(T){
+	static if(isTuple!T){
+		alias T.Types flatTuple;
 	}else{
-		alias arg flatTuple;
+		alias T flatTuple;
 	}
 }
 
 debug(ctpg) unittest{
-	static assert(is(flatTuple!(Tuple!(string, string)) == TypeTuple!(string, string)));
 	static assert(is(flatTuple!(string) == string));
+	static assert(is(flatTuple!(Tuple!(string)) == TypeTuple!string));
+	static assert(is(flatTuple!(Tuple!(Tuple!(string))) == TypeTuple!(Tuple!string)));
 }
 
 version(none) template CombinateSequenceImplType(Range, tparsers...){
 	alias Result!(Tuple!(staticMap!(flatTuple, staticMap!(ParserType, tparsers)))) CombinateSequenceImplType;
 }
 
-template CombinateSequenceImplType(Range, tparsers...){
+version(none) template CombinateSequenceImplType(Range, tparsers...){
 	alias Result!(Range, Tuple!(staticMap!(flatTuple, ParsersTypeTuple!(Range, tparsers).Types))) CombinateSequenceImplType;
 }
 
-debug(ctpg) unittest{
+template CombinateSequenceImplType(tparsers...){
+	alias Tuple!(staticMap!(flatTuple, staticMap!(ParserType, tparsers))) CombinateSequenceImplType;
+}
+
+version(none) debug(ctpg) unittest{
 	static assert(is(CombinateSequenceImplType!(string, parseString!"a", parseString!"a") == Result!(string, Tuple!(string, string))));
 	static assert(is(CombinateSequenceImplType!(wstring, parseString!"a", parseString!"a") == Result!(wstring, Tuple!(string, string))));
 	static assert(is(CombinateSequenceImplType!(dstring, parseString!"a", parseString!"a") == Result!(dstring, Tuple!(string, string))));
@@ -3975,7 +3951,15 @@ debug(ctpg) unittest{
 	static assert(is(CombinateSequenceImplType!(TestRange!""d, parseString!"a", parseString!"a") == Result!(TestRange!""d, Tuple!(string, string))));
 }
 
-template UnTuple(Range, E){
+debug(ctpg) unittest{
+	static assert(is(CombinateSequenceImplType!(parseString!"a", parseString!"a") == Tuple!(string, string)));
+	static assert(is(CombinateSequenceImplType!(TestParser!int, TestParser!long) == Tuple!(int, long)));
+	static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(int, long)), TestParser!uint) == Tuple!(int, long, uint)));
+	static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(int, long)), TestParser!(Tuple!(uint, ulong))) == Tuple!(int, long, uint, ulong)));
+	static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(Tuple!(byte, short), long)), TestParser!(Tuple!(uint, ulong))) == Tuple!(Tuple!(byte, short), long, uint, ulong)));
+}
+
+version(none) template UnTuple(Range, E){
 	static if(ResultType!(Range, E).Types.length == 1){
 		alias Result!(ResultType!(Range, E).Types[0]) UnTuple;
 	}else{
@@ -3983,7 +3967,23 @@ template UnTuple(Range, E){
 	}
 }
 
-UnTuple!(Range, R) unTuple(Range, R)(R r){
+template UnTuple(T){
+	static if(isTuple!T && T.Types.length == 1){
+		alias T.Types[0] UnTuple;
+	}else{
+		alias T UnTuple;
+	}
+}
+
+debug(ctpg) unittest{
+	static assert(is(UnTuple!int == int));
+	static assert(is(UnTuple!(Tuple!(int)) == int));
+	static assert(is(UnTuple!(Tuple!(Tuple!(int))) == Tuple!int));
+	static assert(is(UnTuple!(Tuple!(int, int)) == Tuple!(int, int)));
+	static assert(is(UnTuple!(Tuple!(Tuple!(int, int))) == Tuple!(int, int)));
+}
+
+version(none) UnTuple!(Range, R) unTuple(Range, R)(R r){
 	static if(ResultType!(Range, R).Types.length == 1){
 		return Result!(ResultType!R.Types[0])(r.match, r.value[0], r.rest, r.error);
 	}else{
@@ -3995,7 +3995,7 @@ version(none) template CommonParserType(parsers...){
 	alias CommonType!(staticMap!(ParserType, parsers)) CommonParserType;
 }
 
-template CommonParserType(Range, tparsers...){
+version(none) template CommonParserType(Range, tparsers...){
 	static if(tparsers.length == 1){
 		alias ParserType!(Range, tparsers[0]) CommonParserType;
 	}else static if(tparsers.length > 1){
@@ -4005,8 +4005,15 @@ template CommonParserType(Range, tparsers...){
 	}
 }
 
+template CommonParserType(tparsers...){
+	alias CommonType!(staticMap!(ParserType, tparsers)) CommonParserType;
+}
+
 debug(ctpg) unittest{
-	static assert(is(CommonParserType!(string, parseString!"a", parseString!"a") == string));
+	static assert(is(CommonParserType!(parseString!"a", parseString!"a") == string));
+	static assert(is(CommonParserType!(TestParser!int, TestParser!long) == long));
+	static assert(is(CommonParserType!(TestParser!byte, TestParser!short, TestParser!int) == int));
+	static assert(is(CommonParserType!(TestParser!string, TestParser!int) == void));
 }
 
 version(none) dchar decode(Range)(ref Range arange){
