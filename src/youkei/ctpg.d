@@ -1,5 +1,7 @@
 // Written in the D programming language.
-
+/++
+This module implements compite-time parser generator.
++/
 /*          Copyright youkei 2010 - 2012.
  * Distributed under the Boost Software License, Version 1.0.
  *    (See accompanying file LICENSE_1_0.txt or copy at
@@ -53,6 +55,10 @@ struct Positional(Range){
         pure @safe nothrow
         bool opEquals(typeof(this) rhs){
             return range == rhs.range && line == rhs.line && column == rhs.column;
+        }
+
+        bool isEnd(){
+            return range.empty;
         }
     }
 }
@@ -1477,7 +1483,7 @@ struct Error{
         template parseCharRange(dchar low, dchar high){
             static assert(low <= high);
             alias string ResultType;
-            Result!(Range, ResultType) apply(Range)(Positional!Range input, memo_t memo){
+            Result!(Range, ResultType) apply(Range)(Positional!Range input, ref memo_t memo){
                 typeof(return) result;
                 static if(isSomeString!Range){
                     if(input.range.length){
@@ -1793,7 +1799,7 @@ struct Error{
     /* parseEscapeSequence */ version(all){
         template parseEscapeSequence(){
             alias string ResultType;
-            Result!(Range, ResultType) apply(Range)(Positional!Range input, memo_t memo){
+            Result!(Range, ResultType) apply(Range)(Positional!Range input, ref memo_t memo){
                 typeof(return) result;
                 static if(isSomeString!Range){
                     if(input.range[0] == '\\'){
@@ -2077,7 +2083,7 @@ struct Error{
     /* parseSpace */ version(all){
         template parseSpace(){
             alias string ResultType;
-            Result!(Range, ResultType) apply(Range)(Positional!Range input, memo_t memo){
+            Result!(Range, ResultType) apply(Range)(Positional!Range input, ref memo_t memo){
                 typeof(return) result;
                 static if(isSomeString!Range){
                     if(input.range.length > 0 && (input.range[0] == ' ' || input.range[0] == '\n' || input.range[0] == '\t' || input.range[0] == '\r' || input.range[0] == '\f')){
@@ -2189,7 +2195,7 @@ struct Error{
     /* parseEOF */ version(all){
         template parseEOF(){
             alias None ResultType;
-            Result!(Range, ResultType) apply(Range)(Positional!Range input, memo_t memo){
+            Result!(Range, ResultType) apply(Range)(Positional!Range input, ref memo_t memo){
                 typeof(return) result;
                 if(input.range.empty){
                     result.match = true;
@@ -2352,91 +2358,93 @@ struct Error{
         }
     }
 
-    /* parseIdent */ version(none){
-        alias combinateString!(
-            combinateSequence!(
-                combinateChoice!(
-                    parseString!"_",
-                    parseCharRange!('a','z'),
-                    parseCharRange!('A','Z')
-                ),
-                combinateMore0!parseIdentChar
-            )
-        ) parseIdent;
+    /* parseIdent */ version(all){
+        template parseIdent(){
+            alias combinateMemoize!(combinateString!(
+                combinateMemoize!(combinateSequence!(
+                    combinateMemoize!(combinateChoice!(
+                        combinateMemoize!(parseString!"_"),
+                        combinateMemoize!(parseCharRange!('a','z')),
+                        combinateMemoize!(parseCharRange!('A','Z'))
+                    )),
+                    combinateMemoize!(combinateMore0!(parseIdentChar!()))
+                ))
+            )) parseIdent;
+        }
 
         alias parseIdent ident_p;
 
-        alias combinateChoice!(
-            parseString!"_",
-            parseCharRange!('a','z'),
-            parseCharRange!('A','Z'),
-            parseCharRange!('0','9')
-        ) parseIdentChar;
+        private template parseIdentChar(){
+            alias combinateChoice!(
+                parseString!"_",
+                parseCharRange!('a','z'),
+                parseCharRange!('A','Z'),
+                parseCharRange!('0','9')
+            ) parseIdentChar;
+        }
 
         debug(ctpg) unittest{
-            enum ldg = {
-                {
-                    auto lr = getResult!parseIdent("hoge");
-                    assert(lr.match);
-                    assert(lr.rest == "");
-                    assert(lr.value == "hoge");
-                }
-                {
-                    auto lr = getResult!parseIdent("_x");
-                    assert(lr.match);
-                    assert(lr.rest == "");
-                    assert(lr.value == "_x");
-                }
-                {
-                    auto lr = getResult!parseIdent("_0");
-                    assert(lr.match);
-                    assert(lr.rest == "");
-                    assert(lr.value == "_0");
-                }
-                {
-                    auto lr = getResult!parseIdent("0");
-                    assert(!lr.match);
-                    assert(lr.rest == "");
-                    assert(lr.error.line == 1);
-                    assert(lr.error.column == 1);
-                }
-                {
-                    auto lr = getResult!parseIdent("あ");
-                    assert(!lr.match);
-                    assert(lr.rest == "");
-                    assert(lr.error.line == 1);
-                    assert(lr.error.column == 1);
-                }
+            enum dg = {
+                version(all){{
+                    auto result = getResult!(parseIdent!())("hoge");
+                    assert(result.match);
+                    assert(result.value == "hoge");
+                    assert(result.rest.isEnd);
+                }}
+                version(all){{
+                    auto result = getResult!(parseIdent!())("_x");
+                    assert(result.match);
+                    assert(result.value == "_x");
+                    assert(result.rest.isEnd);
+                }}
+                version(all){{
+                    auto result = getResult!(parseIdent!())("_0");
+                    assert(result.match);
+                    assert(result.value == "_0");
+                    assert(result.rest.isEnd);
+                }}
+                version(all){{
+                    auto result = getResult!(parseIdent!())("0");
+                    assert(!result.match);
+                    assert(result.error == Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'", 1, 1));
+                }}
+                version(all){{
+                    auto result = getResult!(parseIdent!())("あ");
+                    assert(!result.match);
+                    assert(result.error == Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'", 1, 1));
+                }}
                 return true;
             };
-            debug(ctpg_ct) static assert(ldg());
-            ldg();
+            debug(ctpg_ct) static assert(dg());
+            dg();
         }
     }
 
     /* parseStringLiteral */ version(none){
-        alias combinateString!(
-            combinateSequence!(
-                combinateNone!(parseString!"\""),
-                combinateMore0!(
-                    combinateSequence!(
-                        combinateNot!(parseString!"\""),
-                        combinateChoice!(
-                            parseEscapeSequence,
-                            parseAnyChar
+        template parseStringLiteral(){
+            alias combinateString!(
+                combinateSequence!(
+                    combinateNone!(parseString!"\""),
+                    combinateMore0!(
+                        combinateSequence!(
+                            combinateNot!(parseString!"\""),
+                            combinateChoice!(
+                                parseEscapeSequence,
+                                parseAnyChar
+                            )
                         )
-                    )
-                ),
-                combinateNone!(parseString!"\"")
-            )
-        ) parseStringLiteral;
+                    ),
+                    combinateNone!(parseString!"\"")
+                )
+            ) parseStringLiteral;
+        }
 
         alias parseStringLiteral strLit_p;
 
         debug(ctpg) unittest{
-            enum ldg = {
+            enum dg = {
                 {
-                    auto lr = getResult!parseStringLiteral(q{"表が怖い噂のソフト"});
+                    auto lr = getResult!(parseStringLiteral!())(q{"表が怖い噂のソフト"});
                     assert(lr.match);
                     assert(lr.rest == "");
                     assert(lr.value == "表が怖い噂のソフト");
@@ -2448,7 +2456,7 @@ struct Error{
         }
     }
 
-    /* parseIntLiteral */ version(none){
+    /* parseIntLiteral */ version(all){
         alias combinateChoice!(
             combinateConvert!(
                 combinateNone!(parseString!"0"),
@@ -2461,42 +2469,44 @@ struct Error{
                     parseCharRange!('1', '9'),
                     combinateMore0!(parseCharRange!('0', '9'))
                 ),
-                function(string ahead, string[] atails){
-                    int lres = ahead[0] - '0';
-                    foreach(lchar; atails){
-                        lres = lres * 10 + lchar[0] - '0';
+                function(string head, string[] tails){
+                    int result = head[0] - '0';
+                    foreach(c; tails){
+                        result = result * 10 + c[0] - '0';
                     }
-                    return lres;
+                    return result;
                 }
             )
         ) parseIntLiteral;
 
-        alias parseIntLiteral intLit_p;
+        template intLit_p(){
+            alias parseIntLiteral intLit_p;
+        }
 
         debug(ctpg) unittest{
-            enum ldg = {
-                {
-                    auto lr = getResult!parseIntLiteral(q{3141});
-                    assert(lr.match);
-                    assert(lr.rest == "");
-                    assert(lr.value == 3141);
-                }
-                {
-                    auto lr = getResult!parseIntLiteral(q{0});
-                    assert(lr.match);
-                    assert(lr.rest == "");
-                    assert(lr.value == 0);
-                }
-                {
-                    auto lr = getResult!parseIntLiteral("0123");
-                    assert(lr.match);
-                    assert(lr.rest == "123");
-                    assert(lr.value == 0);
-                }
+            enum dg = {
+                version(all){{
+                    auto result = getResult!parseIntLiteral(q{3141});
+                    assert(result.match);
+                    assert(result.value == 3141);
+                    assert(result.rest == positional("", 1, 5));
+                }}
+                version(all){{
+                    auto result = getResult!parseIntLiteral(q{0});
+                    assert(result.match);
+                    assert(result.rest == positional("", 1, 2));
+                    assert(result.value == 0);
+                }}
+                version(all){{
+                    auto result = getResult!parseIntLiteral("0123");
+                    assert(result.match);
+                    assert(result.value == 0);
+                    assert(result.rest == positional("123", 1, 2));
+                }}
                 return true;
             };
-            debug(ctpg_ct) static assert(ldg());
-            ldg();
+            debug(ctpg_ct) static assert(dg());
+            dg();
         }
     }
 
@@ -2518,14 +2528,12 @@ struct Error{
 
 }
 
-version(none){
 mixin template ctpg(string src){
     mixin(parse!defs(src));
 }
 
-template getSource(string Src){
-    enum getSource = getResult!defs(Src).value;
-}
+template getSource(string src){
+    enum getSource = getResult!(defs!())(src).value;
 }
 
 auto getResult(alias fun, Range)(Range input){
@@ -2534,20 +2542,20 @@ auto getResult(alias fun, Range)(Range input){
 }
 
 auto parse(alias fun)(string src){
-    auto result = getResult!fun(src);
+    auto result = getResult!(fun!())(src);
     if(result.match){
         return result.value;
     }else{
-        throw new Exception(to!string(res.error.line) ~ q{: } ~ to!string(res.error.column) ~ q{: error } ~ res.error.need ~ q{ is needed});
+        throw new Exception(to!string(result.error.line) ~ q{: } ~ to!string(result.error.column) ~ q{: error } ~ result.error.need ~ q{ is needed});
     }
 }
 
 bool isMatch(alias fun)(string src){
-    return getResult!fun(src).match;
+    return getResult!(fun!())(src).match;
 }
 
 /* ctpg */ version(all){
-    /* defs */ version(none){
+    /* defs */ version(all){
         template defs(){
             alias string ResultType;
             Result!(Range, string) apply(Range)(Positional!Range input, ref memo_t memo){
@@ -2561,175 +2569,199 @@ bool isMatch(alias fun)(string src){
                         combinateMemoize!(parseSpaces!()),
                         combinateMemoize!(parseEOF!())
                     ))
-                ))(input, memo);
+                )).apply(input, memo);
             }
-        }
-        version(none) Result!string defs(stringp input, ref memo_t memo){
-            return combinateMemoize!(combinateString!(
-                combinateMemoize!(combinateSequence!(
-                    combinateMemoize!parseSpaces,
-                    combinateMemoize!(combinateMore1!(
-                        combinateMemoize!def,
-                        combinateMemoize!parseSpaces
-                    )),
-                    combinateMemoize!parseSpaces,
-                    combinateMemoize!parseEOF
-                ))
-            ))(input, memo);
         }
 
         debug(ctpg) unittest{
-            enum ldg = {
-                string lsrc = q{
+            enum dg = {
+                string src = q{
                     bool hoge = !"hello" $ >> {return false;};
                     Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
                 };
-                auto lr = getResult!defs(lsrc);
-                assert(lr.match);
-                assert(lr.rest == "");
+                auto result = getResult!(defs!())(src);
+                assert(result.match);
+                assert(result.rest.range == "");
                 assert(
-                    lr.value ==
-                    "Result!(bool) hoge(stringp input, memo_t memo){"
-                        "return combinateMemoize!(combinateConvert!("
-                            "combinateMemoize!(combinateSequence!("
-                                "combinateMemoize!(combinateNone!("
-                                    "combinateMemoize!(parseString!\"hello\")"
+                    result.value ==
+                    "template hoge(){"
+                        "alias bool ResultType;"
+                        "Result!(Range, ResultType) apply(Range)(Positional!Range input, ref memo_t memo){"
+                            "return combinateMemoize!(combinateConvert!("
+                                "combinateMemoize!(combinateSequence!("
+                                    "combinateMemoize!(combinateNone!("
+                                        "combinateMemoize!(parseString!\"hello\")"
+                                    ")),"
+                                    "combinateMemoize!(parseEOF!())"
                                 ")),"
-                                "combinateMemoize!(parseEOF)"
-                            ")),"
-                            "function(){"
-                                "return false;"
-                            "}"
-                        "))(input, memo);"
+                                "function(){"
+                                    "return false;"
+                                "}"
+                            ")).apply(input, memo);"
+                        "}"
                     "}"
-                    "Result!(Tuple!piyo) hoge2(stringp input, memo_t memo){"
-                        "return combinateMemoize!(combinateConvert!("
-                            "combinateMemoize!(combinateMore0!("
-                                "combinateMemoize!(hoge)"
-                            ")),"
-                            "function(){"
-                                "return tuple(\"foo\");"
-                            "}"
-                        "))(input, memo);"
+                    "template hoge2(){"
+                        "alias Tuple!piyo ResultType;"
+                        "Result!(Range, ResultType) apply(Range)(Positional!Range input, ref memo_t memo){"
+                            "return combinateMemoize!(combinateConvert!("
+                                "combinateMemoize!(combinateMore0!("
+                                    "combinateMemoize!(hoge!())"
+                                ")),"
+                                "function(){"
+                                    "return tuple(\"foo\");"
+                                "}"
+                            ")).apply(input, memo);"
+                        "}"
                     "}"
                 );
                 return true;
             };
-            debug(ctpg_ct) static assert(ldg());
-            ldg();
+            debug(ctpg_ct) static assert(dg());
+            dg();
         };
     }
 
-    /* defs */ version(none){
-        Result!string def(stringp input, memo_t memo){
-            return combinateMemoize!(combinateConvert!(
-                combinateMemoize!(combinateSequence!(
-                    combinateMemoize!typeName,
-                    combinateMemoize!parseSpaces,
-                    combinateMemoize!id,
-                    combinateMemoize!parseSpaces,
-                    combinateMemoize!(combinateNone!(
-                        combinateMemoize!(parseString!"=")
+    /* def */ version(all){
+        template def(){
+            alias string ResultType;
+            Result!(string, ResultType) apply(Positional!string input, ref memo_t memo){
+                return combinateMemoize!(combinateConvert!(
+                    combinateMemoize!(combinateSequence!(
+                        combinateMemoize!(typeName!()),
+                        combinateMemoize!(parseSpaces!()),
+                        combinateMemoize!(id!()),
+                        combinateMemoize!(parseSpaces!()),
+                        combinateMemoize!(combinateNone!(
+                            combinateMemoize!(parseString!"=")
+                        )),
+                        combinateMemoize!(parseSpaces!()),
+                        combinateMemoize!(convExp!()),
+                        combinateMemoize!(parseSpaces!()),
+                        combinateMemoize!(combinateNone!(
+                            combinateMemoize!(parseString!";")
+                        ))
                     )),
-                    combinateMemoize!parseSpaces,
-                    combinateMemoize!convExp,
-                    combinateMemoize!parseSpaces,
-                    combinateMemoize!(combinateNone!(
-                        combinateMemoize!(parseString!";")
-                    ))
-                )),
-                function(string type, string name, string convExp){
-                    return "Result!("~type~") "~name~"(stringp input, memo_t memo){"
-                        "return "~convExp~"(input, memo);"
-                    "}";
-                }
-            ))(input, memo);
+                    (string type, string name, string convExp)
+                    =>
+                        "template " ~ name ~ "(){"
+                            "alias " ~ type ~ " ResultType;"
+                            "Result!(Range, ResultType) apply(Range)(Positional!Range input, ref memo_t memo){"
+                                "return "~convExp~".apply(input, memo);"
+                            "}"
+                        "}"
+                )).apply(input, memo);
+            }
         }
 
         debug(ctpg) unittest{
-            enum ldg = {
-                auto lr = getResult!def(q{bool hoge = !"hello" $ >> {return false;};});
-                assert(lr.match);
-                assert(lr.rest == "");
-                assert(
-                    lr.value ==
-                    "Result!(bool) hoge(stringp input, memo_t memo){"
-                        "return combinateMemoize!(combinateConvert!("
-                            "combinateMemoize!(combinateSequence!("
-                                "combinateMemoize!(combinateNone!("
-                                    "combinateMemoize!(parseString!\"hello\")"
-                                ")),"
-                                "combinateMemoize!(parseEOF)"
-                            ")),"
-                            "function(){"
-                                "return false;"
+            enum dg = {
+                version(all){{
+                    auto result = getResult!(def!())(`bool hoge = !"hello" $ >> {return false;};`);
+                    assert(result.match);
+                    assert(result.rest.range == "");
+                    assert(
+                        result.value ==
+                        "template hoge(){"
+                            "alias bool ResultType;"
+                            "Result!(Range, ResultType) apply(Range)(Positional!Range input, ref memo_t memo){"
+                                "return combinateMemoize!(combinateConvert!("
+                                    "combinateMemoize!(combinateSequence!("
+                                        "combinateMemoize!(combinateNone!("
+                                            "combinateMemoize!(parseString!\"hello\")"
+                                        ")),"
+                                        "combinateMemoize!(parseEOF!())"
+                                    ")),"
+                                    "function(){"
+                                        "return false;"
+                                    "}"
+                                ")).apply(input, memo);"
                             "}"
-                        "))(input, memo);"
-                    "}"
-                );
+                        "}"
+                    );
+                }}
+                version(all){{
+                    auto result = getResult!(def!())(`None recursive = A $;`);
+                    assert(result.match);
+                    assert(result.rest.range == "");
+                    assert(
+                        result.value ==
+                        "template recursive(){"
+                            "alias None ResultType;"
+                            "Result!(Range, ResultType) apply(Range)(Positional!Range input, ref memo_t memo){"
+                                "return combinateMemoize!(combinateSequence!("
+                                    "combinateMemoize!(A!()),"
+                                    "combinateMemoize!(parseEOF!())"
+                                ")).apply(input, memo);"
+                            "}"
+                        "}"
+                    );
+                }}
                 return true;
             };
-            debug(ctpg_ct) static assert(ldg());
-            ldg();
+            debug(ctpg_ct) static assert(dg());
+            dg();
         };
     }
 
-    /* convExp */ version(none){
-        Result!string convExp(stringp input, memo_t memo){
-            return combinateMemoize!(combinateConvert!(
-                combinateMemoize!(combinateSequence!(
-                    combinateMemoize!choiceExp,
-                    combinateMemoize!(combinateMore0!(
-                        combinateMemoize!(combinateSequence!(
-                            combinateMemoize!parseSpaces,
-                            combinateMemoize!(combinateNone!(
-                                parseString!">>"
-                            )),
-                            combinateMemoize!parseSpaces,
-                            combinateMemoize!(combinateChoice!(
-                                combinateMemoize!func,
-                                combinateMemoize!typeName
+    /* convExp */ version(all){
+        template convExp(){
+            alias string ResultType;
+            Result!(string, ResultType) apply(Positional!string input, ref memo_t memo){
+                return combinateMemoize!(combinateConvert!(
+                    combinateMemoize!(combinateSequence!(
+                        combinateMemoize!(choiceExp!()),
+                        combinateMemoize!(combinateMore0!(
+                            combinateMemoize!(combinateSequence!(
+                                combinateMemoize!(parseSpaces!()),
+                                combinateMemoize!(combinateNone!(
+                                    parseString!">>"
+                                )),
+                                combinateMemoize!(parseSpaces!()),
+                                combinateMemoize!(combinateChoice!(
+                                    combinateMemoize!(func!()),
+                                    combinateMemoize!(typeName!())
+                                ))
                             ))
                         ))
-                    ))
-                )),
-                function(string achoiceExp, string[] afuncs){
-                    string lres = achoiceExp;
-                    foreach(lfunc; afuncs){
-                        lres = "combinateMemoize!(combinateConvert!(" ~ lres ~ "," ~ lfunc ~ "))";
+                    )),
+                    function(string choiceExp, string[] funcs){
+                        string result = choiceExp;
+                        foreach(func; funcs){
+                            result = "combinateMemoize!(combinateConvert!(" ~ result ~ "," ~ func ~ "))";
+                        }
+                        return result;
                     }
-                    return lres;
-                }
-            ))(input, memo);
+                )).apply(input, memo);
+            }
         }
 
         debug(ctpg) unittest{
-            enum ldg = {
-                {
-                    auto lr = getResult!convExp(q{!"hello" $ >> {return false;}});
-                    assert(lr.match);
-                    assert(lr.rest == "");
+            enum dg = {
+                version(all){{
+                    auto result = getResult!(convExp!())(q{!"hello" $ >> {return false;}});
+                    assert(result.match);
+                    assert(result.rest.range == "");
                     assert(
-                        lr.value ==
+                        result.value ==
                         "combinateMemoize!(combinateConvert!("
                             "combinateMemoize!(combinateSequence!("
                                 "combinateMemoize!(combinateNone!("
                                     "combinateMemoize!(parseString!\"hello\")"
                                 ")),"
-                                "combinateMemoize!(parseEOF)"
+                                "combinateMemoize!(parseEOF!())"
                             ")),"
                             "function(){"
                                 "return false;"
                             "}"
                         "))"
                     );
-                }
-                {
-                    auto lr = getResult!convExp(q{"hello" >> flat >> to!int});
-                    assert(lr.match);
-                    assert(lr.rest == "");
+                }}
+                version(all){{
+                    auto result = getResult!(convExp!())(q{"hello" >> flat >> to!int});
+                    assert(result.match);
+                    assert(result.rest.range == "");
                     assert(
-                        lr.value ==
+                        result.value ==
                         "combinateMemoize!(combinateConvert!("
                             "combinateMemoize!(combinateConvert!("
                                 "combinateMemoize!(parseString!\"hello\"),"
@@ -2738,52 +2770,49 @@ bool isMatch(alias fun)(string src){
                             "to!int"
                         "))"
                     );
-                }
+                }}
                 return true;
             };
-            debug(ctpg_ct) static assert(ldg());
-            ldg();
+            debug(ctpg_ct) static assert(dg());
+            dg();
         }
     }
 
-    /* choiceExp */ version(none){
-        Result!string choiceExp(stringp input, memo_t memo){
-            return combinateMemoize!(combinateConvert!(
-                combinateMemoize!(combinateSequence!(
-                    combinateMemoize!seqExp,
-                    combinateMemoize!(combinateMore0!(
-                        combinateMemoize!(combinateSequence!(
-                            combinateMemoize!parseSpaces,
-                            combinateMemoize!(combinateNone!(
-                                combinateMemoize!(parseString!"/")
-                            )),
-                            combinateMemoize!parseSpaces,
-                            combinateMemoize!seqExp
+    /* choiceExp */ version(all){
+        template choiceExp(){
+            alias string ResultType;
+            Result!(string, ResultType) apply(Positional!string input, ref memo_t memo){
+                return combinateMemoize!(combinateConvert!(
+                    combinateMemoize!(combinateSequence!(
+                        combinateMemoize!(seqExp!()),
+                        combinateMemoize!(combinateMore0!(
+                            combinateMemoize!(combinateSequence!(
+                                combinateMemoize!(parseSpaces!()),
+                                combinateMemoize!(combinateNone!(
+                                    combinateMemoize!(parseString!"/")
+                                )),
+                                combinateMemoize!(parseSpaces!()),
+                                combinateMemoize!(seqExp!())
+                            ))
                         ))
-                    ))
-                )),
-                function(string aseqExp, string[] aseqExps){
-                    if(aseqExps.length){
-                        return "combinateMemoize!(combinateChoice!("~aseqExp~","~aseqExps.mkString(",")~"))";
-                    }else{
-                        return aseqExp;
-                    }
-                }
-            ))(input, memo);
+                    )),
+                    (string seqExp, string[] seqExps) => seqExps.length ? "combinateMemoize!(combinateChoice!(" ~ seqExp ~ "," ~ seqExps.mkString(",") ~ "))" : seqExp
+                )).apply(input, memo);
+            }
         }
 
         debug(ctpg) unittest{
-            enum ldg = {
-                {
-                    auto lr = getResult!choiceExp(`!$* / (&(^"a"))?`);
-                    assert(lr.match);
-                    assert(lr.rest == "");
+            enum dg = {
+                version(all){{
+                    auto result = getResult!(choiceExp!())(`!$* / (&(^"a"))?`);
+                    assert(result.match);
+                    assert(result.rest.range == "");
                     assert(
-                        lr.value ==
+                        result.value ==
                         "combinateMemoize!(combinateChoice!("
                             "combinateMemoize!(combinateMore0!("
                                 "combinateMemoize!(combinateNone!("
-                                    "combinateMemoize!(parseEOF)"
+                                    "combinateMemoize!(parseEOF!())"
                                 "))"
                             ")),"
                             "combinateMemoize!(combinateOption!("
@@ -2795,119 +2824,113 @@ bool isMatch(alias fun)(string src){
                             "))"
                         "))"
                     );
-                }
-                {
-                    auto lr = getResult!choiceExp(`!"hello" $`);
-                    assert(lr.match);
-                    assert(lr.rest == "");
+                }}
+                version(all){{
+                    auto result = getResult!(choiceExp!())(`!"hello" $`);
+                    assert(result.match);
+                    assert(result.rest.range == "");
                     assert(
-                        lr.value ==
+                        result.value ==
                         "combinateMemoize!(combinateSequence!("
                             "combinateMemoize!(combinateNone!("
                                 "combinateMemoize!(parseString!\"hello\")"
                             ")),"
-                            "combinateMemoize!(parseEOF)"
+                            "combinateMemoize!(parseEOF!())"
                         "))"
                     );
-                }
+                }}
                 return true;
             };
-            debug(ctpg_ct) static assert(ldg());
-            ldg();
+            debug(ctpg_ct) static assert(dg());
+            dg();
         }
     }
 
-    /* seqExp */ version(none){
-        Result!string seqExp(stringp input, memo_t memo){
-            return combinateMemoize!(combinateConvert!(
-                combinateMemoize!(combinateMore1!(
-                    combinateMemoize!optionExp,
-                    combinateMemoize!parseSpaces
-                )),
-                function(string[] aoptionExps){
-                    if(aoptionExps.length > 1){
-                        return "combinateMemoize!(combinateSequence!("~aoptionExps.mkString(",")~"))";
-                    }else{
-                        return aoptionExps[0];
-                    }
-                }
-            ))(input, memo);
+    /* seqExp */ version(all){
+        template seqExp(){
+            alias string ResultType;
+            Result!(string, ResultType) apply(Positional!string input, ref memo_t memo){
+                return combinateMemoize!(combinateConvert!(
+                    combinateMemoize!(combinateMore1!(
+                        combinateMemoize!(optionExp!()),
+                        combinateMemoize!(parseSpaces!())
+                    )),
+                    (string[] optionExps) => optionExps.length > 1 ? "combinateMemoize!(combinateSequence!("~optionExps.mkString(",")~"))" : optionExps[0]
+                )).apply(input, memo);
+            }
         }
 
         debug(ctpg) unittest{
-            enum ldg = {
-                {
-                    auto lr = getResult!seqExp("!$* (&(^$))?");
-                    assert(lr.match);
-                    assert(lr.rest == "");
+            enum dg = {
+                version(all){{
+                    auto result = getResult!(seqExp!())("!$* (&(^$))?");
+                    assert(result.match);
+                    assert(result.rest.range == "");
                     assert(
-                        lr.value ==
+                        result.value ==
                         "combinateMemoize!(combinateSequence!("
                             "combinateMemoize!(combinateMore0!("
                                 "combinateMemoize!(combinateNone!("
-                                    "combinateMemoize!(parseEOF)"
+                                    "combinateMemoize!(parseEOF!())"
                                 "))"
                             ")),"
                             "combinateMemoize!(combinateOption!("
                                 "combinateMemoize!(combinateAnd!("
                                     "combinateMemoize!(combinateNot!("
-                                        "combinateMemoize!(parseEOF)"
+                                        "combinateMemoize!(parseEOF!())"
                                     "))"
                                 "))"
                             "))"
                         "))"
                     );
-                }
-                {
-                    enum lr = getResult!seqExp("!\"hello\" $");
-                    assert(lr.match);
-                    assert(lr.rest == "");
+                }}
+                version(all){{
+                    auto result = getResult!(seqExp!())("!\"hello\" $");
+                    assert(result.match);
+                    assert(result.rest.range == "");
                     assert(
-                        lr.value ==
+                        result.value ==
                         "combinateMemoize!(combinateSequence!("
                             "combinateMemoize!(combinateNone!("
                                 "combinateMemoize!(parseString!\"hello\")"
                             ")),"
-                            "combinateMemoize!(parseEOF)"
+                            "combinateMemoize!(parseEOF!())"
                         "))"
                     );
-                }
+                }}
                 return true;
             };
-            debug(ctpg_ct) static assert(ldg());
-            ldg();
+            debug(ctpg_ct) static assert(dg());
+            dg();
         }
     }
 
-    /* optionExp */ version(none){
-        Result!string optionExp(stringp input, memo_t memo){
-            return combinateMemoize!(combinateConvert!(
-                combinateMemoize!(combinateSequence!(
-                    combinateMemoize!postExp,
-                    combinateMemoize!parseSpaces,
-                    combinateMemoize!(combinateOption!(
-                        combinateMemoize!(combinateNone!(
-                            combinateMemoize!(parseString!"?")
+    /* optionExp */ version(all){
+        template optionExp(){
+            alias string ResultType;
+            Result!(string, ResultType) apply(Positional!string input, ref memo_t memo){
+                return combinateMemoize!(combinateConvert!(
+                    combinateMemoize!(combinateSequence!(
+                        combinateMemoize!(postExp!()),
+                        combinateMemoize!(parseSpaces!()),
+                        combinateMemoize!(combinateOption!(
+                            combinateMemoize!(combinateNone!(
+                                combinateMemoize!(parseString!"?")
+                            ))
                         ))
-                    ))
-                )),
-                function(string aconvExp, Option!None aop){
-                    if(aop.some){
-                        return "combinateMemoize!(combinateOption!("~aconvExp~"))";
-                    }else{
-                        return aconvExp;
-                    }
-                }
-            ))(input, memo);
+                    )),
+                    (string convExp, Option!None op) => op.some ? "combinateMemoize!(combinateOption!("~convExp~"))" : convExp
+                )).apply(input, memo);
+            }
         }
 
         debug(ctpg) unittest{
-            enum ldg = {
-                auto lr = getResult!optionExp("(&(^\"hello\"))?");
-                assert(lr.match);
-                assert(lr.rest == "");
+            enum dg = {
+                auto result = getResult!(optionExp!())("(&(^\"hello\"))?");
+                assert(result.match);
+                assert(result.rest.range == "");
                 assert(
-                    lr.value ==
+                    result.value ==
                     "combinateMemoize!(combinateOption!("
                         "combinateMemoize!(combinateAnd!("
                             "combinateMemoize!(combinateNot!("
@@ -2918,375 +2941,389 @@ bool isMatch(alias fun)(string src){
                 );
                 return true;
             };
-            debug(ctpg_ct) static assert(ldg());
-            ldg();
+            debug(ctpg_ct) static assert(dg());
+            dg();
         }
     }
 
-    /* postExp */ version(none){
-        Result!string postExp(stringp input, memo_t memo){
-            return combinateMemoize!(combinateConvert!(
-                combinateMemoize!(combinateSequence!(
-                    combinateMemoize!preExp,
-                    combinateMemoize!(combinateOption!(
-                        combinateMemoize!(combinateSequence!(
-                            combinateMemoize!(combinateChoice!(
-                                combinateMemoize!(parseString!"+"),
-                                combinateMemoize!(parseString!"*")
-                            )),
-                            combinateMemoize!(combinateOption!(
-                                combinateMemoize!(combinateSequence!(
-                                    combinateMemoize!(combinateNone!(
-                                        combinateMemoize!(parseString!"<")
-                                    )),
-                                    combinateMemoize!choiceExp,
-                                    combinateMemoize!(combinateNone!(
-                                        combinateMemoize!(parseString!">")
+    /* postExp */ version(all){
+        template postExp(){
+            alias string ResultType;
+            Result!(string, ResultType) apply(Positional!string input, ref memo_t memo){
+                return combinateMemoize!(combinateConvert!(
+                    combinateMemoize!(combinateSequence!(
+                        combinateMemoize!(preExp!()),
+                        combinateMemoize!(combinateOption!(
+                            combinateMemoize!(combinateSequence!(
+                                combinateMemoize!(combinateChoice!(
+                                    combinateMemoize!(parseString!"+"),
+                                    combinateMemoize!(parseString!"*")
+                                )),
+                                combinateMemoize!(combinateOption!(
+                                    combinateMemoize!(combinateSequence!(
+                                        combinateMemoize!(combinateNone!(
+                                            combinateMemoize!(parseString!"<")
+                                        )),
+                                        combinateMemoize!(choiceExp!()),
+                                        combinateMemoize!(combinateNone!(
+                                            combinateMemoize!(parseString!">")
+                                        ))
                                     ))
                                 ))
                             ))
                         ))
-                    ))
-                )),
-                function(string apreExp, Option!(Tuple!(string, Option!string)) aop){
-                    final switch(aop.value[0]){
-                        case "+":
-                            if(aop.value[1].some){
-                                return "combinateMemoize!(combinateMore1!("~apreExp~","~aop.value[1].value~"))";
-                            }else{
-                                return "combinateMemoize!(combinateMore1!("~apreExp~"))";
+                    )),
+                    function(string preExp, Option!(Tuple!(string, Option!string)) op){
+                        final switch(op.value[0]){
+                            case "+":{
+                                if(op.value[1].some){
+                                    return "combinateMemoize!(combinateMore1!(" ~ preExp ~ "," ~ op.value[1].value ~ "))";
+                                }else{
+                                    return "combinateMemoize!(combinateMore1!(" ~ preExp ~ "))";
+                                }
                             }
-                        case "*":
-                            if(aop.value[1].some){
-                                return "combinateMemoize!(combinateMore0!("~apreExp~","~aop.value[1].value~"))";
-                            }else{
-                                return "combinateMemoize!(combinateMore0!("~apreExp~"))";
+                            case "*":{
+                                if(op.value[1].some){
+                                    return "combinateMemoize!(combinateMore0!(" ~ preExp ~ "," ~ op.value[1].value ~ "))";
+                                }else{
+                                    return "combinateMemoize!(combinateMore0!(" ~ preExp ~ "))";
+                                }
                             }
-                        case "":
-                            return apreExp;
+                            case "":{
+                                return preExp;
+                            }
+                        }
                     }
-                }
-            ))(input, memo);
+                )).apply(input, memo);
+            }
         }
 
         debug(ctpg) unittest{
-            enum ldg = {
-                auto lr = getResult!postExp("!$*");
-                assert(lr.match);
-                assert(lr.rest == "");
+            enum dg = {
+                auto result = getResult!(postExp!())("!$*");
+                assert(result.match);
+                assert(result.rest.range == "");
                 assert(
-                    lr.value ==
+                    result.value ==
                     "combinateMemoize!(combinateMore0!("
                         "combinateMemoize!(combinateNone!("
-                            "combinateMemoize!(parseEOF)"
+                            "combinateMemoize!(parseEOF!())"
                         "))"
                     "))"
                 );
                 return true;
             };
-            debug(ctpg_ct) static assert(ldg());
-            ldg();
+            debug(ctpg_ct) static assert(dg());
+            dg();
         }
     }
 
-    /* preExp */ version(none){
-        Result!string preExp(stringp input, memo_t memo){
-            return combinateMemoize!(combinateConvert!(
-                combinateMemoize!(combinateSequence!(
-                    combinateMemoize!(combinateOption!(
-                        combinateMemoize!(combinateChoice!(
-                            combinateMemoize!(parseString!"&"),
-                            combinateMemoize!(parseString!"^"),
-                            combinateMemoize!(parseString!"!")
-                        ))
+    /* preExp */ version(all){
+        template preExp(){
+            alias string ResultType;
+            Result!(string, ResultType) apply(Positional!string input, ref memo_t memo){
+                return combinateMemoize!(combinateConvert!(
+                    combinateMemoize!(combinateSequence!(
+                        combinateMemoize!(combinateOption!(
+                            combinateMemoize!(combinateChoice!(
+                                combinateMemoize!(parseString!"&"),
+                                combinateMemoize!(parseString!"^"),
+                                combinateMemoize!(parseString!"!")
+                            ))
+                        )),
+                        combinateMemoize!(primaryExp!())
                     )),
-                    combinateMemoize!primaryExp
-                )),
-                function(Option!string aop, string aprimaryExp){
-                    final switch(aop.value){
-                        case "&":{
-                            return "combinateMemoize!(combinateAnd!(" ~ aprimaryExp ~ "))";
-                        }
-                        case "!":{
-                            return "combinateMemoize!(combinateNone!(" ~ aprimaryExp ~ "))";
-                        }
-                        case "^":{
-                            return "combinateMemoize!(combinateNot!(" ~ aprimaryExp ~ "))";
-                        }
-                        case "":{
-                            return aprimaryExp;
+                    function(Option!string op, string primaryExp){
+                        final switch(op.value){
+                            case "&":{
+                                return "combinateMemoize!(combinateAnd!(" ~ primaryExp ~ "))";
+                            }
+                            case "!":{
+                                return "combinateMemoize!(combinateNone!(" ~ primaryExp ~ "))";
+                            }
+                            case "^":{
+                                return "combinateMemoize!(combinateNot!(" ~ primaryExp ~ "))";
+                            }
+                            case "":{
+                                return primaryExp;
+                            }
                         }
                     }
-                }
-            ))(input, memo);
+                )).apply(input, memo);
+            }
         }
 
         debug(ctpg) unittest{
-            enum ldg = {
-                auto lr = getResult!preExp("!$");
-                assert(lr.match);
-                assert(lr.rest == "");
+            enum dg = {
+                auto result = getResult!(preExp!())("!$");
+                assert(result.match);
+                assert(result.rest.range == "");
                 assert(
-                    lr.value ==
+                    result.value ==
                     "combinateMemoize!(combinateNone!("
-                        "combinateMemoize!(parseEOF)"
+                        "combinateMemoize!(parseEOF!())"
                     "))"
                 );
                 return true;
             };
-            debug(ctpg_ct) static assert(ldg());
-            ldg();
+            debug(ctpg_ct) static assert(dg());
+            dg();
         }
     }
 
-    /* primaryExp */ version(none){
-        Result!string primaryExp(stringp input, memo_t memo){
-            return combinateMemoize!(combinateChoice!(
-                combinateMemoize!literal,
-                combinateMemoize!nonterminal,
-                combinateMemoize!(combinateSequence!(
-                    combinateMemoize!(combinateNone!(
-                        combinateMemoize!(parseString!"(")
-                    )),
-                    combinateMemoize!convExp,
-                    combinateMemoize!(combinateNone!(
-                        combinateMemoize!(parseString!")")
+    /* primaryExp */ version(all){
+        template primaryExp(){
+            alias string ResultType;
+            Result!(string, ResultType) apply(Positional!string input, ref memo_t memo){
+                return combinateMemoize!(combinateChoice!(
+                    combinateMemoize!(literal!()),
+                    combinateMemoize!(nonterminal!()),
+                    combinateMemoize!(combinateSequence!(
+                        combinateMemoize!(combinateNone!(
+                            combinateMemoize!(parseString!"(")
+                        )),
+                        combinateMemoize!(convExp!()),
+                        combinateMemoize!(combinateNone!(
+                            combinateMemoize!(parseString!")")
+                        ))
                     ))
-                ))
-            ))(input, memo);
+                )).apply(input, memo);
+            }
         }
 
         debug(ctpg) unittest{
-            enum ldg = {
-                {
-                    auto lr = getResult!primaryExp("(&(^$)?)");
-                    assert(lr.match);
-                    assert(lr.rest == "");
+            enum dg = {
+                version(all){{
+                    auto result = getResult!(primaryExp!())("(&(^$)?)");
+                    assert(result.match);
+                    assert(result.rest.range == "");
                     assert(
-                        lr.value ==
+                        result.value ==
                         "combinateMemoize!(combinateOption!("
                             "combinateMemoize!(combinateAnd!("
                                 "combinateMemoize!(combinateNot!("
-                                    "combinateMemoize!(parseEOF)"
+                                    "combinateMemoize!(parseEOF!())"
                                 "))"
                             "))"
                         "))"
                     );
-                }
-                {
-                    auto lr = getResult!primaryExp("int");
-                    assert(lr.match);
-                    assert(lr.rest == "");
-                    assert(lr.value == "combinateMemoize!(int)");
-                }
-                {
-                    auto lr = getResult!primaryExp("select!(true)(\"true\", \"false\")");
-                    assert(lr.match);
-                    assert(lr.rest == "");
-                    assert(lr.value == "combinateMemoize!(select!(true)(\"true\", \"false\"))");
-                }
-                {
-                    auto lr = getResult!primaryExp("###このコメントは表示されません###");
-                    assert(!lr.match);
-                }
+                }}
+                version(all){{
+                    auto result = getResult!(primaryExp!())("int");
+                    assert(result.match);
+                    assert(result.rest.range == "");
+                    assert(result.value == "combinateMemoize!(int!())");
+                }}
+                version(all){{
+                    auto result = getResult!(primaryExp!())("select!(true)(\"true\", \"false\")");
+                    assert(result.match);
+                    assert(result.rest.range == "");
+                    assert(result.value == "combinateMemoize!(select!(true)(\"true\", \"false\")!())");
+                }}
+                version(all){{
+                    auto result = getResult!(primaryExp!())("###このコメントは表示されません###");
+                    assert(!result.match);
+                }}
                 return true;
             };
-            debug(ctpg_ct) static assert(ldg());
-            ldg();
+            debug(ctpg_ct) static assert(dg());
+            dg();
         }
     }
 
-    /* literal */ version(none){
-        Result!string literal(stringp input, memo_t memo){
-            return combinateMemoize!(combinateChoice!(
-                combinateMemoize!rangeLit,
-                combinateMemoize!stringLit,
-                combinateMemoize!eofLit
-            ))(input, memo);
+    /* literal */ version(all){
+        template literal(){
+            alias string ResultType;
+            Result!(string, ResultType) apply(Positional!string input, ref memo_t memo){
+                return combinateMemoize!(combinateChoice!(
+                    combinateMemoize!(rangeLit!()),
+                    combinateMemoize!(stringLit!()),
+                    combinateMemoize!(eofLit!()),
+                    //combinateMemoize!(usefulLit!()),
+                )).apply(input, memo);
+            }
         }
 
         debug(ctpg) unittest{
-            enum ldg = {
-                {
-                    auto lr = getResult!literal("\"hello\nworld\"");
-                    assert(lr.match);
-                    assert(lr.rest == "");
-                    assert(lr.value == "combinateMemoize!(parseString!\"hello\nworld\")");
-                }
-                {
-                    auto lr = getResult!literal("[a-z]");
-                    assert(lr.match);
-                    assert(lr.rest == "");
-                    assert(lr.value == "combinateMemoize!(parseCharRange!('a','z'))");
-                }
-                {
-                    auto lr = getResult!literal("$");
-                    assert(lr.match);
-                    assert(lr.rest == "");
-                    assert(lr.value == "combinateMemoize!(parseEOF)");
-                }
-                {
-                    auto lr = getResult!literal("表が怖い噂のソフト");
-                    assert(!lr.match);
-                }
+            enum dg = {
+                version(all){{
+                    auto result = getResult!(literal!())("\"hello\nworld\"");
+                    assert(result.match);
+                    assert(result.rest.range == "");
+                    assert(result.value == "combinateMemoize!(parseString!\"hello\nworld\")");
+                }}
+                version(all){{
+                    auto result = getResult!(literal!())("[a-z]");
+                    assert(result.match);
+                    assert(result.rest.range == "");
+                    assert(result.value == "combinateMemoize!(parseCharRange!('a','z'))");
+                }}
+                version(all){{
+                    auto result = getResult!(literal!())("$");
+                    assert(result.match);
+                    assert(result.rest.range == "");
+                    assert(result.value == "combinateMemoize!(parseEOF!())");
+                }}
+                version(all){{
+                    auto result = getResult!(literal!())("表が怖い噂のソフト");
+                    assert(!result.match);
+                }}
                 return true;
             };
-            debug(ctpg_ct) static assert(ldg());
-            ldg();
+            debug(ctpg_ct) static assert(dg());
+            dg();
         }
     }
 
-    /* stringLit */ version(none){
-        Result!string stringLit(stringp input, memo_t memo){
-            return combinateMemoize!(combinateConvert!(
-                combinateMemoize!(combinateSequence!(
-                    combinateMemoize!(combinateNone!(
-                        combinateMemoize!(parseString!"\"")
-                    )),
-                    combinateMemoize!(combinateMore0!(
-                        combinateMemoize!(combinateSequence!(
-                            combinateMemoize!(combinateNot!(
-                                combinateMemoize!(parseString!"\"")
-                            )),
-                            combinateMemoize!(combinateChoice!(
-                                combinateMemoize!parseEscapeSequence,
-                                combinateMemoize!parseAnyChar
+    /* stringLit */ version(all){
+        template stringLit(){
+            alias string ResultType;
+            Result!(string, ResultType) apply(Positional!string input, ref memo_t memo){
+                return combinateMemoize!(combinateConvert!(
+                    combinateMemoize!(combinateSequence!(
+                        combinateMemoize!(combinateNone!(
+                            combinateMemoize!(parseString!"\"")
+                        )),
+                        combinateMemoize!(combinateMore0!(
+                            combinateMemoize!(combinateSequence!(
+                                combinateMemoize!(combinateNot!(
+                                    combinateMemoize!(parseString!"\"")
+                                )),
+                                combinateMemoize!(combinateChoice!(
+                                    combinateMemoize!(parseEscapeSequence!()),
+                                    combinateMemoize!(parseAnyChar!())
+                                ))
                             ))
+                        )),
+                        combinateMemoize!(combinateNone!(
+                            combinateMemoize!(parseString!"\"")
                         ))
                     )),
-                    combinateMemoize!(combinateNone!(
-                        combinateMemoize!(parseString!"\"")
-                    ))
-                )),
-                function(string[] astrs){
-                    return "combinateMemoize!(parseString!\""~astrs.mkString()~"\")";
-                }
-            ))(input, memo);
+                    (string[] strs) => "combinateMemoize!(parseString!\"" ~ strs.flat ~ "\")"
+                )).apply(input, memo);
+            }
         }
 
         debug(ctpg) unittest{
-            enum ldg = {
-                {
-                    auto lr = getResult!stringLit("\"hello\nworld\" ");
-                    assert(lr.match);
-                    assert(lr.rest == " ");
-                    assert(lr.value == "combinateMemoize!(parseString!\"hello\nworld\")");
-                }
-                {
-                    auto lr = getResult!stringLit("aa\"");
-                    assert(!lr.match);
-                }
+            enum dg = {
+                version(all){{
+                    auto result = getResult!(stringLit!())("\"hello\nworld\" ");
+                    assert(result.match);
+                    assert(result.rest.range == " ");
+                    assert(result.value == "combinateMemoize!(parseString!\"hello\nworld\")");
+                }}
+                version(all){{
+                    auto result = getResult!(stringLit!())("aa\"");
+                    assert(!result.match);
+                }}
                 return true;
             };
-            debug(ctpg_ct) static assert(ldg());
-            ldg();
+            debug(ctpg_ct) static assert(dg());
+            dg();
         }
     }
 
-    /* rangeLit */ version(none){
-        Result!string rangeLit(stringp input, memo_t memo){
-            return combinateMemoize!(combinateConvert!(
-                combinateMemoize!(combinateSequence!(
-                    combinateMemoize!(combinateNone!(
-                        combinateMemoize!(parseString!"[")
-                    )),
-                    combinateMemoize!(combinateMore1!(
-                        combinateMemoize!(combinateSequence!(
-                            combinateMemoize!(combinateNot!(
-                                combinateMemoize!(parseString!"]")
-                            )),
-                            combinateMemoize!(combinateChoice!(
-                                combinateMemoize!charRange,
-                                combinateMemoize!oneChar
+    /* rangeLit */ version(all){
+        template rangeLit(){
+            alias string ResultType;
+            Result!(string, ResultType) apply(Positional!string input, ref memo_t memo){
+                return combinateMemoize!(combinateConvert!(
+                    combinateMemoize!(combinateSequence!(
+                        combinateMemoize!(combinateNone!(
+                            combinateMemoize!(parseString!"[")
+                        )),
+                        combinateMemoize!(combinateMore1!(
+                            combinateMemoize!(combinateSequence!(
+                                combinateMemoize!(combinateNot!(
+                                    combinateMemoize!(parseString!"]")
+                                )),
+                                combinateMemoize!(combinateChoice!(
+                                    combinateMemoize!(charRange!()),
+                                    combinateMemoize!(oneChar!())
+                                ))
                             ))
+                        )),
+                        combinateMemoize!(combinateNone!(
+                            combinateMemoize!(parseString!"]")
                         ))
                     )),
-                    combinateMemoize!(combinateNone!(
-                        combinateMemoize!(parseString!"]")
-                    ))
-                )),
-                function(string[] astrs){
-                    if(astrs.length == 1){
-                        return astrs[0];
-                    }else{
-                        return "combinateMemoize!(combinateChoice!("~astrs.mkString(",")~"))";
-                    }
-                }
-            ))(input, memo);
+                    (string[] strs) => strs.length == 1 ? strs[0] : "combinateMemoize!(combinateChoice!("~strs.mkString(",")~"))"
+                )).apply(input, memo);
+            }
         }
 
-        Result!string charRange(stringp input, memo_t memo){
-            return combinateMemoize!(combinateConvert!(
-                combinateMemoize!(combinateSequence!(
-                    combinateMemoize!(combinateChoice!(
-                        combinateMemoize!parseEscapeSequence,
-                        combinateMemoize!parseAnyChar
+        template charRange(){
+            alias string ResultType;
+            Result!(string, ResultType) apply(Positional!string input, ref memo_t memo){
+                return combinateMemoize!(combinateConvert!(
+                    combinateMemoize!(combinateSequence!(
+                        combinateMemoize!(combinateChoice!(
+                            combinateMemoize!(parseEscapeSequence!()),
+                            combinateMemoize!(parseAnyChar!())
+                        )),
+                        combinateMemoize!(combinateNone!(
+                            combinateMemoize!(parseString!"-")
+                        )),
+                        combinateMemoize!(combinateChoice!(
+                            combinateMemoize!(parseEscapeSequence!()),
+                            combinateMemoize!(parseAnyChar!())
+                        )),
                     )),
-                    combinateMemoize!(combinateNone!(
-                        combinateMemoize!(parseString!"-")
-                    )),
-                    combinateMemoize!(combinateChoice!(
-                        combinateMemoize!parseEscapeSequence,
-                        combinateMemoize!parseAnyChar
-                    )),
-                )),
-                function(string alow, string ahigh){
-                    return "combinateMemoize!(parseCharRange!('"~alow~"','"~ahigh~"'))";
-                }
-            ))(input, memo);
+                    (string low, string high) => "combinateMemoize!(parseCharRange!('" ~ low ~ "','" ~ high ~ "'))"
+                )).apply(input, memo);
+            }
         }
 
-        Result!string oneChar(stringp input, memo_t memo){
-            return combinateMemoize!(combinateConvert!(
-                combinateMemoize!(combinateChoice!(
-                    combinateMemoize!parseEscapeSequence,
-                    combinateMemoize!parseAnyChar
-                )),
-                function(string ac){
-                    return "combinateMemoize!(parseString!\""~ac~"\")";
-                }
-            ))(input, memo);
+        template oneChar(){
+            alias string ResultType;
+            Result!(string, ResultType) apply(Positional!string input, ref memo_t memo){
+                return combinateMemoize!(combinateConvert!(
+                    combinateMemoize!(combinateChoice!(
+                        combinateMemoize!(parseEscapeSequence!()),
+                        combinateMemoize!(parseAnyChar!())
+                    )),
+                    (string c) => "combinateMemoize!(parseString!\"" ~ c ~ "\")"
+                )).apply(input, memo);
+            }
         }
 
         debug(ctpg) unittest{
-            enum ldg = {
-                {
-                    auto lr = getResult!rangeLit("[a-z]");
-                    assert(lr.match);
-                    assert(lr.rest == "");
-                    assert(lr.value == "combinateMemoize!(parseCharRange!('a','z'))");
-                }
-                {
-                    auto lr = getResult!rangeLit("[a-zA-Z_]");
-                    assert(lr.match);
-                    assert(lr.rest == "");
+            enum dg = {
+                version(all){{
+                    auto result = getResult!(rangeLit!())("[a-z]");
+                    assert(result.match);
+                    assert(result.rest.range == "");
+                    assert(result.value == "combinateMemoize!(parseCharRange!('a','z'))");
+                }}
+                version(all){{
+                    auto result = getResult!(rangeLit!())("[a-zA-Z_]");
+                    assert(result.match);
+                    assert(result.rest.range == "");
                     assert(
-                        lr.value ==
+                        result.value ==
                         "combinateMemoize!(combinateChoice!("
                             "combinateMemoize!(parseCharRange!('a','z')),"
                             "combinateMemoize!(parseCharRange!('A','Z')),"
                             "combinateMemoize!(parseString!\"_\")"
                         "))"
                     );
-                }
+                }}
                 return true;
             };
-            debug(ctpg_ct) static assert(ldg());
-            ldg();
+            debug(ctpg_ct) static assert(dg());
+            dg();
         }
     }
 
     /* eofLit */ version(all){
         template eofLit(){
             alias string ResultType;
-            Result!(string, ResultType) apply(Positional!string input, memo_t memo){
+            Result!(string, ResultType) apply(Positional!string input, ref memo_t memo){
                 return combinateMemoize!(combinateConvert!(
                     combinateMemoize!(combinateNone!(
                         combinateMemoize!(parseString!"$")
                     )),
-                    function{
-                        return "combinateMemoize!(parseEOF)";
-                    }
+                    () => "combinateMemoize!(parseEOF!())"
                 )).apply(input, memo);
             }
         }
@@ -3297,7 +3334,7 @@ bool isMatch(alias fun)(string src){
                     auto result = getResult!(eofLit!())("$");
                     assert(result.match);
                     assert(result.rest.range == "");
-                    assert(result.value == "combinateMemoize!(parseEOF)");
+                    assert(result.value == "combinateMemoize!(parseEOF!())");
                 }}
                 version(all){{
                     auto result = getResult!(eofLit!())("#");
@@ -3307,6 +3344,21 @@ bool isMatch(alias fun)(string src){
             };
             debug(ctpg_ct) static assert(dg());
             dg();
+        }
+    }
+
+    /* usefulLit */ version(none){
+        template usefulLit(){
+            alias string ResultType;
+            Result!(string, ResultType) apply(Positional!string, input, ref memo_t memo){
+                return combinateMemoize!(combinateConvert!(
+                    combinateMemoize!(combinameChoice!(
+                        combinateMemoize!(parseString!`\a`),
+                        combinateMemoize!(parseString!`\ss`),
+                        combinateMemoize!(parseString!`\s`),
+                    ))
+                )).apply(input, memo);
+            }
         }
     }
 
@@ -3340,6 +3392,12 @@ bool isMatch(alias fun)(string src){
         debug(ctpg) unittest{
             enum dg = {
                 version(all){{
+                    auto result = getResult!(id!())("A");
+                    assert(result.match);
+                    assert(result.rest.range == "");
+                    assert(result.value == "A");
+                }}
+                version(all){{
                     auto result = getResult!(id!())("int");
                     assert(result.match);
                     assert(result.rest.range == "");
@@ -3361,10 +3419,10 @@ bool isMatch(alias fun)(string src){
     /* nonterminal */ version(all){
         template nonterminal(){
             alias string ResultType;
-            Result!(string, ResultType) apply(Positional!string input, memo_t memo){
+            Result!(string, ResultType) apply(Positional!string input, ref memo_t memo){
                 return combinateMemoize!(combinateConvert!(
                     id!(),
-                    function(string id){ return "combinateMemoize!(" ~ id ~ ")"; }
+                    (string id) => "combinateMemoize!(" ~ id ~ "!())"
                 )).apply(input, memo);
             }
         }
@@ -3372,16 +3430,22 @@ bool isMatch(alias fun)(string src){
         debug(ctpg) unittest{
             enum dg = {
                 version(all){{
+                    auto result = getResult!(nonterminal!())("A");
+                    assert(result.match);
+                    assert(result.rest.range == "");
+                    assert(result.value == "combinateMemoize!(A!())");
+                }}
+                version(all){{
                     auto result = getResult!(nonterminal!())("int");
                     assert(result.match);
                     assert(result.rest.range == "");
-                    assert(result.value == "combinateMemoize!(int)");
+                    assert(result.value == "combinateMemoize!(int!())");
                 }}
                 version(all){{
                     auto result = getResult!(nonterminal!())("select!(true)(\"true\", \"false\")");
                     assert(result.match);
                     assert(result.rest.range == "");
-                    assert(result.value == "combinateMemoize!(select!(true)(\"true\", \"false\"))");
+                    assert(result.value == "combinateMemoize!(select!(true)(\"true\", \"false\")!())");
                 }}
                 return true;
             };
@@ -3460,13 +3524,7 @@ bool isMatch(alias fun)(string src){
                         )),
                         combinateMemoize!(arch!("{", "}"))
                     )),
-                    function(Option!string arch, string brace){
-                        if(!arch.isNull){
-                            return "function" ~ arch ~ brace;
-                        }else{
-                            return "function()" ~ brace;
-                        }
-                    }
+                    (Option!string arch, string brace) => arch.some ? "function" ~ arch ~ brace : "function()" ~ brace
                 )).apply(input, memo);
             }
         }
@@ -3536,9 +3594,7 @@ bool isMatch(alias fun)(string src){
                             combinateMemoize!(parseString!close)
                         ))
                     )),
-                    function(string[] strs){
-                        return open ~ strs.flat ~ close;
-                    }
+                    (string[] strs) => open ~ strs.flat ~ close
                 )).apply(input, memo);
             }
         }
@@ -3572,31 +3628,46 @@ bool isMatch(alias fun)(string src){
     }
 }
 
-string flat(Arg)(Arg aarg){
-    string lres;
-    static if(isTuple!Arg || isArray!Arg){
-        foreach(larg; aarg){
-            lres ~= flat(larg);
+string flat(Arg)(Arg arg){
+    static if(is(Arg == Tuple!(string, string[]))){
+        string result = arg[0];
+        foreach(elem; arg[1]){
+            result ~= elem;
         }
+        return result;
     }else{
-        lres = to!string(aarg);
+        string result;
+        static if(isTuple!Arg || isArray!Arg){
+            if(arg.length){
+                foreach(elem; arg){
+                    result ~= flat(elem);
+                }
+            }
+        }else{
+            result = to!string(arg);
+        }
+        return result;
     }
-    return lres;
 }
 
 debug(ctpg) unittest{
     enum dg = {
         version(all){{
-            auto r = flat(tuple(1, "hello", tuple(2, "world")));
-            assert(r == "1hello2world");
+            auto result = flat(tuple(1, "hello", tuple(2, "world")));
+            assert(result == "1hello2world");
         }}
         version(all){{
-            auto r = flat(tuple([0, 1, 2], "hello", tuple([3, 4, 5], ["wor", "ld!!"]), ["!", "!"]));
-            assert(r == "012hello345world!!!!");
+            auto result = flat(tuple([0, 1, 2], "hello", tuple([3, 4, 5], ["wor", "ld!!"]), ["!", "!"]));
+            assert(result == "012hello345world!!!!");
         }}
         version(all){{
-            auto r = flat(tuple('表', 'が', '怖', 'い', '噂', 'の', 'ソ', 'フ', 'ト'));
-            assert(r == "表が怖い噂のソフト");
+            auto result = flat(tuple('表', 'が', '怖', 'い', '噂', 'の', 'ソ', 'フ', 'ト'));
+            assert(result == "表が怖い噂のソフト");
+        }}
+        version(all){{
+            string[] ary;
+            auto result = flat(tuple("A", ary));
+            assert(result == "A");
         }}
         return true;
     };
@@ -3604,8 +3675,16 @@ debug(ctpg) unittest{
     dg();
 }
 
-debug(ctpg) void main(){}
+string mkString(string[] strs, string sep = ""){
+    string result;
+    foreach(i, str; strs){
+        if(i){ result ~= sep; }
+        result ~= str;
+    }
+    return result;
+}
 
+debug(ctpg) void main(){}
 
 private:
 
@@ -3843,7 +3922,7 @@ debug(ctpg) unittest{
     dg();
 }
 
-version(none) debug(ctpg) public:
+version(all) debug(ctpg) public:
 
 mixin ctpg!q{
     int root = addExp $;
@@ -3886,19 +3965,17 @@ mixin ctpg!q{
 };
 
 unittest{
-    enum ldg = {
-        {
+    enum dg = {
+        version(all){{
             assert(parse!root("5*8+3*20") == 100);
             assert(parse!root("5*(8+3)*20") == 1100);
-            if(!__ctfe){
-                try{
-                    parse!root("5*(8+3)20");
-                }catch(Exception e){
-                    assert(e.msg == "1: 8: error EOF is needed");
-                }
+            try{
+                parse!root("5*(8+3)20");
+            }catch(Exception e){
+                assert(e.msg == "1: 8: error EOF is needed");
             }
-        }
-        {
+        }}
+        version(all){{
             assert( isMatch!recursive("a"));
             assert( isMatch!recursive("aaa"));
             assert(!isMatch!recursive("aaaaa"));
@@ -3907,9 +3984,9 @@ unittest{
             assert(!isMatch!recursive("aaaaaaaaaaa"));
             assert(!isMatch!recursive("aaaaaaaaaaaaa"));
             assert( isMatch!recursive("aaaaaaaaaaaaaaa"));
-        }
+        }}
         return true;
     };
-    debug(ctpg_ct) static assert(ldg());
-    ldg();
+    debug(ctpg_ct) static assert(dg());
+    dg();
 }
