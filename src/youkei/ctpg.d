@@ -1,6 +1,6 @@
 // Written in the D programming language.
 /++
-This module implements compite-time parser generator.
+This module implements a compite-time parser generator.
 +/
 /*          Copyright youkei 2010 - 2012.
  * Distributed under the Boost Software License, Version 1.0.
