@@ -2420,21 +2420,47 @@ struct Error{
         }
     }
 
-    /* parseStringLiteral */ version(none){
+    /* parseStringLiteral */ version(all){
         template parseStringLiteral(){
-            alias combinateString!(
-                combinateSequence!(
-                    combinateNone!(parseString!"\""),
-                    combinateMore0!(
-                        combinateSequence!(
-                            combinateNot!(parseString!"\""),
-                            combinateChoice!(
-                                parseEscapeSequence,
+            combinateChoice!(
+                combinateString!(
+                    combinateSequence!(
+                        parseString!"\"",
+                        combinateMore0!(
+                            combinateSequence!(
+                                combinateNot!(parseString!"\""),
+                                combinateChoice!(
+                                    parseEscapeSequence,
+                                    parseAnyChar
+                                )
+                            )
+                        ),
+                        parseString!"\""
+                    )
+                ),
+                combinateString!(
+                    combinateSequence!(
+                        parseString!"r\"",
+                        combinateMore0!(
+                            combinateSequence!(
+                                combinateNot!(parseString!"\""),
                                 parseAnyChar
                             )
-                        )
-                    ),
-                    combinateNone!(parseString!"\"")
+                        ),
+                        parseString!"\""
+                    )
+                ),
+                combinateString!(
+                    combinateSequence!(
+                        parseString!"`",
+                        combinateMore0!(
+                            combinateSequence!(
+                                combinateNot!(parseString!"`"),
+                                parseAnyChar
+                            )
+                        ),
+                        parseString!"`"
+                    )
                 )
             ) parseStringLiteral;
         }
@@ -2444,15 +2470,27 @@ struct Error{
         debug(ctpg) unittest{
             enum dg = {
                 {
-                    auto lr = getResult!(parseStringLiteral!())(q{"表が怖い噂のソフト"});
-                    assert(lr.match);
-                    assert(lr.rest == "");
-                    assert(lr.value == "表が怖い噂のソフト");
+                    auto r = getResult!(parseStringLiteral!())(q{"表が怖い噂のソフト"});
+                    assert(r.match);
+                    assert(r.rest == "");
+                    assert(r.value == q{"表が怖い噂のソフト"});
+                }
+                {
+                    auto r = getResult!(parseStringLiteral!())(q{r"表が怖い噂のソフト"});
+                    assert(r.match);
+                    assert(r.rest == "");
+                    assert(r.value == q{r"表が怖い噂のソフト"});
+                }
+                {
+                    auto r = getResult!(parseStringLiteral!())(q{`表が怖い噂のソフト`});
+                    assert(r.match);
+                    assert(r.rest == "");
+                    assert(r.value == q{"表が怖い噂のソフト"});
                 }
                 return true;
             };
-            debug(ctpg_ct) static assert(ldg());
-            ldg();
+            debug(ctpg_ct) static assert(dg());
+            dg();
         }
     }
 
