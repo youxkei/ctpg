@@ -102,7 +102,7 @@ struct Error{
     }
 }
 
-/* combinators */ version(all){
+/* combinators */ version(none){
     /* combinateMemoize */ version(all){
         version(memoize){
             template combinateMemoize(alias parser){
