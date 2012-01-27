@@ -1636,166 +1636,6 @@ struct Error{
         }
     }
 
-    /* parseAnyChar */ version(all){
-        template parseAnyChar(){
-            alias parseCharRange!(dchar.min, dchar.max) parseAnyChar;
-        }
-
-        debug(ctpg) unittest{
-            enum dg = {
-                /* \a <= "hoge"       */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(parseAnyChar!())("hoge");
-                        assert(result.match);
-                        assert(result.value == "h");
-                        assert(result.rest == positional("oge", 1, 2));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(parseAnyChar!())("hoge"w);
-                        assert(result.match);
-                        assert(result.value == "h");
-                        assert(result.rest == positional("oge"w, 1, 2));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(parseAnyChar!())("hoge"d);
-                        assert(result.match);
-                        assert(result.value == "h");
-                        assert(result.rest == positional("oge"d, 1, 2));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(parseAnyChar!())(testRange("hoge"));
-                        assert(result.match);
-                        assert(result.value == "h");
-                        assert(result.rest == positional(testRange("oge"), 1, 2));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(parseAnyChar!())(testRange("hoge"w));
-                        assert(result.match);
-                        assert(result.value == "h");
-                        assert(result.rest == positional(testRange("oge"w), 1, 2));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(parseAnyChar!())(testRange("hoge"d));
-                        assert(result.match);
-                        assert(result.value == "h");
-                        assert(result.rest == positional(testRange("oge"d), 1, 2));
-                    }}
-                }
-                /* \a <= "\U00012345" */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(parseAnyChar!())("\U00012345");
-                        assert(result.match);
-                        assert(result.value == "\U00012345");
-                        assert(result.rest == positional("", 1, 2));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(parseAnyChar!())("\U00012345"w);
-                        assert(result.match);
-                        assert(result.value == "\U00012345");
-                        assert(result.rest == positional(""w, 1, 2));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(parseAnyChar!())("\U00012345"d);
-                        assert(result.match);
-                        assert(result.value == "\U00012345");
-                        assert(result.rest == positional(""d, 1, 2));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(parseAnyChar!())(testRange("\U00012345"));
-                        assert(result.match);
-                        assert(result.value == "\U00012345");
-                        assert(result.rest == positional(testRange(""), 1, 2));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(parseAnyChar!())(testRange("\U00012345"w));
-                        assert(result.match);
-                        assert(result.value == "\U00012345");
-                        assert(result.rest == positional(testRange(""w), 1, 2));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(parseAnyChar!())(testRange("\U00012345"d));
-                        assert(result.match);
-                        assert(result.value == "\U00012345");
-                        assert(result.rest == positional(testRange(""d), 1, 2));
-                    }}
-                }
-                /* \a <= "\nhoge"     */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(parseAnyChar!())("\nhoge");
-                        assert(result.match);
-                        assert(result.value == "\n");
-                        assert(result.rest == positional("hoge", 2, 1));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(parseAnyChar!())("\nhoge"w);
-                        assert(result.match);
-                        assert(result.value == "\n");
-                        assert(result.rest == positional("hoge"w, 2, 1));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(parseAnyChar!())("\nhoge"d);
-                        assert(result.match);
-                        assert(result.value == "\n");
-                        assert(result.rest == positional("hoge"d, 2, 1));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(parseAnyChar!())(testRange("\nhoge"));
-                        assert(result.match);
-                        assert(result.value == "\n");
-                        assert(result.rest == positional(testRange("hoge"), 2, 1));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(parseAnyChar!())(testRange("\nhoge"w));
-                        assert(result.match);
-                        assert(result.value == "\n");
-                        assert(result.rest == positional(testRange("hoge"w), 2, 1));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(parseAnyChar!())(testRange("\nhoge"d));
-                        assert(result.match);
-                        assert(result.value == "\n");
-                        assert(result.rest == positional(testRange("hoge"d), 2, 1));
-                    }}
-                }
-                /* \a <= ""           */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(parseAnyChar!())("");
-                        assert(!result.match);
-                        assert(result.error == Error("any char", 1, 1));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(parseAnyChar!())(""w);
-                        assert(!result.match);
-                        assert(result.error == Error("any char", 1, 1));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(parseAnyChar!())(""d);
-                        assert(!result.match);
-                        assert(result.error == Error("any char", 1, 1));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(parseAnyChar!())(testRange(""));
-                        assert(!result.match);
-                        assert(result.error == Error("any char", 1, 1));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(parseAnyChar!())(testRange(""w));
-                        assert(!result.match);
-                        assert(result.error == Error("any char", 1, 1));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(parseAnyChar!())(testRange(""d));
-                        assert(!result.match);
-                        assert(result.error == Error("any char", 1, 1));
-                    }}
-                }
-                return true;
-            };
-            debug(ctpg_ct) static assert(dg());
-            dg();
-        }
-    }
-
     /* parseEscapeSequence */ version(all){
         template parseEscapeSequence(){
             alias string ResultType;
@@ -2279,6 +2119,184 @@ struct Error{
         }
     }
 
+    debug(ctpg) unittest{
+        enum dg = {
+            return true;
+        };
+        debug(ctpg_ct) static assert(dg());
+        dg();
+    }
+
+    debug(ctpg) unittest{
+        enum dg = {
+            return true;
+        };
+        debug(ctpg_ct) static assert(dg());
+        dg();
+    }
+}
+
+/* useful parser */ version(none){
+    /* parseAnyChar */ version(all){
+        template parseAnyChar(){
+            alias parseCharRange!(dchar.min, dchar.max) parseAnyChar;
+        }
+
+        debug(ctpg) unittest{
+            enum dg = {
+                /* \a <= "hoge"       */ version(all){
+                    /* string          */ version(all){{
+                        auto result = getResult!(parseAnyChar!())("hoge");
+                        assert(result.match);
+                        assert(result.value == "h");
+                        assert(result.rest == positional("oge", 1, 2));
+                    }}
+                    /* wstring         */ version(all){{
+                        auto result = getResult!(parseAnyChar!())("hoge"w);
+                        assert(result.match);
+                        assert(result.value == "h");
+                        assert(result.rest == positional("oge"w, 1, 2));
+                    }}
+                    /* dstring         */ version(all){{
+                        auto result = getResult!(parseAnyChar!())("hoge"d);
+                        assert(result.match);
+                        assert(result.value == "h");
+                        assert(result.rest == positional("oge"d, 1, 2));
+                    }}
+                    /* TestRange!char  */ version(all){{
+                        auto result = getResult!(parseAnyChar!())(testRange("hoge"));
+                        assert(result.match);
+                        assert(result.value == "h");
+                        assert(result.rest == positional(testRange("oge"), 1, 2));
+                    }}
+                    /* TestRange!wchar */ version(all){{
+                        auto result = getResult!(parseAnyChar!())(testRange("hoge"w));
+                        assert(result.match);
+                        assert(result.value == "h");
+                        assert(result.rest == positional(testRange("oge"w), 1, 2));
+                    }}
+                    /* TestRange!dchar */ version(all){{
+                        auto result = getResult!(parseAnyChar!())(testRange("hoge"d));
+                        assert(result.match);
+                        assert(result.value == "h");
+                        assert(result.rest == positional(testRange("oge"d), 1, 2));
+                    }}
+                }
+                /* \a <= "\U00012345" */ version(all){
+                    /* string          */ version(all){{
+                        auto result = getResult!(parseAnyChar!())("\U00012345");
+                        assert(result.match);
+                        assert(result.value == "\U00012345");
+                        assert(result.rest == positional("", 1, 2));
+                    }}
+                    /* wstring         */ version(all){{
+                        auto result = getResult!(parseAnyChar!())("\U00012345"w);
+                        assert(result.match);
+                        assert(result.value == "\U00012345");
+                        assert(result.rest == positional(""w, 1, 2));
+                    }}
+                    /* dstring         */ version(all){{
+                        auto result = getResult!(parseAnyChar!())("\U00012345"d);
+                        assert(result.match);
+                        assert(result.value == "\U00012345");
+                        assert(result.rest == positional(""d, 1, 2));
+                    }}
+                    /* TestRange!char  */ version(all){{
+                        auto result = getResult!(parseAnyChar!())(testRange("\U00012345"));
+                        assert(result.match);
+                        assert(result.value == "\U00012345");
+                        assert(result.rest == positional(testRange(""), 1, 2));
+                    }}
+                    /* TestRange!wchar */ version(all){{
+                        auto result = getResult!(parseAnyChar!())(testRange("\U00012345"w));
+                        assert(result.match);
+                        assert(result.value == "\U00012345");
+                        assert(result.rest == positional(testRange(""w), 1, 2));
+                    }}
+                    /* TestRange!dchar */ version(all){{
+                        auto result = getResult!(parseAnyChar!())(testRange("\U00012345"d));
+                        assert(result.match);
+                        assert(result.value == "\U00012345");
+                        assert(result.rest == positional(testRange(""d), 1, 2));
+                    }}
+                }
+                /* \a <= "\nhoge"     */ version(all){
+                    /* string          */ version(all){{
+                        auto result = getResult!(parseAnyChar!())("\nhoge");
+                        assert(result.match);
+                        assert(result.value == "\n");
+                        assert(result.rest == positional("hoge", 2, 1));
+                    }}
+                    /* wstring         */ version(all){{
+                        auto result = getResult!(parseAnyChar!())("\nhoge"w);
+                        assert(result.match);
+                        assert(result.value == "\n");
+                        assert(result.rest == positional("hoge"w, 2, 1));
+                    }}
+                    /* dstring         */ version(all){{
+                        auto result = getResult!(parseAnyChar!())("\nhoge"d);
+                        assert(result.match);
+                        assert(result.value == "\n");
+                        assert(result.rest == positional("hoge"d, 2, 1));
+                    }}
+                    /* TestRange!char  */ version(all){{
+                        auto result = getResult!(parseAnyChar!())(testRange("\nhoge"));
+                        assert(result.match);
+                        assert(result.value == "\n");
+                        assert(result.rest == positional(testRange("hoge"), 2, 1));
+                    }}
+                    /* TestRange!wchar */ version(all){{
+                        auto result = getResult!(parseAnyChar!())(testRange("\nhoge"w));
+                        assert(result.match);
+                        assert(result.value == "\n");
+                        assert(result.rest == positional(testRange("hoge"w), 2, 1));
+                    }}
+                    /* TestRange!dchar */ version(all){{
+                        auto result = getResult!(parseAnyChar!())(testRange("\nhoge"d));
+                        assert(result.match);
+                        assert(result.value == "\n");
+                        assert(result.rest == positional(testRange("hoge"d), 2, 1));
+                    }}
+                }
+                /* \a <= ""           */ version(all){
+                    /* string          */ version(all){{
+                        auto result = getResult!(parseAnyChar!())("");
+                        assert(!result.match);
+                        assert(result.error == Error("any char", 1, 1));
+                    }}
+                    /* wstring         */ version(all){{
+                        auto result = getResult!(parseAnyChar!())(""w);
+                        assert(!result.match);
+                        assert(result.error == Error("any char", 1, 1));
+                    }}
+                    /* dstring         */ version(all){{
+                        auto result = getResult!(parseAnyChar!())(""d);
+                        assert(!result.match);
+                        assert(result.error == Error("any char", 1, 1));
+                    }}
+                    /* TestRange!char  */ version(all){{
+                        auto result = getResult!(parseAnyChar!())(testRange(""));
+                        assert(!result.match);
+                        assert(result.error == Error("any char", 1, 1));
+                    }}
+                    /* TestRange!wchar */ version(all){{
+                        auto result = getResult!(parseAnyChar!())(testRange(""w));
+                        assert(!result.match);
+                        assert(result.error == Error("any char", 1, 1));
+                    }}
+                    /* TestRange!dchar */ version(all){{
+                        auto result = getResult!(parseAnyChar!())(testRange(""d));
+                        assert(!result.match);
+                        assert(result.error == Error("any char", 1, 1));
+                    }}
+                }
+                return true;
+            };
+            debug(ctpg_ct) static assert(dg());
+            dg();
+        }
+    }
+
     /* parseSpaces */ version(all){
         template parseSpaces(){
             alias combinateNone!(combinateMore0!(parseSpace!())) parseSpaces;
@@ -2547,23 +2565,6 @@ struct Error{
             dg();
         }
     }
-
-    debug(ctpg) unittest{
-        enum dg = {
-            return true;
-        };
-        debug(ctpg_ct) static assert(dg());
-        dg();
-    }
-
-    debug(ctpg) unittest{
-        enum dg = {
-            return true;
-        };
-        debug(ctpg_ct) static assert(dg());
-        dg();
-    }
-
 }
 
 mixin template ctpg(string src){
@@ -2592,7 +2593,7 @@ bool isMatch(alias fun)(string src){
     return getResult!(fun!())(src).match;
 }
 
-/* ctpg */ version(all){
+/* ctpg */ version(none){
     /* defs */ version(all){
         template defs(){
             alias string ResultType;
@@ -3722,7 +3723,9 @@ string mkString(string[] strs, string sep = ""){
     return result;
 }
 
-debug(ctpg) void main(){}
+debug(ctpg) void main(){
+    import std.stdio; writeln("unittest passed");
+}
 
 private:
 
@@ -3960,7 +3963,7 @@ debug(ctpg) unittest{
     dg();
 }
 
-version(all) debug(ctpg) public:
+version(none) debug(ctpg) public:
 
 mixin ctpg!q{
     int root = addExp $;
