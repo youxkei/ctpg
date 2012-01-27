@@ -102,7 +102,7 @@ struct Error{
     }
 }
 
-/* combinators */ version(none){
+/* combinators */ version(all){
     /* combinateMemoize */ version(all){
         version(memoize){
             template combinateMemoize(alias parser){
@@ -2566,10 +2566,6 @@ struct Error{
 
 }
 
-/* useful parsers */ version(all){
-
-}
-
 mixin template ctpg(string src){
     mixin(parse!defs(src));
 }
@@ -3964,7 +3960,7 @@ debug(ctpg) unittest{
     dg();
 }
 
-version(none) debug(ctpg) public:
+version(all) debug(ctpg) public:
 
 mixin ctpg!q{
     int root = addExp $;
