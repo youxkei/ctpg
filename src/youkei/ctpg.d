@@ -24,7 +24,7 @@ import std.functional;
 alias Tuple!() None;
 alias void*[size_t][size_t][string] memo_t;
 
-version = memoize;
+//version = memoize;
 
 struct Option(T){
     public{
@@ -102,8 +102,8 @@ struct Error{
     }
 }
 
-/* combinators */ version(none){
-    /* combinateMemoize */ version(all){
+/* combinators */ version(all){
+    /* combinateMemoize */ version(none){
         version(memoize){
             template combinateMemoize(alias parser){
                 alias ParserType!parser ResultType;
@@ -954,15 +954,56 @@ struct Error{
             Result!(Range, ResultType) apply(Range)(Positional!Range input, ref memo_t memo){
                 typeof(return) result;
                 result.rest = input;
-                auto r = parser.apply(input.save, memo);
-                result.match = r.match;
-                result.error = r.error;
+                version(none){
+                    auto r = parser.apply(input, memo);
+                    result.match = r.match;
+                    result.error = r.error;
+                }
+                result.match = parser.apply(input, memo).match;
                 return result;
             }
         }
 
         debug(ctpg) unittest{
             enum dg = {
+                /* &"w"        <= "www" */ version(all){
+                    /* string          */ version(all){{
+                        auto result = getResult!(combinateAnd!(parseString!"w"))("www");
+                        assert(result.match);
+                        assert(result.value == None());
+                        assert(result.rest == positional("www", 1, 1));
+                    }}
+                    /* wstring         */ version(all){{
+                        auto result = getResult!(combinateAnd!(parseString!"w"))("www"w);
+                        assert(result.match);
+                        assert(result.value == None());
+                        assert(result.rest == positional("www"w, 1, 1));
+                    }}
+                    /* dstring         */ version(all){{
+                        auto result = getResult!(combinateAnd!(parseString!"w"))("www"d);
+                        assert(result.match);
+                        assert(result.value == None());
+                        assert(result.rest == positional("www"d, 1, 1));
+                    }}
+                    /* TestRange!char  */ version(all){{
+                        auto result = getResult!(combinateAnd!(parseString!"w"))(testRange("www"));
+                        assert(result.match);
+                        assert(result.value == None());
+                        assert(result.rest == positional(testRange("www"), 1, 1));
+                    }}
+                    /* TestRange!wchar */ version(all){{
+                        auto result = getResult!(combinateAnd!(parseString!"w"))(testRange("www"w));
+                        assert(result.match);
+                        assert(result.value == None());
+                        assert(result.rest == positional(testRange("www"w), 1, 1));
+                    }}
+                    /* TestRange!dchar */ version(all){{
+                        auto result = getResult!(combinateAnd!(parseString!"w"))(testRange("www"d));
+                        assert(result.match);
+                        assert(result.value == None());
+                        assert(result.rest == positional(testRange("www"d), 1, 1));
+                    }}
+                }
                 /* ("w" &"w")+ <= "www" */ version(all){
                     /* string          */ version(all){{
                         auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))))("www");
@@ -1040,7 +1081,7 @@ struct Error{
         }
     }
 
-    /* combinateNot */ version(all){
+    /* combinateNot */ version(none){
         template combinateNot(alias parser){
             alias None ResultType;
             Result!(Range, ResultType) apply(Range)(Positional!Range input, ref memo_t memo){
