@@ -96,14 +96,14 @@ struct Error{
         int column;
 
         pure @safe nothrow
-        bool opEquals(Error rhs){
+        bool opEquals(in Error rhs){
             return need == rhs.need && line == rhs.line && column == rhs.column;
         }
     }
 }
 
 /* combinators */ version(all){
-    /* combinateMemoize */ version(none){
+    /* combinateMemoize */ version(all){
         version(memoize){
             template combinateMemoize(alias parser){
                 alias ParserType!parser ResultType;
@@ -954,12 +954,12 @@ struct Error{
             Result!(Range, ResultType) apply(Range)(Positional!Range input, ref memo_t memo){
                 typeof(return) result;
                 result.rest = input;
-                version(none){
+                version(all){
                     auto r = parser.apply(input, memo);
                     result.match = r.match;
                     result.error = r.error;
                 }
-                result.match = parser.apply(input, memo).match;
+                version(none) result.match = parser.apply(input, memo).match;
                 return result;
             }
         }
@@ -1002,6 +1002,44 @@ struct Error{
                         assert(result.match);
                         assert(result.value == None());
                         assert(result.rest == positional(testRange("www"d), 1, 1));
+                    }}
+                }
+                /* "w" &"w"    <= "www" */ version(all){
+                    /* string          */ version(all){{
+                        auto result = getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))("www");
+                        assert(result.match);
+                        assert(result.value == "w");
+                        assert(result.rest == positional("ww", 1, 2));
+                    }}
+                    /* wstring         */ version(all){{
+                        auto result = getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))("www"w);
+                        assert(result.match);
+                        assert(result.value == "w");
+                        assert(result.rest == positional("ww"w, 1, 2));
+                    }}
+                    /* dstring         */ version(all){{
+                        auto result = getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))("www"d);
+                        assert(result.match);
+                        assert(result.value == "w");
+                        assert(result.rest == positional("ww"d, 1, 2));
+                    }}
+                    /* TestRange!char  */ version(all){{
+                        auto result = getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))(testRange("www"));
+                        assert(result.match);
+                        assert(result.value == "w");
+                        assert(result.rest == positional(testRange("ww"), 1, 2));
+                    }}
+                    /* TestRange!wchar */ version(all){{
+                        auto result = getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))(testRange("www"w));
+                        assert(result.match);
+                        assert(result.value == "w");
+                        assert(result.rest == positional(testRange("ww"w), 1, 2));
+                    }}
+                    /* TestRange!dchar */ version(all){{
+                        auto result = getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))(testRange("www"d));
+                        assert(result.match);
+                        assert(result.value == "w");
+                        assert(result.rest == positional(testRange("ww"d), 1, 2));
                     }}
                 }
                 /* ("w" &"w")+ <= "www" */ version(all){
@@ -1081,7 +1119,7 @@ struct Error{
         }
     }
 
-    /* combinateNot */ version(none){
+    /* combinateNot */ version(all){
         template combinateNot(alias parser){
             alias None ResultType;
             Result!(Range, ResultType) apply(Range)(Positional!Range input, ref memo_t memo){
@@ -1332,7 +1370,8 @@ struct Error{
     /* parseString */ version(all){
         template parseString(string str) if(str.length > 0){
             alias string ResultType;
-            Result!(Range, ResultType) apply(Range)(Positional!Range input, ref memo_t memo){
+            Result!(Range, ResultType) apply(Range)(Positional!Range ainput, ref memo_t memo){
+                auto input = ainput;
                 enum breadth = countBreadth(str);
                 enum convertedString = staticConvertString!(str, Range);
                 typeof(return) result;
@@ -1358,6 +1397,7 @@ struct Error{
                     result.rest.range = input.range;
                     result.rest.line = input.line + breadth.line;
                     result.rest.column = input.column + breadth.column;
+                    return result;
                 }
             Lerror:
                 result.error = Error('"' ~ str ~ '"', input.line, input.column);
@@ -2177,7 +2217,7 @@ struct Error{
     }
 }
 
-/* useful parser */ version(none){
+/* useful parser */ version(all){
     /* parseAnyChar */ version(all){
         template parseAnyChar(){
             alias parseCharRange!(dchar.min, dchar.max) parseAnyChar;
@@ -2481,7 +2521,7 @@ struct Error{
 
     /* parseStringLiteral */ version(all){
         template parseStringLiteral(){
-            combinateChoice!(
+            alias combinateChoice!(
                 combinateString!(
                     combinateSequence!(
                         parseString!"\"",
@@ -2489,8 +2529,8 @@ struct Error{
                             combinateSequence!(
                                 combinateNot!(parseString!"\""),
                                 combinateChoice!(
-                                    parseEscapeSequence,
-                                    parseAnyChar
+                                    parseEscapeSequence!(),
+                                    parseAnyChar!()
                                 )
                             )
                         ),
@@ -2503,7 +2543,7 @@ struct Error{
                         combinateMore0!(
                             combinateSequence!(
                                 combinateNot!(parseString!"\""),
-                                parseAnyChar
+                                parseAnyChar!()
                             )
                         ),
                         parseString!"\""
@@ -2515,7 +2555,7 @@ struct Error{
                         combinateMore0!(
                             combinateSequence!(
                                 combinateNot!(parseString!"`"),
-                                parseAnyChar
+                                parseAnyChar!()
                             )
                         ),
                         parseString!"`"
@@ -2531,20 +2571,20 @@ struct Error{
                 {
                     auto r = getResult!(parseStringLiteral!())(q{"表が怖い噂のソフト"});
                     assert(r.match);
-                    assert(r.rest == "");
+                    assert(r.rest == positional("", 1, 12));
                     assert(r.value == q{"表が怖い噂のソフト"});
                 }
                 {
                     auto r = getResult!(parseStringLiteral!())(q{r"表が怖い噂のソフト"});
                     assert(r.match);
-                    assert(r.rest == "");
+                    assert(r.rest == positional("", 1, 13));
                     assert(r.value == q{r"表が怖い噂のソフト"});
                 }
                 {
                     auto r = getResult!(parseStringLiteral!())(q{`表が怖い噂のソフト`});
                     assert(r.match);
-                    assert(r.rest == "");
-                    assert(r.value == q{"表が怖い噂のソフト"});
+                    assert(r.rest == positional("", 1, 12));
+                    assert(r.value == q{`表が怖い噂のソフト`});
                 }
                 return true;
             };
@@ -2634,7 +2674,7 @@ bool isMatch(alias fun)(string src){
     return getResult!(fun!())(src).match;
 }
 
-/* ctpg */ version(none){
+/* ctpg */ version(all){
     /* defs */ version(all){
         template defs(){
             alias string ResultType;
@@ -4004,7 +4044,7 @@ debug(ctpg) unittest{
     dg();
 }
 
-version(none) debug(ctpg) public:
+version(all) debug(ctpg) public:
 
 mixin ctpg!q{
     int root = addExp $;
