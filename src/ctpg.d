@@ -8,7 +8,7 @@ This module implements a compite-time parser generator.
  *          http://www.boost.org/LICENSE_1_0.txt)
  */
 
-module youkei.ctpg;
+module ctpg;
 
 import std.algorithm;
 import std.array;
