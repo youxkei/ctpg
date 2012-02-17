@@ -1403,44 +1403,12 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                /* "hello"    <= "hello world"        */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(parseString!"hello")("hello world");
-                        assert(result.match);
-                        assert(result.value == "hello");
-                        assert(result.rest == positional(" world", 1, 6));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(parseString!"hello")("hello world"w);
-                        assert(result.match);
-                        assert(result.value == "hello");
-                        assert(result.rest == positional(" world"w, 1, 6));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(parseString!"hello")("hello world"d);
-                        assert(result.match);
-                        assert(result.value == "hello");
-                        assert(result.rest == positional(" world"d, 1, 6));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(parseString!"hello")(testRange("hello world"));
-                        assert(result.match);
-                        assert(result.value == "hello");
-                        assert(result.rest == positional(testRange(" world"), 1, 6));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(parseString!"hello")(testRange("hello world"w));
-                        assert(result.match);
-                        assert(result.value == "hello");
-                        assert(result.rest == positional(testRange(" world"w), 1, 6));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(parseString!"hello")(testRange("hello world"d));
-                        assert(result.match);
-                        assert(result.value == "hello");
-                        assert(result.rest == positional(testRange(" world"d), 1, 6));
-                    }}
-                }
+                /* "hello"    <= "hello world"        */ mixin(generateUnittest(q{
+                    auto result = getResult!(parseString!"hello")(@1);
+                    assert(result.match);
+                    assert(result.value == "hello");
+                    assert(result.rest == positional(@2, 1, 6));
+                }, "hello world", " world"));
                 /* "hello"    <= "hello"              */ version(all){
                     /* string          */ version(all){{
                         auto result = getResult!(parseString!"hello")("hello");
@@ -1549,6 +1517,7 @@ struct Error{
                         assert(result.error == Error("\"hello\"", 1, 1));
                     }}
                 }
+                assert(false);
                 return true;
             };
             debug(ctpg_ct) static assert(dg());
@@ -3805,6 +3774,48 @@ debug(ctpg) void main(){
 }
 
 private:
+
+string generateUnittest(string src, string input, string rest, string file = __FILE__, int line = __LINE__){
+    import std.array;
+    import std.string;
+    auto result = appender!string(); 
+    foreach(idx; 0..6){
+        import std.conv; result.put("#line " ~ to!string(line - countchars(src, "\n")) ~ " \"" ~ file ~ "(");
+        final switch(idx){
+            case 0:{
+                result.put("string)\"\n");
+                result.put("{" ~ src.replace("@1", "\"" ~ input ~ "\"").replace("@2", "\"" ~ rest ~ "\"") ~ "}");
+                break;
+            }
+            case 1:{
+                result.put("wstring)\"\n");
+                result.put("{" ~ src.replace("@1", "\"" ~ input ~ "\"w").replace("@2", "\"" ~ rest ~ "\"w") ~ "}");
+                break;
+            }
+            case 2:{
+                result.put("dstring)\"\n");
+                result.put("{" ~ src.replace("@1", "\"" ~ input ~ "\"d").replace("@2", "\"" ~ rest ~ "\"d") ~ "}");
+                break;
+            }
+            case 3:{
+                result.put("TestRange!char)\"\n");
+                result.put("{" ~ src.replace("@1", "testRange(\"" ~ input ~ "\")").replace("@2", "testRange(\"" ~ rest ~ "\")") ~ "}");
+                break;
+            }
+            case 4:{
+                result.put("TestRange!wchar)\"\n");
+                result.put("{" ~ src.replace("@1", "testRange(\"" ~ input ~ "\"w)").replace("@2", "testRange(\"" ~ rest ~ "\"w)") ~ "}");
+                break;
+            }
+            case 5:{
+                result.put("TestRange!dchar)\"\n");
+                result.put("{" ~ src.replace("@1", "testRange(\"" ~ input ~ "\"d)").replace("@2", "testRange(\"" ~ rest ~ "\"d)") ~ "}");
+                break;
+            }
+        }
+    }
+    return result.data;
+}
 
 debug(ctpg) version(unittest) template TestParser(T){
     alias T ResultType;
