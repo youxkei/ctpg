@@ -31,10 +31,6 @@ struct Option(T){
         bool some;
         T value;
 
-        @property isNull(){
-            return !some;
-        }
-
         alias value this;
     }
 }
@@ -780,37 +776,37 @@ struct Error{
                     /* string          */ version(all){{
                         auto result = getResult!(combinateOption!(parseString!"w"))("hoge");
                         assert(result.match);
-                        assert(result.value.isNull);
+                        assert(!result.value.some);
                         assert(result.rest == positional("hoge", 1, 1));
                     }}
                     /* wstring         */ version(all){{
                         auto result = getResult!(combinateOption!(parseString!"w"))("hoge"w);
                         assert(result.match);
-                        assert(result.value.isNull);
+                        assert(!result.value.some);
                         assert(result.rest == positional("hoge"w, 1, 1));
                     }}
                     /* dstring         */ version(all){{
                         auto result = getResult!(combinateOption!(parseString!"w"))("hoge"d);
                         assert(result.match);
-                        assert(result.value.isNull);
+                        assert(!result.value.some);
                         assert(result.rest == positional("hoge"d, 1, 1));
                     }}
                     /* TestRange!char  */ version(all){{
                         auto result = getResult!(combinateOption!(parseString!"w"))(testRange("hoge"));
                         assert(result.match);
-                        assert(result.value.isNull);
+                        assert(!result.value.some);
                         assert(result.rest == positional(testRange("hoge"), 1, 1));
                     }}
                     /* TestRange!wchar */ version(all){{
                         auto result = getResult!(combinateOption!(parseString!"w"))(testRange("hoge"w));
                         assert(result.match);
-                        assert(result.value.isNull);
+                        assert(!result.value.some);
                         assert(result.rest == positional(testRange("hoge"w), 1, 1));
                     }}
                     /* TestRange!dchar */ version(all){{
                         auto result = getResult!(combinateOption!(parseString!"w"))(testRange("hoge"d));
                         assert(result.match);
-                        assert(result.value.isNull);
+                        assert(!result.value);
                         assert(result.rest == positional(testRange("hoge"d), 1, 1));
                     }}
                 }
