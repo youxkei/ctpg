@@ -129,19 +129,19 @@ struct Error{
 
     /* combinateUnTuple */ version(all){
         template combinateUnTuple(alias parser){
-            alias UnTuple!(ParserType!parser) ResultType;
-            Result!(Range, ResultType) apply(Range)(Positional!Range input, ref memo_t memo){
-                typeof(return) result;
-                auto r = parser.apply(input, memo);
-                static if(isTuple!(ParserType!parser) && ParserType!parser.Types.length == 1){
+            static if(isTuple!(ParserType!parser) && ParserType!parser.Types.length == 1){
+                alias ParserType!parser.Types[0] ResultType;
+                Result!(Range, ResultType) apply(Range)(Positional!Range input, ref memo_t memo){
+                    typeof(return) result;
+                    auto r = parser.apply(input, memo);
                     result.match = r.match;
                     result.value = r.value[0];
                     result.rest = r.rest;
                     result.error = r.error;
-                }else{
-                    result = r;
+                    return result;
                 }
-                return result;
+            }else{
+                alias parser combinateUnTuple;
             }
         }
 
@@ -3937,22 +3937,6 @@ debug(ctpg) unittest{
     static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(int, long)), TestParser!uint) == Tuple!(int, long, uint)));
     static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(int, long)), TestParser!(Tuple!(uint, ulong))) == Tuple!(int, long, uint, ulong)));
     static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(Tuple!(byte, short), long)), TestParser!(Tuple!(uint, ulong))) == Tuple!(Tuple!(byte, short), long, uint, ulong)));
-}
-
-template UnTuple(T){
-    static if(isTuple!T && T.Types.length == 1){
-        alias T.Types[0] UnTuple;
-    }else{
-        alias T UnTuple;
-    }
-}
-
-debug(ctpg) unittest{
-    static assert(is(UnTuple!int == int));
-    static assert(is(UnTuple!(Tuple!(int)) == int));
-    static assert(is(UnTuple!(Tuple!(Tuple!(int))) == Tuple!int));
-    static assert(is(UnTuple!(Tuple!(int, int)) == Tuple!(int, int)));
-    static assert(is(UnTuple!(Tuple!(Tuple!(int, int))) == Tuple!(int, int)));
 }
 
 template CommonParserType(tparsers...){
