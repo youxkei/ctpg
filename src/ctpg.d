@@ -3298,9 +3298,8 @@ debug(ctpg) void main(){
 private:
 
 string generateUnittest(string file = __FILE__, int line = __LINE__)(string src, string input, string rest){
-    import std.array;
     import std.string;
-    auto result = appender!string(); 
+    import std.array; auto result = appender!string(); 
     foreach(idx; 0..6){
         import std.conv; result.put(`#line ` ~ to!string(line) ~ ` "` ~ file ~ `(`);
         final switch(idx){
