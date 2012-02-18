@@ -3298,7 +3298,6 @@ debug(ctpg) void main(){
 private:
 
 string generateUnittest(string file = __FILE__, int line = __LINE__)(string src, string input, string rest){
-    pragma(msg, line);
     import std.array;
     import std.string;
     auto result = appender!string(); 
