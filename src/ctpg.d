@@ -80,6 +80,10 @@ struct Result(Range, T){
     }
 }
 
+Result!(Range, T) result(Range, T)(bool match, T value, Positional!Range rest, Error error){
+    return Result!(Range, T)(match, value, rest, error);
+}
+
 struct Error{
     invariant(){
         assert(line >= 1);
