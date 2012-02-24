@@ -77,6 +77,10 @@ struct Result(Range, T){
             rest = rhs.rest;
             error = rhs.error;
         }
+        
+        bool opEquals(typeof(this) rhs){
+            return match == rhs.match && value == rhs.value && rest == rhs.rest && error == rhs.error;
+        }
     }
 }
 
