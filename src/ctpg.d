@@ -1324,8 +1324,7 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                cast(void)__LINE__;
-                /* \0 <= "hoge" */ version(all) mixin(generateUnittest(q{
+                /* \0 <= "hoge" */ mixin(generateUnittest(q{
                     auto result = getResult!(parseNone!())(@1);
                     assert(result.match);
                     assert(result.rest == positional(@2, 1, 1));
@@ -1377,26 +1376,25 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                cast(void)__LINE__;
-                /* "hello"    <= "hello world"        */ version(all) mixin(generateUnittest(q{
+                /* "hello"    <= "hello world"        */ mixin(generateUnittest(q{
                     auto result = getResult!(parseString!"hello")(@1);
                     assert(result.match);
                     assert(result.value == "hello");
                     assert(result.rest == positional(@2, 1, 6));
                 }, "hello world", " world"));
-                /* "hello"    <= "hello"              */ version(all) mixin(generateUnittest(q{
+                /* "hello"    <= "hello"              */ mixin(generateUnittest(q{
                     auto result = getResult!(parseString!"hello")(@1);
                     assert(result.match);
                     assert(result.value == "hello");
                     assert(result.rest == positional(@2, 1, 6));
                 }, "hello", ""));
-                /* "表が怖い" <= "表が怖い噂のソフト" */ version(all) mixin(generateUnittest(q{
+                /* "表が怖い" <= "表が怖い噂のソフト" */ mixin(generateUnittest(q{
                     auto result = getResult!(parseString!"表が怖い")(@1);
                     assert(result.match);
                     assert(result.value == "表が怖い");
                     assert(result.rest == positional(@2, 1, 5));
                 }, "表が怖い噂のソフト", "噂のソフト"));
-                /* "hello"    <= "hllo world"         */ version(all) mixin(generateUnittest(q{
+                /* "hello"    <= "hllo world"         */ mixin(generateUnittest(q{
                     auto result = getResult!(parseString!"hello")(@1);
                     assert(!result.match);
                     assert(result.error == Error("\"hello\"", 1, 1));
@@ -1450,20 +1448,19 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                cast(void)__LINE__;
-                /* [a-z]               <= "hoge"           */ version(all) mixin(generateUnittest(q{
+                /* [a-z]               <= "hoge"           */ mixin(generateUnittest(q{
                     auto result = getResult!(parseCharRange!('a', 'z'))(@1);
                     assert(result.match);
                     assert(result.value == "h");
                     assert(result.rest == positional(@2, 1, 2));
                 }, "hoge", "oge"));
-                /* [\u0100-\u0010FFFF] <= "\U00012345hoge" */ version(all) mixin(generateUnittest(q{
+                /* [\u0100-\u0010FFFF] <= "\U00012345hoge" */ mixin(generateUnittest(q{
                     auto result = getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(@1);
                     assert(result.match);
                     assert(result.value == "\U00012345");
                     assert(result.rest == positional(@2, 1, 2));
                 }, "\U00012345hoge", "hoge"));
-                /* [\u0100-\u0010FFFF] <= "hello world"    */ version(all) mixin(generateUnittest(q{
+                /* [\u0100-\u0010FFFF] <= "hello world"    */ mixin(generateUnittest(q{
                     auto result = getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(@1);
                     assert(!result.match);
                     assert(result.error == Error("c: '\u0100' <= c <= '\U0010FFFF'", 1, 1));
@@ -1568,7 +1565,6 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                cast(void)__LINE__;
                 /* \es <= "\\\"hoge"        */ version(all) mixin(generateUnittest(q{
                     auto result = getResult!(parseEscapeSequence!())(@1);
                     assert(result.match);
@@ -1581,19 +1577,19 @@ struct Error{
                     assert(result.value == r"\U0010FFFF");
                     assert(result.rest == positional(@2, 1, 11));
                 }, r"\U0010FFFFhoge", "hoge"));
-                /* \es <= r"\u10FFhoge"     */ version(all) mixin(generateUnittest(q{
+                /* \es <= r"\u10FFhoge"     */ mixin(generateUnittest(q{
                     auto result = getResult!(parseEscapeSequence!())(@1);
                     assert(result.match);
                     assert(result.value == r"\u10FF");
                     assert(result.rest == positional(@2, 1, 7));
                 }, r"\u10FFhoge", "hoge"));
-                /* \es <= r"\nhoge"         */ version(all) mixin(generateUnittest(q{
+                /* \es <= r"\nhoge"         */ mixin(generateUnittest(q{
                     auto result = getResult!(parseEscapeSequence!())(@1);
                     assert(result.match);
                     assert(result.value == r"\\");
                     assert(result.rest == positional(@2, 1, 3));
                 }, r"\\hoge", "hoge"));
-                /* \es <= "欝hoge"          */ version(all) mixin(generateUnittest(q{
+                /* \es <= "欝hoge"          */ mixin(generateUnittest(q{
                     auto result = getResult!(parseEscapeSequence!())(@1);
                     assert(!result.match);
                     assert(result.error == Error("escape sequence", 1, 1));
@@ -1640,14 +1636,13 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                cast(void)__LINE__;
-                /* \s <= "\thoge" */ version(all) mixin(generateUnittest(q{
+                /* \s <= "\thoge" */ mixin(generateUnittest(q{
                     auto result = getResult!(parseSpace!())(@1);
                     assert(result.match);
                     assert(result.value == "\t");
                     assert(result.rest == positional(@2, 1, 2));
                 }, "\thoge", "hoge"));
-                /* \s <= "hoge"   */ version(all) mixin(generateUnittest(q{
+                /* \s <= "hoge"   */ mixin(generateUnittest(q{
                     auto result = getResult!(parseSpace!())(@1);
                     assert(!result.match);
                     assert(result.error == Error("space", 1, 1));
@@ -1675,13 +1670,12 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                cast(void)__LINE__;
-                /* $ <= ""     */ version(all) mixin(generateUnittest(q{
+                /* $ <= ""     */ mixin(generateUnittest(q{
                     auto result = getResult!(parseEOF!())(@1);
                     assert(result.match);
                     assert(result.rest == positional(@2, 1, 1));
                 }, "", ""));
-                /* $ <= "hoge" */ version(all) mixin(generateUnittest(q{
+                /* $ <= "hoge" */ mixin(generateUnittest(q{
                     auto result = getResult!(parseEOF!())(@1);
                     assert(!result.match);
                     assert(result.error == Error("EOF", 1, 1));
