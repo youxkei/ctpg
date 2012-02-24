@@ -1327,7 +1327,7 @@ struct Error{
         }
 
         debug(ctpg) unittest{
-            enum ldg = {
+            enum dg = {
                 /* \0 <= "hoge" */ version(all){
                     /* string          */ version(all){{
                         auto result = getResult!(parseNone!())("hoge");
@@ -1362,8 +1362,8 @@ struct Error{
                 }
                 return true;
             };
-            debug(ctpg_ct) static assert(ldg());
-            ldg();
+            debug(ctpg_ct) static assert(dg());
+            dg();
         }
     }
 
