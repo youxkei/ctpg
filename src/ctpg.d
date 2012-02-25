@@ -1332,12 +1332,12 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                assert(getResult!(parseNone!())("hoge") == result(true, None(), positional("hoge", 1, 1), Error()));
-                assert(getResult!(parseNone!())("hoge"w) == result(true, None(), positional("hoge"w, 1, 1), Error()));
-                assert(getResult!(parseNone!())("hoge"d) == result(true, None(), positional("hoge"d, 1, 1), Error()));
-                assert(getResult!(parseNone!())(testRange("hoge")) == result(true, None(), positional(testRange("hoge"), 1, 1), Error()));
-                assert(getResult!(parseNone!())(testRange("hoge"w)) == result(true, None(), positional(testRange("hoge"w), 1, 1), Error()));
-                assert(getResult!(parseNone!())(testRange("hoge"d)) == result(true, None(), positional(testRange("hoge"d), 1, 1), Error()));
+                assert(getResult!(parseNone!())("hoge" ) == result(true, None.init, positional("hoge" , 1, 1), Error.init));
+                assert(getResult!(parseNone!())("hoge"w) == result(true, None.init, positional("hoge"w, 1, 1), Error.init));
+                assert(getResult!(parseNone!())("hoge"d) == result(true, None.init, positional("hoge"d, 1, 1), Error.init));
+                assert(getResult!(parseNone!())(testRange("hoge" )) == result(true, None.init, positional(testRange("hoge" ), 1, 1), Error.init));
+                assert(getResult!(parseNone!())(testRange("hoge"w)) == result(true, None.init, positional(testRange("hoge"w), 1, 1), Error.init));
+                assert(getResult!(parseNone!())(testRange("hoge"d)) == result(true, None.init, positional(testRange("hoge"d), 1, 1), Error.init));
                 return true;
             };
             debug(ctpg_ct) static assert(dg());
@@ -1385,31 +1385,31 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                assert(getResult!(parseString!"hello")("hello world") == result(true, "hello", positional(" world", 1, 6), Error()));
-                assert(getResult!(parseString!"hello")("hello world"w) == result(true, "hello", positional(" world"w, 1, 6), Error()));
-                assert(getResult!(parseString!"hello")("hello world"d) == result(true, "hello", positional(" world"d, 1, 6), Error()));
-                assert(getResult!(parseString!"hello")(testRange("hello world")) == result(true, "hello", positional(testRange(" world"), 1, 6), Error()));
-                assert(getResult!(parseString!"hello")(testRange("hello world"w)) == result(true, "hello", positional(testRange(" world"w), 1, 6), Error()));
-                assert(getResult!(parseString!"hello")(testRange("hello world"d)) == result(true, "hello", positional(testRange(" world"d), 1, 6), Error()));
+                assert(getResult!(parseString!"hello")("hello world" ) == result(true, "hello", positional(" world" , 1, 6), Error.init));
+                assert(getResult!(parseString!"hello")("hello world"w) == result(true, "hello", positional(" world"w, 1, 6), Error.init));
+                assert(getResult!(parseString!"hello")("hello world"d) == result(true, "hello", positional(" world"d, 1, 6), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello world" )) == result(true, "hello", positional(testRange(" world" ), 1, 6), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello world"w)) == result(true, "hello", positional(testRange(" world"w), 1, 6), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello world"d)) == result(true, "hello", positional(testRange(" world"d), 1, 6), Error.init));
 
-                assert(getResult!(parseString!"hello")("hello") == result(true, "hello", positional("", 1, 6), Error()));
-                assert(getResult!(parseString!"hello")("hello"w) == result(true, "hello", positional(""w, 1, 6), Error()));
-                assert(getResult!(parseString!"hello")("hello"d) == result(true, "hello", positional(""d, 1, 6), Error()));
-                assert(getResult!(parseString!"hello")(testRange("hello")) == result(true, "hello", positional(testRange(""), 1, 6), Error()));
-                assert(getResult!(parseString!"hello")(testRange("hello"w)) == result(true, "hello", positional(testRange(""w), 1, 6), Error()));
-                assert(getResult!(parseString!"hello")(testRange("hello"d)) == result(true, "hello", positional(testRange(""d), 1, 6), Error()));
+                assert(getResult!(parseString!"hello")("hello" ) == result(true, "hello", positional("" , 1, 6), Error.init));
+                assert(getResult!(parseString!"hello")("hello"w) == result(true, "hello", positional(""w, 1, 6), Error.init));
+                assert(getResult!(parseString!"hello")("hello"d) == result(true, "hello", positional(""d, 1, 6), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello" )) == result(true, "hello", positional(testRange("" ), 1, 6), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello"w)) == result(true, "hello", positional(testRange(""w), 1, 6), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello"d)) == result(true, "hello", positional(testRange(""d), 1, 6), Error.init));
 
-                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト") == result(true, "表が怖い", positional("噂のソフト", 1, 5), Error()));
-                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト"w) == result(true, "表が怖い", positional("噂のソフト"w, 1, 5), Error()));
-                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト"d) == result(true, "表が怖い", positional("噂のソフト"d, 1, 5), Error()));
-                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト")) == result(true, "表が怖い", positional(testRange("噂のソフト"), 1, 5), Error()));
-                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト"w)) == result(true, "表が怖い", positional(testRange("噂のソフト"w), 1, 5), Error()));
-                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト"d)) == result(true, "表が怖い", positional(testRange("噂のソフト"d), 1, 5), Error()));
+                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト" ) == result(true, "表が怖い", positional("噂のソフト" , 1, 5), Error.init));
+                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト"w) == result(true, "表が怖い", positional("噂のソフト"w, 1, 5), Error.init));
+                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト"d) == result(true, "表が怖い", positional("噂のソフト"d, 1, 5), Error.init));
+                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト" )) == result(true, "表が怖い", positional(testRange("噂のソフト" ), 1, 5), Error.init));
+                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト"w)) == result(true, "表が怖い", positional(testRange("噂のソフト"w), 1, 5), Error.init));
+                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト"d)) == result(true, "表が怖い", positional(testRange("噂のソフト"d), 1, 5), Error.init));
 
-                assert(getResult!(parseString!"hello")("hllo world") == result(false, "", positional(""), Error("\"hello\"", 1, 1)));
+                assert(getResult!(parseString!"hello")("hllo world" ) == result(false, "", positional("" ), Error("\"hello\"", 1, 1)));
                 assert(getResult!(parseString!"hello")("hllo world"w) == result(false, "", positional(""w), Error("\"hello\"", 1, 1)));
                 assert(getResult!(parseString!"hello")("hllo world"d) == result(false, "", positional(""d), Error("\"hello\"", 1, 1)));
-                assert(getResult!(parseString!"hello")(testRange("hllo world")) == result(false, "", positional(testRange("")), Error("\"hello\"", 1, 1)));
+                assert(getResult!(parseString!"hello")(testRange("hllo world" )) == result(false, "", positional(testRange("" )), Error("\"hello\"", 1, 1)));
                 assert(getResult!(parseString!"hello")(testRange("hllo world"w)) == result(false, "", positional(testRange(""w)), Error("\"hello\"", 1, 1)));
                 assert(getResult!(parseString!"hello")(testRange("hllo world"d)) == result(false, "", positional(testRange(""d)), Error("\"hello\"", 1, 1)));
                 return true;
@@ -1463,24 +1463,24 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                assert(getResult!(parseCharRange!('a', 'z'))("hoge") == result(true, "h", positional("oge", 1, 2), Error()));
-                assert(getResult!(parseCharRange!('a', 'z'))("hoge"w) == result(true, "h", positional("oge"w, 1, 2), Error()));
-                assert(getResult!(parseCharRange!('a', 'z'))("hoge"d) == result(true, "h", positional("oge"d, 1, 2), Error()));
-                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge")) == result(true, "h", positional(testRange("oge"), 1, 2), Error()));
-                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge"w)) == result(true, "h", positional(testRange("oge"w), 1, 2), Error()));
-                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge"d)) == result(true, "h", positional(testRange("oge"d), 1, 2), Error()));
+                assert(getResult!(parseCharRange!('a', 'z'))("hoge" ) == result(true, "h", positional("oge" , 1, 2), Error.init));
+                assert(getResult!(parseCharRange!('a', 'z'))("hoge"w) == result(true, "h", positional("oge"w, 1, 2), Error.init));
+                assert(getResult!(parseCharRange!('a', 'z'))("hoge"d) == result(true, "h", positional("oge"d, 1, 2), Error.init));
+                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge" )) == result(true, "h", positional(testRange("oge" ), 1, 2), Error.init));
+                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge"w)) == result(true, "h", positional(testRange("oge"w), 1, 2), Error.init));
+                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge"d)) == result(true, "h", positional(testRange("oge"d), 1, 2), Error.init));
 
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge") == result(true, "\U00012345", positional("hoge", 1, 2), Error()));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge"w) == result(true, "\U00012345", positional("hoge"w, 1, 2), Error()));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge"d) == result(true, "\U00012345", positional("hoge"d, 1, 2), Error()));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge")) == result(true, "\U00012345", positional(testRange("hoge"), 1, 2), Error()));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge"w)) == result(true, "\U00012345", positional(testRange("hoge"w), 1, 2), Error()));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge"d)) == result(true, "\U00012345", positional(testRange("hoge"d), 1, 2), Error()));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge" ) == result(true, "\U00012345", positional("hoge" , 1, 2), Error.init));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge"w) == result(true, "\U00012345", positional("hoge"w, 1, 2), Error.init));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge"d) == result(true, "\U00012345", positional("hoge"d, 1, 2), Error.init));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge" )) == result(true, "\U00012345", positional(testRange("hoge" ), 1, 2), Error.init));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge"w)) == result(true, "\U00012345", positional(testRange("hoge"w), 1, 2), Error.init));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge"d)) == result(true, "\U00012345", positional(testRange("hoge"d), 1, 2), Error.init));
 
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("hello world") == result(false, "", positional(""), Error("c: '\u0100' <= c <= '\U0010FFFF'", 1, 1)));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("hello world" ) == result(false, "", positional("" ), Error("c: '\u0100' <= c <= '\U0010FFFF'", 1, 1)));
                 assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("hello world"w) == result(false, "", positional(""w), Error("c: '\u0100' <= c <= '\U0010FFFF'", 1, 1)));
                 assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("hello world"d) == result(false, "", positional(""d), Error("c: '\u0100' <= c <= '\U0010FFFF'", 1, 1)));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("hello world")) == result(false, "", positional(testRange("")), Error("c: '\u0100' <= c <= '\U0010FFFF'", 1, 1)));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("hello world" )) == result(false, "", positional(testRange("" )), Error("c: '\u0100' <= c <= '\U0010FFFF'", 1, 1)));
                 assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("hello world"w)) == result(false, "", positional(testRange(""w)), Error("c: '\u0100' <= c <= '\U0010FFFF'", 1, 1)));
                 assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("hello world"d)) == result(false, "", positional(testRange(""d)), Error("c: '\u0100' <= c <= '\U0010FFFF'", 1, 1)));
                 return true;
@@ -1583,38 +1583,38 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                assert(getResult!(parseEscapeSequence!())(`\"hoge`) == result(true, `\"`, positional("hoge", 1, 3), Error()));
-                assert(getResult!(parseEscapeSequence!())(`\"hoge`w) == result(true, `\"`, positional("hoge"w, 1, 3), Error()));
-                assert(getResult!(parseEscapeSequence!())(`\"hoge`d) == result(true, `\"`, positional("hoge"d, 1, 3), Error()));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge`)) == result(true, `\"`, positional(testRange("hoge"), 1, 3), Error()));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge`w)) == result(true, `\"`, positional(testRange("hoge"w), 1, 3), Error()));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge`d)) == result(true, `\"`, positional(testRange("hoge"d), 1, 3), Error()));
+                assert(getResult!(parseEscapeSequence!())(`\"hoge` ) == result(true, `\"`, positional("hoge" , 1, 3), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\"hoge`w) == result(true, `\"`, positional("hoge"w, 1, 3), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\"hoge`d) == result(true, `\"`, positional("hoge"d, 1, 3), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge` )) == result(true, `\"`, positional(testRange("hoge" ), 1, 3), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge`w)) == result(true, `\"`, positional(testRange("hoge"w), 1, 3), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge`d)) == result(true, `\"`, positional(testRange("hoge"d), 1, 3), Error.init));
 
-                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge`) == result(true, `\U0010FFFF`, positional("hoge", 1, 11), Error()));
-                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge`w) == result(true, `\U0010FFFF`, positional("hoge"w, 1, 11), Error()));
-                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge`d) == result(true, `\U0010FFFF`, positional("hoge"d, 1, 11), Error()));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge`)) == result(true, `\U0010FFFF`, positional(testRange("hoge"), 1, 11), Error()));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge`w)) == result(true, `\U0010FFFF`, positional(testRange("hoge"w), 1, 11), Error()));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge`d)) == result(true, `\U0010FFFF`, positional(testRange("hoge"d), 1, 11), Error()));
+                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge` ) == result(true, `\U0010FFFF`, positional("hoge" , 1, 11), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge`w) == result(true, `\U0010FFFF`, positional("hoge"w, 1, 11), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge`d) == result(true, `\U0010FFFF`, positional("hoge"d, 1, 11), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge` )) == result(true, `\U0010FFFF`, positional(testRange("hoge" ), 1, 11), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge`w)) == result(true, `\U0010FFFF`, positional(testRange("hoge"w), 1, 11), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge`d)) == result(true, `\U0010FFFF`, positional(testRange("hoge"d), 1, 11), Error.init));
 
-                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge`) == result(true, `\u10FF`, positional("hoge", 1, 7), Error()));
-                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge`w) == result(true, `\u10FF`, positional("hoge"w, 1, 7), Error()));
-                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge`d) == result(true, `\u10FF`, positional("hoge"d, 1, 7), Error()));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge`)) == result(true, `\u10FF`, positional(testRange("hoge"), 1, 7), Error()));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge`w)) == result(true, `\u10FF`, positional(testRange("hoge"w), 1, 7), Error()));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge`d)) == result(true, `\u10FF`, positional(testRange("hoge"d), 1, 7), Error()));
+                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge` ) == result(true, `\u10FF`, positional("hoge" , 1, 7), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge`w) == result(true, `\u10FF`, positional("hoge"w, 1, 7), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge`d) == result(true, `\u10FF`, positional("hoge"d, 1, 7), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge` )) == result(true, `\u10FF`, positional(testRange("hoge" ), 1, 7), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge`w)) == result(true, `\u10FF`, positional(testRange("hoge"w), 1, 7), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge`d)) == result(true, `\u10FF`, positional(testRange("hoge"d), 1, 7), Error.init));
 
-                assert(getResult!(parseEscapeSequence!())(`\nhoge`) == result(true, `\n`, positional("hoge", 1, 3), Error()));
-                assert(getResult!(parseEscapeSequence!())(`\nhoge`w) == result(true, `\n`, positional("hoge"w, 1, 3), Error()));
-                assert(getResult!(parseEscapeSequence!())(`\nhoge`d) == result(true, `\n`, positional("hoge"d, 1, 3), Error()));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge`)) == result(true, `\n`, positional(testRange("hoge"), 1, 3), Error()));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge`w)) == result(true, `\n`, positional(testRange("hoge"w), 1, 3), Error()));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge`d)) == result(true, `\n`, positional(testRange("hoge"d), 1, 3), Error()));
+                assert(getResult!(parseEscapeSequence!())(`\nhoge` ) == result(true, `\n`, positional("hoge" , 1, 3), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\nhoge`w) == result(true, `\n`, positional("hoge"w, 1, 3), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\nhoge`d) == result(true, `\n`, positional("hoge"d, 1, 3), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge` )) == result(true, `\n`, positional(testRange("hoge" ), 1, 3), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge`w)) == result(true, `\n`, positional(testRange("hoge"w), 1, 3), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge`d)) == result(true, `\n`, positional(testRange("hoge"d), 1, 3), Error.init));
 
-                assert(getResult!(parseEscapeSequence!())("鬱hoge") == result(false, "", positional(""), Error("escape sequence", 1, 1)));
+                assert(getResult!(parseEscapeSequence!())("鬱hoge" ) == result(false, "", positional("" ), Error("escape sequence", 1, 1)));
                 assert(getResult!(parseEscapeSequence!())("鬱hoge"w) == result(false, "", positional(""w), Error("escape sequence", 1, 1)));
                 assert(getResult!(parseEscapeSequence!())("鬱hoge"d) == result(false, "", positional(""d), Error("escape sequence", 1, 1)));
-                assert(getResult!(parseEscapeSequence!())(testRange("鬱hoge")) == result(false, "", positional(testRange("")), Error("escape sequence", 1, 1)));
+                assert(getResult!(parseEscapeSequence!())(testRange("鬱hoge" )) == result(false, "", positional(testRange("" )), Error("escape sequence", 1, 1)));
                 assert(getResult!(parseEscapeSequence!())(testRange("鬱hoge"w)) == result(false, "", positional(testRange(""w)), Error("escape sequence", 1, 1)));
                 assert(getResult!(parseEscapeSequence!())(testRange("鬱hoge"d)) == result(false, "", positional(testRange(""d)), Error("escape sequence", 1, 1)));
                 return true;
@@ -1659,76 +1659,19 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                /* \s <= "\thoge" */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(parseSpace!())("\thoge");
-                        assert(result.match);
-                        assert(result.value == "\t");
-                        assert(result.rest == positional("hoge", 1, 2));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(parseSpace!())("\thoge"w);
-                        assert(result.match);
-                        assert(result.value == "\t");
-                        assert(result.rest == positional("hoge"w, 1, 2));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(parseSpace!())("\thoge"d);
-                        assert(result.match);
-                        assert(result.value == "\t");
-                        assert(result.rest == positional("hoge"d, 1, 2));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(parseSpace!())(testRange("\thoge"));
-                        assert(result.match);
-                        assert(result.value == "\t");
-                        assert(result.rest == positional(testRange("hoge"), 1, 2));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(parseSpace!())(testRange("\thoge"w));
-                        assert(result.match);
-                        assert(result.value == "\t");
-                        assert(result.rest == positional(testRange("hoge"w), 1, 2));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(parseSpace!())(testRange("\thoge"d));
-                        assert(result.match);
-                        assert(result.value == "\t");
-                        assert(result.rest == positional(testRange("hoge"d), 1, 2));
-                    }}
-                }
-                /* \s <= "hoge"   */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(parseSpace!())("hoge");
-                        assert(!result.match);
-                        assert(result.error == Error("space", 1, 1));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(parseSpace!())("hoge"w);
-                        assert(!result.match);
-                        assert(result.error == Error("space", 1, 1));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(parseSpace!())("hoge"d);
-                        assert(!result.match);
-                        assert(result.error == Error("space", 1, 1));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(parseSpace!())("hoge");
-                        assert(!result.match);
-                        assert(result.error == Error("space", 1, 1));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(parseSpace!())("hoge"w);
-                        assert(!result.match);
-                        assert(result.error == Error("space", 1, 1));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(parseSpace!())("hoge"d);
-                        assert(!result.match);
-                        assert(result.error == Error("space", 1, 1));
-                    }}
-                }
+                assert(getResult!(parseSpace!())("\thoge" ) == result(true, "\t", positional("hoge" , 1, 2), Error.init));
+                assert(getResult!(parseSpace!())("\thoge"w) == result(true, "\t", positional("hoge"w, 1, 2), Error.init));
+                assert(getResult!(parseSpace!())("\thoge"d) == result(true, "\t", positional("hoge"d, 1, 2), Error.init));
+                assert(getResult!(parseSpace!())(testRange("\thoge"))  == result(true, "\t", positional(testRange("hoge"),  1, 2), Error.init));
+                assert(getResult!(parseSpace!())(testRange("\thoge"w)) == result(true, "\t", positional(testRange("hoge"w), 1, 2), Error.init));
+                assert(getResult!(parseSpace!())(testRange("\thoge"d)) == result(true, "\t", positional(testRange("hoge"d), 1, 2), Error.init));
+
+                assert(getResult!(parseSpace!())("hoge" ) == result(false, "", positional("" ), Error("space", 1, 1)));
+                assert(getResult!(parseSpace!())("hoge"w) == result(false, "", positional(""w), Error("space", 1, 1)));
+                assert(getResult!(parseSpace!())("hoge"d) == result(false, "", positional(""d), Error("space", 1, 1)));
+                assert(getResult!(parseSpace!())(testRange("hoge" )) == result(false, "", positional(testRange("" )), Error("space", 1, 1)));
+                assert(getResult!(parseSpace!())(testRange("hoge"w)) == result(false, "", positional(testRange(""w)), Error("space", 1, 1)));
+                assert(getResult!(parseSpace!())(testRange("hoge"d)) == result(false, "", positional(testRange(""d)), Error("space", 1, 1)));
                 return true;
             };
             debug(ctpg_ct) static assert(dg());
@@ -1752,91 +1695,24 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                /* $ <= ""     */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(parseEOF!())("");
-                        assert(result.match);
-                        assert(result.rest == positional("", 1, 1));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(parseEOF!())(""w);
-                        assert(result.match);
-                        assert(result.rest == positional(""w, 1, 1));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(parseEOF!())(""d);
-                        assert(result.match);
-                        assert(result.rest == positional(""d, 1, 1));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(parseEOF!())(testRange(""));
-                        assert(result.match);
-                        assert(result.rest == positional(testRange(""), 1, 1));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(parseEOF!())(testRange(""w));
-                        assert(result.match);
-                        assert(result.rest == positional(testRange(""w), 1, 1));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(parseEOF!())(testRange(""d));
-                        assert(result.match);
-                        assert(result.rest == positional(testRange(""d), 1, 1));
-                    }}
-                }
-                /* $ <= "hoge" */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(parseEOF!())("hoge");
-                        assert(!result.match);
-                        assert(result.error == Error("EOF", 1, 1));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(parseEOF!())("hoge"w);
-                        assert(!result.match);
-                        assert(result.error == Error("EOF", 1, 1));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(parseEOF!())("hoge"d);
-                        assert(!result.match);
-                        assert(result.error == Error("EOF", 1, 1));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(parseEOF!())(testRange("hoge"));
-                        assert(!result.match);
-                        assert(result.error == Error("EOF", 1, 1));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(parseEOF!())(testRange("hoge"w));
-                        assert(!result.match);
-                        assert(result.error == Error("EOF", 1, 1));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(parseEOF!())(testRange("hoge"d));
-                        assert(!result.match);
-                        assert(result.error == Error("EOF", 1, 1));
-                    }}
-                }
+                assert(getResult!(parseEOF!())("" ) == result(true, None.init, positional("" , 1, 1), Error.init));
+                assert(getResult!(parseEOF!())(""w) == result(true, None.init, positional(""w, 1, 1), Error.init));
+                assert(getResult!(parseEOF!())(""d) == result(true, None.init, positional(""d, 1, 1), Error.init));
+                assert(getResult!(parseEOF!())(testRange("" )) == result(true, None.init, positional(testRange("" ), 1, 1), Error.init));
+                assert(getResult!(parseEOF!())(testRange(""w)) == result(true, None.init, positional(testRange(""w), 1, 1), Error.init));
+                assert(getResult!(parseEOF!())(testRange(""d)) == result(true, None.init, positional(testRange(""d), 1, 1), Error.init));
+
+                assert(getResult!(parseEOF!())("hoge" ) == result(false, None.init, positional("" , 1, 1), Error("EOF", 1, 1)));
+                assert(getResult!(parseEOF!())("hoge"w) == result(false, None.init, positional(""w, 1, 1), Error("EOF", 1, 1)));
+                assert(getResult!(parseEOF!())("hoge"d) == result(false, None.init, positional(""d, 1, 1), Error("EOF", 1, 1)));
+                assert(getResult!(parseEOF!())(testRange("hoge" )) == result(false, None.init, positional(testRange("" ), 1, 1), Error("EOF", 1, 1)));
+                assert(getResult!(parseEOF!())(testRange("hoge"w)) == result(false, None.init, positional(testRange(""w), 1, 1), Error("EOF", 1, 1)));
+                assert(getResult!(parseEOF!())(testRange("hoge"d)) == result(false, None.init, positional(testRange(""d), 1, 1), Error("EOF", 1, 1)));
                 return true;
             };
             debug(ctpg_ct) static assert(dg());
             dg();
         }
-    }
-
-    debug(ctpg) unittest{
-        enum dg = {
-            return true;
-        };
-        debug(ctpg_ct) static assert(dg());
-        dg();
-    }
-
-    debug(ctpg) unittest{
-        enum dg = {
-            return true;
-        };
-        debug(ctpg_ct) static assert(dg());
-        dg();
     }
 }
 
