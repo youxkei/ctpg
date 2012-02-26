@@ -1,6 +1,6 @@
 // Written in the D programming language.
 /++
-This module implements a compite-time parser generator.
+This module implements a compile time parser generator.
 +/
 /*          Copyright youkei 2010 - 2012.
  * Distributed under the Boost Software License, Version 1.0.
@@ -157,7 +157,7 @@ struct Error{
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(combinateUnTuple!(TestParser!int))("" ) == result(false, 0, positional("" ), Error.init));
                 assert(getResult!(combinateUnTuple!(TestParser!int))(""w) == result(false, 0, positional(""w), Error.init));
@@ -230,7 +230,7 @@ struct Error{
                 assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int), int))))(testRange(""d)) == result(false, tuple(tuple(0, 0), 0), positional(testRange(""d)), Error.init));
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -298,7 +298,7 @@ struct Error{
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld" ) == result(true, tuple("hello", "world"), positional("" , 1, 11), Error.init));
                 assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld"w) == result(true, tuple("hello", "world"), positional(""w, 1, 11), Error.init));
@@ -329,7 +329,7 @@ struct Error{
                 assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")))(testRange("helloworld?"d)) == result(false, tuple("", "", ""), positional(testRange(""d)), Error(q{"!"}, 1, 11)));
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -362,7 +362,7 @@ struct Error{
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw" ) == result(true, "h", positional("w" , 1, 2), Error.init)); 
                 assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw"w) == result(true, "h", positional("w"w, 1, 2), Error.init)); 
@@ -386,7 +386,7 @@ struct Error{
                 assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange(""d)) == result(false, "", positional(testRange(""d)), Error(q{"h" or "w"}, 1, 1)));
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -431,7 +431,7 @@ struct Error{
             alias combinateMore!(1, parser, sep) combinateMore1;
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))("www w" ) == result(true, "www", positional(" w" , 1, 4), Error.init));
                 assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))("www w"w) == result(true, "www", positional(" w"w, 1, 4), Error.init));
@@ -462,7 +462,7 @@ struct Error{
                 assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange(" w"d)) == result(false, "", positional(testRange(""d)), Error(q{"w"}, 1, 1)));
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -485,7 +485,7 @@ struct Error{
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(combinateOption!(parseString!"w"))("w" ) == result(true, option(true, "w"), positional("" , 1, 2), Error.init));
                 assert(getResult!(combinateOption!(parseString!"w"))("w"w) == result(true, option(true, "w"), positional(""w, 1, 2), Error.init));
@@ -502,7 +502,7 @@ struct Error{
                 assert(getResult!(combinateOption!(parseString!"w"))(testRange("hoge"d)) == result(true, option(false, ""), positional(testRange("hoge"d), 1, 1), Error.init));
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -523,7 +523,7 @@ struct Error{
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)" ) == result(true, "w", positional("" , 1, 4), Error.init));
                 assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)"w) == result(true, "w", positional(""w, 1, 4), Error.init));
@@ -547,7 +547,7 @@ struct Error{
                 assert(getResult!(combinateNone!(parseString!"w"))(testRange("a"d)) == result(false, None.init, positional(testRange(""d)), Error(q{"w"}, 1, 1)));
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -565,7 +565,7 @@ struct Error{
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(combinateAnd!(parseString!"w"))("www" ) == result(true, None.init, positional("www" , 1, 1), Error.init));
                 assert(getResult!(combinateAnd!(parseString!"w"))("www"w) == result(true, None.init, positional("www"w, 1, 1), Error.init));
@@ -596,7 +596,7 @@ struct Error{
                 assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("w"d)) == result(false, "", positional(testRange(""d)), Error(q{"w"}, 1, 2)));
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -612,7 +612,7 @@ struct Error{
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))("wwws" ) == result(true, "ww", positional("ws" , 1, 3), Error.init));
                 assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))("wwws"w) == result(true, "ww", positional("ws"w, 1, 3), Error.init));
@@ -622,7 +622,7 @@ struct Error{
                 assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))(testRange("wwws"d)) == result(true, "ww", positional(testRange("ws"d), 1, 3), Error.init));
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -668,7 +668,7 @@ struct Error{
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www" ) == result(true, 3u, positional("" , 1, 4), Error.init));
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www"w) == result(true, 3u, positional(""w, 1, 4), Error.init));
@@ -685,7 +685,7 @@ struct Error{
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a"d)) == result(false, 0u, positional(testRange(""d)), Error(q{"w"}, 1, 1)));
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -709,7 +709,7 @@ struct Error{
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwwww" ) == result(true, "wwwww", positional("" , 1, 6), Error.init));
                 assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwwww"w) == result(true, "wwwww", positional(""w, 1, 6), Error.init));
@@ -726,7 +726,7 @@ struct Error{
                 assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwww"d)) == result(false, "", positional(testRange(""d)), Error("passing check", 1, 1)));
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -744,7 +744,7 @@ struct Error{
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(parseNone!())("hoge" ) == result(true, None.init, positional("hoge" , 1, 1), Error.init));
                 assert(getResult!(parseNone!())("hoge"w) == result(true, None.init, positional("hoge"w, 1, 1), Error.init));
@@ -754,7 +754,7 @@ struct Error{
                 assert(getResult!(parseNone!())(testRange("hoge"d)) == result(true, None.init, positional(testRange("hoge"d), 1, 1), Error.init));
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -797,7 +797,7 @@ struct Error{
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(parseString!"hello")("hello world" ) == result(true, "hello", positional(" world" , 1, 6), Error.init));
                 assert(getResult!(parseString!"hello")("hello world"w) == result(true, "hello", positional(" world"w, 1, 6), Error.init));
@@ -828,7 +828,7 @@ struct Error{
                 assert(getResult!(parseString!"hello")(testRange("hllo world"d)) == result(false, "", positional(testRange(""d)), Error("\"hello\"", 1, 1)));
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -875,7 +875,7 @@ struct Error{
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(parseCharRange!('a', 'z'))("hoge" ) == result(true, "h", positional("oge" , 1, 2), Error.init));
                 assert(getResult!(parseCharRange!('a', 'z'))("hoge"w) == result(true, "h", positional("oge"w, 1, 2), Error.init));
@@ -899,7 +899,7 @@ struct Error{
                 assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("hello world"d)) == result(false, "", positional(testRange(""d)), Error("c: '\u0100' <= c <= '\U0010FFFF'", 1, 1)));
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -995,7 +995,7 @@ struct Error{
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(parseEscapeSequence!())(`\"hoge` ) == result(true, `\"`, positional("hoge" , 1, 3), Error.init));
                 assert(getResult!(parseEscapeSequence!())(`\"hoge`w) == result(true, `\"`, positional("hoge"w, 1, 3), Error.init));
@@ -1033,7 +1033,7 @@ struct Error{
                 assert(getResult!(parseEscapeSequence!())(testRange("鬱hoge"d)) == result(false, "", positional(testRange(""d)), Error("escape sequence", 1, 1)));
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -1071,7 +1071,7 @@ struct Error{
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(parseSpace!())("\thoge" ) == result(true, "\t", positional("hoge" , 1, 2), Error.init));
                 assert(getResult!(parseSpace!())("\thoge"w) == result(true, "\t", positional("hoge"w, 1, 2), Error.init));
@@ -1088,7 +1088,7 @@ struct Error{
                 assert(getResult!(parseSpace!())(testRange("hoge"d)) == result(false, "", positional(testRange(""d)), Error("space", 1, 1)));
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -1107,7 +1107,7 @@ struct Error{
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(parseEOF!())("" ) == result(true, None.init, positional("" , 1, 1), Error.init));
                 assert(getResult!(parseEOF!())(""w) == result(true, None.init, positional(""w, 1, 1), Error.init));
@@ -1124,7 +1124,7 @@ struct Error{
                 assert(getResult!(parseEOF!())(testRange("hoge"d)) == result(false, None.init, positional(testRange(""d), 1, 1), Error("EOF", 1, 1)));
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -1136,7 +1136,7 @@ struct Error{
             alias parseCharRange!(dchar.min, dchar.max) parseAnyChar;
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 /* \a <= "hoge"       */ version(all){
                     /* string          */ version(all){{
@@ -1286,7 +1286,7 @@ struct Error{
                 }
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -1296,7 +1296,7 @@ struct Error{
             alias combinateNone!(combinateMore0!(parseSpace!())) parseSpaces;
         }
 
-        debug(ctpg) unittest{
+        unittest{
             static assert(is(parseSpaces!().ResultType));
             enum dg = {
                 /* \ss <= "\t \rhoge" */ version(all){
@@ -1365,7 +1365,7 @@ struct Error{
                 }
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -1395,7 +1395,7 @@ struct Error{
             ) parseIdentChar;
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 version(all){{
                     auto result = getResult!(parseIdent!())("hoge");
@@ -1427,7 +1427,7 @@ struct Error{
                 }}
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -1479,7 +1479,7 @@ struct Error{
 
         alias parseStringLiteral strLit_p;
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 {
                     auto r = getResult!(parseStringLiteral!())(q{"表が怖い噂のソフト"});
@@ -1501,7 +1501,7 @@ struct Error{
                 }
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -1533,7 +1533,7 @@ struct Error{
             alias parseIntLiteral intLit_p;
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 version(all){{
                     auto result = getResult!parseIntLiteral(q{3141});
@@ -1555,7 +1555,7 @@ struct Error{
                 }}
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -1606,7 +1606,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 string src = q{
                     bool hoge = !"hello" $ >> {return false;};
@@ -1649,7 +1649,7 @@ bool isMatch(alias fun)(string src){
                 );
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         };
     }
@@ -1686,7 +1686,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 version(all){{
                     auto result = getResult!(def!())(`bool hoge = !"hello" $ >> {return false;};`);
@@ -1731,7 +1731,7 @@ bool isMatch(alias fun)(string src){
                 }}
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         };
     }
@@ -1768,7 +1768,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 version(all){{
                     auto result = getResult!(convExp!())(q{!"hello" $ >> {return false;}});
@@ -1806,7 +1806,7 @@ bool isMatch(alias fun)(string src){
                 }}
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -1834,7 +1834,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 version(all){{
                     auto result = getResult!(choiceExp!())(`!$* / (&(^"a"))?`);
@@ -1874,7 +1874,7 @@ bool isMatch(alias fun)(string src){
                 }}
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -1893,7 +1893,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 version(all){{
                     auto result = getResult!(seqExp!())("!$* (&(^$))?");
@@ -1933,7 +1933,7 @@ bool isMatch(alias fun)(string src){
                 }}
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -1957,7 +1957,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 auto result = getResult!(optionExp!())("(&(^\"hello\"))?");
                 assert(result.match);
@@ -1974,7 +1974,7 @@ bool isMatch(alias fun)(string src){
                 );
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -2031,7 +2031,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 auto result = getResult!(postExp!())("!$*");
                 assert(result.match);
@@ -2046,7 +2046,7 @@ bool isMatch(alias fun)(string src){
                 );
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -2086,7 +2086,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 auto result = getResult!(preExp!())("!$");
                 assert(result.match);
@@ -2099,7 +2099,7 @@ bool isMatch(alias fun)(string src){
                 );
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -2124,7 +2124,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 version(all){{
                     auto result = getResult!(primaryExp!())("(&(^$)?)");
@@ -2159,7 +2159,7 @@ bool isMatch(alias fun)(string src){
                 }}
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -2177,7 +2177,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 version(all){{
                     auto result = getResult!(literal!())("\"hello\nworld\"");
@@ -2203,7 +2203,7 @@ bool isMatch(alias fun)(string src){
                 }}
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -2237,7 +2237,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 version(all){{
                     auto result = getResult!(stringLit!())("\"hello\nworld\" ");
@@ -2251,7 +2251,7 @@ bool isMatch(alias fun)(string src){
                 }}
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -2320,7 +2320,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 version(all){{
                     auto result = getResult!(rangeLit!())("[a-z]");
@@ -2343,7 +2343,7 @@ bool isMatch(alias fun)(string src){
                 }}
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -2361,7 +2361,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 version(all){{
                     auto result = getResult!(eofLit!())("$");
@@ -2375,7 +2375,7 @@ bool isMatch(alias fun)(string src){
                 }}
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -2422,7 +2422,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 version(all){{
                     auto result = getResult!(id!())("A");
@@ -2444,7 +2444,7 @@ bool isMatch(alias fun)(string src){
                 }}
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -2460,7 +2460,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 version(all){{
                     auto result = getResult!(nonterminal!())("A");
@@ -2482,7 +2482,7 @@ bool isMatch(alias fun)(string src){
                 }}
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -2516,7 +2516,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 version(all){{
                     auto result = getResult!(typeName!())("int");
@@ -2538,7 +2538,7 @@ bool isMatch(alias fun)(string src){
                 }}
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -2562,7 +2562,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 auto result = getResult!(func!())(
                 "(int num, string code){"
@@ -2598,7 +2598,7 @@ bool isMatch(alias fun)(string src){
                 );
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -2632,7 +2632,7 @@ bool isMatch(alias fun)(string src){
             }
         }
 
-        debug(ctpg) unittest{
+        unittest{
             enum dg = {
                 version(all){{
                     auto result = getResult!(arch!("(", ")"))("(a(i(u)e)o())");
@@ -2655,7 +2655,7 @@ bool isMatch(alias fun)(string src){
                 }}
                 return true;
             };
-            debug(ctpg_ct) static assert(dg());
+            debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -2683,7 +2683,7 @@ string flat(Arg)(Arg arg){
     }
 }
 
-debug(ctpg) unittest{
+unittest{
     enum dg = {
         version(all){{
             auto result = flat(tuple(1, "hello", tuple(2, "world")));
@@ -2704,7 +2704,7 @@ debug(ctpg) unittest{
         }}
         return true;
     };
-    debug(ctpg_ct) static assert(dg());
+    debug(ctpg_compile_time) static assert(dg());
     dg();
 }
 
@@ -2717,13 +2717,13 @@ string mkString(string[] strs, string sep = ""){
     return result;
 }
 
-debug(ctpg) void main(){
+debug void main(){
     import std.stdio; writeln("unittest passed");
 }
 
 private:
 
-debug(ctpg) version(unittest) template TestParser(T){
+version(unittest) template TestParser(T){
     alias T ResultType;
     Result!(Range, ResultType) parse(Range)(Positional!Range input, ref memo_t memo){
         typeof(return) result;
@@ -2731,7 +2731,7 @@ debug(ctpg) version(unittest) template TestParser(T){
     }
 }
 
-debug(ctpg) version(unittest) struct TestRange(T){
+version(unittest) struct TestRange(T){
     immutable(T)[] source;
     @property T front(){ return source[0]; }
     @property void popFront(){ source = source[1..$]; }
@@ -2744,7 +2744,7 @@ debug(ctpg) version(unittest) struct TestRange(T){
     }
 }
 
-debug(ctpg) version(unittest) TestRange!(T) testRange(T)(immutable(T)[] source){
+version(unittest) TestRange!(T) testRange(T)(immutable(T)[] source){
     return TestRange!T(source);
 }
 
@@ -2768,7 +2768,7 @@ template staticConvertString(string tstring, T){
     }
 }
 
-debug(ctpg) unittest{
+unittest{
     static assert(staticConvertString!("foobar", string) == "foobar");
     static assert(staticConvertString!("foobar", wstring) == "foobar"w);
     static assert(staticConvertString!("foobar", dstring) == "foobar"d);
@@ -2794,7 +2794,7 @@ Tuple!(size_t, "line", size_t, "column") countBreadth(string str)in{
     return result;
 }
 
-debug(ctpg) unittest{
+unittest{
     static assert({
         version(all){{
             auto result = countBreadth("これ\nとこれ");
@@ -2823,7 +2823,7 @@ template ParserType(alias parser){
     }
 }
 
-debug(ctpg) unittest{
+unittest{
     static assert(is(ParserType!(TestParser!string) == string));
     static assert(is(ParserType!(TestParser!int) == int));
     static assert(is(ParserType!(TestParser!long) == long));
@@ -2838,7 +2838,7 @@ template flatTuple(T){
     }
 }
 
-debug(ctpg) unittest{
+unittest{
     static assert(is(flatTuple!(string) == string));
     static assert(is(flatTuple!(Tuple!(string)) == TypeTuple!string));
     static assert(is(flatTuple!(Tuple!(Tuple!(string))) == TypeTuple!(Tuple!string)));
@@ -2848,7 +2848,7 @@ template CombinateSequenceImplType(parsers...){
     alias Tuple!(staticMap!(flatTuple, staticMap!(ParserType, parsers))) CombinateSequenceImplType;
 }
 
-debug(ctpg) unittest{
+unittest{
     static assert(is(CombinateSequenceImplType!(TestParser!string, TestParser!string) == Tuple!(string, string)));
     static assert(is(CombinateSequenceImplType!(TestParser!int, TestParser!long) == Tuple!(int, long)));
     static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(int, long)), TestParser!uint) == Tuple!(int, long, uint)));
@@ -2860,7 +2860,7 @@ template CommonParserType(tparsers...){
     alias CommonType!(staticMap!(ParserType, tparsers)) CommonParserType;
 }
 
-debug(ctpg) unittest{
+unittest{
     static assert(is(CommonParserType!(TestParser!string, TestParser!string) == string));
     static assert(is(CommonParserType!(TestParser!int, TestParser!long) == long));
     static assert(is(CommonParserType!(TestParser!byte, TestParser!short, TestParser!int) == int));
@@ -2925,7 +2925,7 @@ dchar decode(Range)(ref Range range){
     }
 }
 
-debug(ctpg) unittest{
+unittest{
     enum dg = {
         assert(decode([testRange("\u0001")][0]) == '\u0001');
         assert(decode([testRange("\u0081")][0]) == '\u0081');
@@ -2937,13 +2937,13 @@ debug(ctpg) unittest{
         assert(decode([testRange("\U0010FFFE")][0]) == '\U0010FFFE');
         return true;
     };
-    debug(ctpg_ct) static assert(dg());
+    debug(ctpg_compile_time) static assert(dg());
     dg();
 }
 
-version(all) debug(ctpg) public:
+version(all) public:
 
-mixin ctpg!q{
+version(unittest) mixin ctpg!q{
     int root = addExp $;
 
     int addExp = mulExp (("+" / "-") addExp)? >> (int lhs, Option!(Tuple!(string, int)) rhs){
@@ -2985,27 +2985,24 @@ mixin ctpg!q{
 
 unittest{
     enum dg = {
-        version(all){{
-            assert(parse!root("5*8+3*20") == 100);
-            assert(parse!root("5*(8+3)*20") == 1100);
-            try{
-                parse!root("5*(8+3)20");
-            }catch(Exception e){
-                assert(e.msg == "1: 8: error EOF is needed");
-            }
-        }}
-        version(all){{
-            assert( isMatch!recursive("a"));
-            assert( isMatch!recursive("aaa"));
-            assert(!isMatch!recursive("aaaaa"));
-            assert( isMatch!recursive("aaaaaaa"));
-            assert(!isMatch!recursive("aaaaaaaaa"));
-            assert(!isMatch!recursive("aaaaaaaaaaa"));
-            assert(!isMatch!recursive("aaaaaaaaaaaaa"));
-            assert( isMatch!recursive("aaaaaaaaaaaaaaa"));
-        }}
+        assert(parse!root("5*8+3*20") == 100);
+        assert(parse!root("5*(8+3)*20") == 1100);
+        try{
+            parse!root("5*(8+3)20");
+        }catch(Exception e){
+            assert(e.msg == "1: 8: error EOF is needed");
+        }
+
+        assert( isMatch!recursive("a"));
+        assert( isMatch!recursive("aaa"));
+        assert(!isMatch!recursive("aaaaa"));
+        assert( isMatch!recursive("aaaaaaa"));
+        assert(!isMatch!recursive("aaaaaaaaa"));
+        assert(!isMatch!recursive("aaaaaaaaaaa"));
+        assert(!isMatch!recursive("aaaaaaaaaaaaa"));
+        assert( isMatch!recursive("aaaaaaaaaaaaaaa"));
         return true;
     };
-    debug(ctpg_ct) static assert(dg());
+    debug(ctpg_compile_time) static assert(dg());
     dg();
 }
