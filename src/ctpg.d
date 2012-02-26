@@ -35,6 +35,10 @@ struct Option(T){
     }
 }
 
+Option!T option(T)(bool some, T value){
+    return Option!T(some, value);
+}
+
 struct Positional(Range){
     static assert(isForwardRange!Range && isSomeChar!(ElementType!Range));
 
@@ -155,16 +159,75 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                assert(getResult!(combinateUnTuple!(TestParser!int))("").value == 0);
-                assert(getResult!(combinateUnTuple!(TestParser!long))("").value == 0);
-                assert(getResult!(combinateUnTuple!(TestParser!string))("").value == "");
-                assert(getResult!(combinateUnTuple!(TestParser!wstring))("").value == ""w);
-                assert(getResult!(combinateUnTuple!(TestParser!dstring))("").value == ""d);
-                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(int))))("").value == 0);
-                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(int, int))))("").value == tuple(0, 0));
-                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int)))))("").value == tuple(0));
-                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int)))))("").value == tuple(0, 0));
-                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int), int))))("").value == tuple(tuple(0, 0), 0));
+                assert(getResult!(combinateUnTuple!(TestParser!int))("" ) == result(false, 0, positional("" ), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!int))(""w) == result(false, 0, positional(""w), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!int))(""d) == result(false, 0, positional(""d), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!int))(testRange("" )) == result(false, 0, positional(testRange("" )), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!int))(testRange(""w)) == result(false, 0, positional(testRange(""w)), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!int))(testRange(""d)) == result(false, 0, positional(testRange(""d)), Error.init));
+
+                assert(getResult!(combinateUnTuple!(TestParser!long))("" ) == result(false, 0L, positional("" ), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!long))(""w) == result(false, 0L, positional(""w), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!long))(""d) == result(false, 0L, positional(""d), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!long))(testRange("" )) == result(false, 0L, positional(testRange("" )), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!long))(testRange(""w)) == result(false, 0L, positional(testRange(""w)), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!long))(testRange(""d)) == result(false, 0L, positional(testRange(""d)), Error.init));
+
+                assert(getResult!(combinateUnTuple!(TestParser!string))("" ) == result(false, "", positional("" ), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!string))(""w) == result(false, "", positional(""w), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!string))(""d) == result(false, "", positional(""d), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!string))(testRange("" )) == result(false, "", positional(testRange("" )), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!string))(testRange(""w)) == result(false, "", positional(testRange(""w)), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!string))(testRange(""d)) == result(false, "", positional(testRange(""d)), Error.init));
+
+                assert(getResult!(combinateUnTuple!(TestParser!wstring))("" ) == result(false, ""w, positional("" ), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!wstring))(""w) == result(false, ""w, positional(""w), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!wstring))(""d) == result(false, ""w, positional(""d), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!wstring))(testRange("" )) == result(false, ""w, positional(testRange("" )), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!wstring))(testRange(""w)) == result(false, ""w, positional(testRange(""w)), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!wstring))(testRange(""d)) == result(false, ""w, positional(testRange(""d)), Error.init));
+
+                assert(getResult!(combinateUnTuple!(TestParser!dstring))("" ) == result(false, ""d, positional("" ), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!dstring))(""w) == result(false, ""d, positional(""w), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!dstring))(""d) == result(false, ""d, positional(""d), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!dstring))(testRange("" )) == result(false, ""d, positional(testRange("" )), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!dstring))(testRange(""w)) == result(false, ""d, positional(testRange(""w)), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!dstring))(testRange(""d)) == result(false, ""d, positional(testRange(""d)), Error.init));
+
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!int)))("" ) == result(false, 0, positional("" ), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!int)))(""w) == result(false, 0, positional(""w), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!int)))(""d) == result(false, 0, positional(""d), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!int)))(testRange("" )) == result(false, 0, positional(testRange("" )), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!int)))(testRange(""w)) == result(false, 0, positional(testRange(""w)), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!int)))(testRange(""d)) == result(false, 0, positional(testRange(""d)), Error.init));
+
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(int, int))))("" ) == result(false, tuple(0, 0), positional("" ), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(int, int))))(""w) == result(false, tuple(0, 0), positional(""w), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(int, int))))(""d) == result(false, tuple(0, 0), positional(""d), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(int, int))))(testRange("" )) == result(false, tuple(0, 0), positional(testRange("" )), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(int, int))))(testRange(""w)) == result(false, tuple(0, 0), positional(testRange(""w)), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(int, int))))(testRange(""d)) == result(false, tuple(0, 0), positional(testRange(""d)), Error.init));
+
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!int))))("" ) == result(false, tuple(0), positional("" ), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!int))))(""w) == result(false, tuple(0), positional(""w), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!int))))(""d) == result(false, tuple(0), positional(""d), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!int))))(testRange("" )) == result(false, tuple(0), positional(testRange("" )), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!int))))(testRange(""w)) == result(false, tuple(0), positional(testRange(""w)), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!int))))(testRange(""d)) == result(false, tuple(0), positional(testRange(""d)), Error.init));
+
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int)))))("" ) == result(false, tuple(0, 0), positional("" ), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int)))))(""w) == result(false, tuple(0, 0), positional(""w), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int)))))(""d) == result(false, tuple(0, 0), positional(""d), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int)))))(testRange("" )) == result(false, tuple(0, 0), positional(testRange("" )), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int)))))(testRange(""w)) == result(false, tuple(0, 0), positional(testRange(""w)), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int)))))(testRange(""d)) == result(false, tuple(0, 0), positional(testRange(""d)), Error.init));
+
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int), int))))("" ) == result(false, tuple(tuple(0, 0), 0), positional("" ), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int), int))))(""w) == result(false, tuple(tuple(0, 0), 0), positional(""w), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int), int))))(""d) == result(false, tuple(tuple(0, 0), 0), positional(""d), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int), int))))(testRange("" )) == result(false, tuple(tuple(0, 0), 0), positional(testRange("" )), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int), int))))(testRange(""w)) == result(false, tuple(tuple(0, 0), 0), positional(testRange(""w)), Error.init));
+                assert(getResult!(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int), int))))(testRange(""d)) == result(false, tuple(tuple(0, 0), 0), positional(testRange(""d)), Error.init));
                 return true;
             };
             debug(ctpg_ct) static assert(dg());
@@ -237,146 +300,33 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                /* "hello" "world"       <= "helloworld"  */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld");
-                        assert(result.match);
-                        assert(result.value == tuple("hello", "world"));
-                        assert(result.rest == positional("", 1, 11));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld"w);
-                        assert(result.match);
-                        assert(result.value == tuple("hello", "world"));
-                        assert(result.rest == positional(""w, 1, 11));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld"d);
-                        assert(result.match);
-                        assert(result.value == tuple("hello", "world"));
-                        assert(result.rest == positional(""d, 1, 11));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("helloworld"));
-                        assert(result.match);
-                        assert(result.value == tuple("hello", "world"));
-                        assert(result.rest == positional(testRange(""), 1, 11));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("helloworld"w));
-                        assert(result.match);
-                        assert(result.value == tuple("hello", "world"));
-                        assert(result.rest == positional(testRange(""w), 1, 11));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("helloworld"d));
-                        assert(result.match);
-                        assert(result.value == tuple("hello", "world"));
-                        assert(result.rest == positional(testRange(""d), 1, 11));
-                    }}
-                }
-                /* ("hello" "world") "!" <= "helloworld!" */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))("helloworld!");
-                        assert(result.match);
-                        assert(result.value == tuple("hello", "world", "!"));
-                        assert(result.rest == positional("", 1, 12));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))("helloworld!"w);
-                        assert(result.match);
-                        assert(result.value == tuple("hello", "world", "!"));
-                        assert(result.rest == positional(""w, 1, 12));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))("helloworld!"d);
-                        assert(result.match);
-                        assert(result.value == tuple("hello", "world", "!"));
-                        assert(result.rest == positional(""d, 1, 12));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))(testRange("helloworld!"));
-                        assert(result.match);
-                        assert(result.value == tuple("hello", "world", "!"));
-                        assert(result.rest == positional(testRange(""), 1, 12));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))(testRange("helloworld!"w));
-                        assert(result.match);
-                        assert(result.value == tuple("hello", "world", "!"));
-                        assert(result.rest == positional(testRange(""w), 1, 12));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))(testRange("helloworld!"d));
-                        assert(result.match);
-                        assert(result.value == tuple("hello", "world", "!"));
-                        assert(result.rest == positional(testRange(""d), 1, 12));
-                    }}
-                }
-                /* "hello" "world"       <= "hellovvorld" */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("hellovvorld");
-                        assert(!result.match);
-                        assert(result.error == Error(q{"world"}, 1, 6));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("hellovvorld"w);
-                        assert(!result.match);
-                        assert(result.error == Error(q{"world"}, 1, 6));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("hellovvorld"d);
-                        assert(!result.match);
-                        assert(result.error == Error(q{"world"}, 1, 6));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("hellovvorld"));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"world"}, 1, 6));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("hellovvorld"w));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"world"}, 1, 6));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("hellovvorld"d));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"world"}, 1, 6));
-                    }}
-                }
-                /* "hello" "world" "!"   <= "helloworld?" */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")))("helloworld?");
-                        assert(!result.match);
-                        assert(result.error == Error(q{"!"}, 1, 11));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")))("helloworld?"w);
-                        assert(!result.match);
-                        assert(result.error == Error(q{"!"}, 1, 11));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")))("helloworld?"d);
-                        assert(!result.match);
-                        assert(result.error == Error(q{"!"}, 1, 11));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")))(testRange("helloworld?"));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"!"}, 1, 11));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")))(testRange("helloworld?"w));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"!"}, 1, 11));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")))(testRange("helloworld?"d));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"!"}, 1, 11));
-                    }}
-                }
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld" ) == result(true, tuple("hello", "world"), positional("" , 1, 11), Error.init));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld"w) == result(true, tuple("hello", "world"), positional(""w, 1, 11), Error.init));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld"d) == result(true, tuple("hello", "world"), positional(""d, 1, 11), Error.init));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("helloworld" )) == result(true, tuple("hello", "world"), positional(testRange("" ), 1, 11), Error.init));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("helloworld"w)) == result(true, tuple("hello", "world"), positional(testRange(""w), 1, 11), Error.init));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("helloworld"d)) == result(true, tuple("hello", "world"), positional(testRange(""d), 1, 11), Error.init));
+
+                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))("helloworld!" ) == result(true, tuple("hello", "world", "!"), positional("" , 1, 12), Error.init));
+                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))("helloworld!"w) == result(true, tuple("hello", "world", "!"), positional(""w, 1, 12), Error.init));
+                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))("helloworld!"d) == result(true, tuple("hello", "world", "!"), positional(""d, 1, 12), Error.init));
+                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))(testRange("helloworld!" )) == result(true, tuple("hello", "world", "!"), positional(testRange("" ), 1, 12), Error.init));
+                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))(testRange("helloworld!"w)) == result(true, tuple("hello", "world", "!"), positional(testRange(""w), 1, 12), Error.init));
+                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))(testRange("helloworld!"d)) == result(true, tuple("hello", "world", "!"), positional(testRange(""d), 1, 12), Error.init));
+
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("hellovvorld" ) == result(false, tuple("", ""), positional("" ), Error(q{"world"}, 1, 6)));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("hellovvorld"w) == result(false, tuple("", ""), positional(""w), Error(q{"world"}, 1, 6)));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("hellovvorld"d) == result(false, tuple("", ""), positional(""d), Error(q{"world"}, 1, 6)));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("hellovvorld" )) == result(false, tuple("", ""), positional(testRange("" )), Error(q{"world"}, 1, 6)));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("hellovvorld"w)) == result(false, tuple("", ""), positional(testRange(""w)), Error(q{"world"}, 1, 6)));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("hellovvorld"d)) == result(false, tuple("", ""), positional(testRange(""d)), Error(q{"world"}, 1, 6)));
+
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")))("helloworld?" ) == result(false, tuple("", "", ""), positional("" ), Error(q{"!"}, 1, 11)));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")))("helloworld?"w) == result(false, tuple("", "", ""), positional(""w), Error(q{"!"}, 1, 11)));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")))("helloworld?"d) == result(false, tuple("", "", ""), positional(""d), Error(q{"!"}, 1, 11)));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")))(testRange("helloworld?" )) == result(false, tuple("", "", ""), positional(testRange("" )), Error(q{"!"}, 1, 11)));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")))(testRange("helloworld?"w)) == result(false, tuple("", "", ""), positional(testRange(""w)), Error(q{"!"}, 1, 11)));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")))(testRange("helloworld?"d)) == result(false, tuple("", "", ""), positional(testRange(""d)), Error(q{"!"}, 1, 11)));
                 return true;
             };
             debug(ctpg_ct) static assert(dg());
@@ -414,114 +364,26 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                /* "h" / "w" <= "hw" */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw");
-                        assert(result.match);
-                        assert(result.value == "h");
-                        assert(result.rest == positional("w", 1, 2));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw"w);
-                        assert(result.match);
-                        assert(result.value == "h");
-                        assert(result.rest == positional("w"w, 1, 2));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw"d);
-                        assert(result.match);
-                        assert(result.value == "h");
-                        assert(result.rest == positional("w"d, 1, 2));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("hw"));
-                        assert(result.match);
-                        assert(result.value == "h");
-                        assert(result.rest == positional(testRange("w"), 1, 2));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("hw"w));
-                        assert(result.match);
-                        assert(result.value == "h");
-                        assert(result.rest == positional(testRange("w"w), 1, 2));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("hw"d));
-                        assert(result.match);
-                        assert(result.value == "h");
-                        assert(result.rest == positional(testRange("w"d), 1, 2));
-                    }}
-                }
-                /* "h" / "w" <= "w"  */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))("w");
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional("", 1, 2));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))("w");
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional("", 1, 2));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))("w");
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional("", 1, 2));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("w"));
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional(testRange(""), 1, 2));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("w"w));
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional(testRange(""w), 1, 2));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("w"d));
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional(testRange(""d), 1, 2));
-                    }}
-                }
-                /* "h" / "w" <= ""   */ version(all){{
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))("");
-                        assert(!result.match);
-                        assert(result.error == Error(q{"h" or "w"}, 1, 1));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))(""w);
-                        assert(!result.match);
-                        assert(result.error == Error(q{"h" or "w"}, 1, 1));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))(""d);
-                        assert(!result.match);
-                        assert(result.error == Error(q{"h" or "w"}, 1, 1));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange(""));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"h" or "w"}, 1, 1));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange(""w));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"h" or "w"}, 1, 1));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange(""d));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"h" or "w"}, 1, 1));
-                    }}
-                }}
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw" ) == result(true, "h", positional("w" , 1, 2), Error.init)); 
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw"w) == result(true, "h", positional("w"w, 1, 2), Error.init)); 
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw"d) == result(true, "h", positional("w"d, 1, 2), Error.init)); 
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("hw" )) == result(true, "h", positional(testRange("w" ), 1, 2), Error.init)); 
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("hw"w)) == result(true, "h", positional(testRange("w"w), 1, 2), Error.init)); 
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("hw"d)) == result(true, "h", positional(testRange("w"d), 1, 2), Error.init)); 
+
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("w" ) == result(true, "w", positional("" , 1, 2), Error.init));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("w"w) == result(true, "w", positional(""w, 1, 2), Error.init));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("w"d) == result(true, "w", positional(""d, 1, 2), Error.init));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("w" )) == result(true, "w", positional(testRange("" ), 1, 2), Error.init));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("w"w)) == result(true, "w", positional(testRange(""w), 1, 2), Error.init));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("w"d)) == result(true, "w", positional(testRange(""d), 1, 2), Error.init));
+
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("" ) == result(false, "", positional("" ), Error(q{"h" or "w"}, 1, 1)));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(""w) == result(false, "", positional(""w), Error(q{"h" or "w"}, 1, 1)));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(""d) == result(false, "", positional(""d), Error(q{"h" or "w"}, 1, 1)));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("" )) == result(false, "", positional(testRange("" )), Error(q{"h" or "w"}, 1, 1)));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange(""w)) == result(false, "", positional(testRange(""w)), Error(q{"h" or "w"}, 1, 1)));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange(""d)) == result(false, "", positional(testRange(""d)), Error(q{"h" or "w"}, 1, 1)));
                 return true;
             };
             debug(ctpg_ct) static assert(dg());
@@ -547,14 +409,16 @@ struct Error{
                             break;
                         }
                     }else{
-                        result.error = r1.error;
-                        break;
+                        if(result.value.length < n){
+                            result.error = r1.error;
+                            return result;
+                        }else{
+                            break;
+                        }
                     }
                 }
-                if(result.value.length >= n){
-                    result.match = true;
-                    result.rest = rest;
-                }
+                result.match = true;
+                result.rest = rest;
                 return result;
             }
         }
@@ -569,152 +433,33 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                /* "w"* <= "www w" */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateMore0!(parseString!"w"))("www w");
-                        assert(result.match);
-                        assert(result.value == ["w", "w", "w"]);
-                        assert(result.rest == positional(" w", 1, 4));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateMore0!(parseString!"w"))("www w"w);
-                        assert(result.match);
-                        assert(result.value == ["w", "w", "w"]);
-                        assert(result.rest == positional(" w"w, 1, 4));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateMore0!(parseString!"w"))("www w"d);
-                        assert(result.match);
-                        assert(result.value == ["w", "w", "w"]);
-                        assert(result.rest == positional(" w"d, 1, 4));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateMore0!(parseString!"w"))(testRange("www w"));
-                        assert(result.match);
-                        assert(result.value == ["w", "w", "w"]);
-                        assert(result.rest == positional(testRange(" w"), 1, 4));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateMore0!(parseString!"w"))(testRange("www w"w));
-                        assert(result.match);
-                        assert(result.value == ["w", "w", "w"]);
-                        assert(result.rest == positional(testRange(" w"w), 1, 4));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateMore0!(parseString!"w"))(testRange("www w"d));
-                        assert(result.match);
-                        assert(result.value == ["w", "w", "w"]);
-                        assert(result.rest == positional(testRange(" w"d), 1, 4));
-                    }}
-                }
-                /* "w"* <= " w"    */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateString!(combinateMore0!(parseString!"w")))(" w");
-                        assert(result.match);
-                        assert(result.value == []);
-                        assert(result.rest == positional(" w", 1, 1));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateString!(combinateMore0!(parseString!"w")))(" w"w);
-                        assert(result.match);
-                        assert(result.value == []);
-                        assert(result.rest == positional(" w"w, 1, 1));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateString!(combinateMore0!(parseString!"w")))(" w"d);
-                        assert(result.match);
-                        assert(result.value == []);
-                        assert(result.rest == positional(" w"d, 1, 1));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange(" w"));
-                        assert(result.match);
-                        assert(result.value == []);
-                        assert(result.rest == positional(testRange(" w"), 1, 1));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange(" w"w));
-                        assert(result.match);
-                        assert(result.value == []);
-                        assert(result.rest == positional(testRange(" w"w), 1, 1));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange(" w"d));
-                        assert(result.match);
-                        assert(result.value == []);
-                        assert(result.rest == positional(testRange(" w"d), 1, 1));
-                    }}
-                }
-                /* "w"+ <= "www w" */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateMore1!(parseString!"w"))("www w");
-                        assert(result.match);
-                        assert(result.value == ["w", "w", "w"]);
-                        assert(result.rest == positional(" w", 1, 4));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateMore1!(parseString!"w"))("www w"w);
-                        assert(result.match);
-                        assert(result.value == ["w", "w", "w"]);
-                        assert(result.rest == positional(" w"w, 1, 4));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateMore1!(parseString!"w"))("www w"d);
-                        assert(result.match);
-                        assert(result.value == ["w", "w", "w"]);
-                        assert(result.rest == positional(" w"d, 1, 4));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateMore1!(parseString!"w"))(testRange("www w"));
-                        assert(result.match);
-                        assert(result.value == ["w", "w", "w"]);
-                        assert(result.rest == positional(testRange(" w"), 1, 4));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateMore1!(parseString!"w"))(testRange("www w"w));
-                        assert(result.match);
-                        assert(result.value == ["w", "w", "w"]);
-                        assert(result.rest == positional(testRange(" w"w), 1, 4));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateMore1!(parseString!"w"))(testRange("www w"d));
-                        assert(result.match);
-                        assert(result.value == ["w", "w", "w"]);
-                        assert(result.rest == positional(testRange(" w"d), 1, 4));
-                    }}
-                }
-                /* "w"+ <= " w"    */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateString!(combinateMore1!(parseString!"w")))(" w");
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 1));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateString!(combinateMore1!(parseString!"w")))(" w"w);
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 1));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateString!(combinateMore1!(parseString!"w")))(" w"d);
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 1));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange(" w"));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 1));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange(" w"w));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 1));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange(" w"d));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 1));
-                    }}
-                }
+                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))("www w" ) == result(true, "www", positional(" w" , 1, 4), Error.init));
+                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))("www w"w) == result(true, "www", positional(" w"w, 1, 4), Error.init));
+                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))("www w"d) == result(true, "www", positional(" w"d, 1, 4), Error.init));
+                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange("www w" )) == result(true, "www", positional(testRange(" w" ), 1, 4), Error.init));
+                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange("www w"w)) == result(true, "www", positional(testRange(" w"w), 1, 4), Error.init));
+                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange("www w"d)) == result(true, "www", positional(testRange(" w"d), 1, 4), Error.init));
+
+                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(" w" ) == result(true, "", positional(" w" , 1, 1), Error.init));
+                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(" w"w) == result(true, "", positional(" w"w, 1, 1), Error.init));
+                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(" w"d) == result(true, "", positional(" w"d, 1, 1), Error.init));
+                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange(" w" )) == result(true, "", positional(testRange(" w" ), 1, 1), Error.init));
+                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange(" w"w)) == result(true, "", positional(testRange(" w"w), 1, 1), Error.init));
+                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange(" w"d)) == result(true, "", positional(testRange(" w"d), 1, 1), Error.init));
+
+                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))("www w" ) == result(true, "www", positional(" w" , 1, 4), Error.init));
+                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))("www w"w) == result(true, "www", positional(" w"w, 1, 4), Error.init));
+                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))("www w"d) == result(true, "www", positional(" w"d, 1, 4), Error.init));
+                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange("www w" )) == result(true, "www", positional(testRange(" w" ), 1, 4), Error.init));
+                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange("www w"w)) == result(true, "www", positional(testRange(" w"w), 1, 4), Error.init));
+                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange("www w"d)) == result(true, "www", positional(testRange(" w"d), 1, 4), Error.init));
+
+                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(" w" ) == result(false, "", positional("" ), Error(q{"w"}, 1, 1)));
+                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(" w"w) == result(false, "", positional(""w), Error(q{"w"}, 1, 1)));
+                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(" w"d) == result(false, "", positional(""d), Error(q{"w"}, 1, 1)));
+                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange(" w" )) == result(false, "", positional(testRange("" )), Error(q{"w"}, 1, 1)));
+                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange(" w"w)) == result(false, "", positional(testRange(""w)), Error(q{"w"}, 1, 1)));
+                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange(" w"d)) == result(false, "", positional(testRange(""d)), Error(q{"w"}, 1, 1)));
                 return true;
             };
             debug(ctpg_ct) static assert(dg());
@@ -742,82 +487,19 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                /* "w"? <= "w"    */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateOption!(parseString!"w"))("w");
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional("", 1, 2));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateOption!(parseString!"w"))("w"w);
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional(""w, 1, 2));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateOption!(parseString!"w"))("w"d);
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional(""d, 1, 2));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateOption!(parseString!"w"))(testRange("w"));
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional(testRange(""), 1, 2));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateOption!(parseString!"w"))(testRange("w"w));
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional(testRange(""w), 1, 2));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateOption!(parseString!"w"))(testRange("w"d));
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional(testRange(""d), 1, 2));
-                    }}
-                }
-                /* "w"? <= "hoge" */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateOption!(parseString!"w"))("hoge");
-                        assert(result.match);
-                        assert(!result.value.some);
-                        assert(result.rest == positional("hoge", 1, 1));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateOption!(parseString!"w"))("hoge"w);
-                        assert(result.match);
-                        assert(!result.value.some);
-                        assert(result.rest == positional("hoge"w, 1, 1));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateOption!(parseString!"w"))("hoge"d);
-                        assert(result.match);
-                        assert(!result.value.some);
-                        assert(result.rest == positional("hoge"d, 1, 1));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateOption!(parseString!"w"))(testRange("hoge"));
-                        assert(result.match);
-                        assert(!result.value.some);
-                        assert(result.rest == positional(testRange("hoge"), 1, 1));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateOption!(parseString!"w"))(testRange("hoge"w));
-                        assert(result.match);
-                        assert(!result.value.some);
-                        assert(result.rest == positional(testRange("hoge"w), 1, 1));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateOption!(parseString!"w"))(testRange("hoge"d));
-                        assert(result.match);
-                        assert(!result.value);
-                        assert(result.rest == positional(testRange("hoge"d), 1, 1));
-                    }}
-                }
+                assert(getResult!(combinateOption!(parseString!"w"))("w" ) == result(true, option(true, "w"), positional("" , 1, 2), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))("w"w) == result(true, option(true, "w"), positional(""w, 1, 2), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))("w"d) == result(true, option(true, "w"), positional(""d, 1, 2), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("w" )) == result(true, option(true, "w"), positional(testRange("" ), 1, 2), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("w"w)) == result(true, option(true, "w"), positional(testRange(""w), 1, 2), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("w"d)) == result(true, option(true, "w"), positional(testRange(""d), 1, 2), Error.init));
+
+                assert(getResult!(combinateOption!(parseString!"w"))("hoge" ) == result(true, option(false, ""), positional("hoge" , 1, 1), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))("hoge"w) == result(true, option(false, ""), positional("hoge"w, 1, 1), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))("hoge"d) == result(true, option(false, ""), positional("hoge"d, 1, 1), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("hoge" )) == result(true, option(false, ""), positional(testRange("hoge" ), 1, 1), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("hoge"w)) == result(true, option(false, ""), positional(testRange("hoge"w), 1, 1), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("hoge"d)) == result(true, option(false, ""), positional(testRange("hoge"d), 1, 1), Error.init));
                 return true;
             };
             debug(ctpg_ct) static assert(dg());
@@ -843,108 +525,26 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                /* !"(" "w" !")" <= "(w)" */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)");
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional("", 1, 4));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)"w);
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional(""w, 1, 4));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)"d);
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional(""d, 1, 4));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w)"));
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional(testRange(""), 1, 4));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w)"w));
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional(testRange(""w), 1, 4));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w)"d));
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional(testRange(""d), 1, 4));
-                    }}
-                }
-                /* !"(" "w" !")" <= "(w}" */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w}");
-                        assert(!result.match);
-                        assert(result.error == Error(q{")"}, 1, 3));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w}"w);
-                        assert(!result.match);
-                        assert(result.error == Error(q{")"}, 1, 3));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w}"d);
-                        assert(!result.match);
-                        assert(result.error == Error(q{")"}, 1, 3));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w}"));
-                        assert(!result.match);
-                        assert(result.error == Error(q{")"}, 1, 3));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w}"w));
-                        assert(!result.match);
-                        assert(result.error == Error(q{")"}, 1, 3));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w}"d));
-                        assert(!result.match);
-                        assert(result.error == Error(q{")"}, 1, 3));
-                    }}
-                }
-                /* !"w"          <= "a"   */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateNone!(parseString!"w"))("a");
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 1));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateNone!(parseString!"w"))("a"w);
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 1));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateNone!(parseString!"w"))("a"d);
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 1));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateNone!(parseString!"w"))(testRange("a"));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 1));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateNone!(parseString!"w"))(testRange("a"w));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 1));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateNone!(parseString!"w"))(testRange("a"d));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 1));
-                    }}
-                }
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)" ) == result(true, "w", positional("" , 1, 4), Error.init));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)"w) == result(true, "w", positional(""w, 1, 4), Error.init));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)"d) == result(true, "w", positional(""d, 1, 4), Error.init));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w)" )) == result(true, "w", positional(testRange("" ), 1, 4), Error.init));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w)"w)) == result(true, "w", positional(testRange(""w), 1, 4), Error.init));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w)"d)) == result(true, "w", positional(testRange(""d), 1, 4), Error.init));
+
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w}" ) == result(false, "", positional("" ), Error(q{")"}, 1, 3)));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w}"w) == result(false, "", positional(""w), Error(q{")"}, 1, 3)));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w}"d) == result(false, "", positional(""d), Error(q{")"}, 1, 3)));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w}" )) == result(false, "", positional(testRange("" )), Error(q{")"}, 1, 3)));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w}"w)) == result(false, "", positional(testRange(""w)), Error(q{")"}, 1, 3)));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w}"d)) == result(false, "", positional(testRange(""d)), Error(q{")"}, 1, 3)));
+
+                assert(getResult!(combinateNone!(parseString!"w"))("a" ) == result(false, None.init, positional("" ), Error(q{"w"}, 1, 1)));
+                assert(getResult!(combinateNone!(parseString!"w"))("a"w) == result(false, None.init, positional(""w), Error(q{"w"}, 1, 1)));
+                assert(getResult!(combinateNone!(parseString!"w"))("a"d) == result(false, None.init, positional(""d), Error(q{"w"}, 1, 1)));
+                assert(getResult!(combinateNone!(parseString!"w"))(testRange("a" )) == result(false, None.init, positional(testRange("" )), Error(q{"w"}, 1, 1)));
+                assert(getResult!(combinateNone!(parseString!"w"))(testRange("a"w)) == result(false, None.init, positional(testRange(""w)), Error(q{"w"}, 1, 1)));
+                assert(getResult!(combinateNone!(parseString!"w"))(testRange("a"d)) == result(false, None.init, positional(testRange(""d)), Error(q{"w"}, 1, 1)));
                 return true;
             };
             debug(ctpg_ct) static assert(dg());
@@ -958,164 +558,42 @@ struct Error{
             Result!(Range, ResultType) parse(Range)(Positional!Range input, ref memo_t memo){
                 typeof(return) result;
                 result.rest = input;
-                version(all){
-                    auto r = parser.parse(input, memo);
-                    result.match = r.match;
-                    result.error = r.error;
-                }
-                version(none) result.match = parser.parse(input, memo).match;
+                auto r = parser.parse(input, memo);
+                result.match = r.match;
+                result.error = r.error;
                 return result;
             }
         }
 
         debug(ctpg) unittest{
             enum dg = {
-                /* &"w"        <= "www" */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateAnd!(parseString!"w"))("www");
-                        assert(result.match);
-                        assert(result.value == None());
-                        assert(result.rest == positional("www", 1, 1));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateAnd!(parseString!"w"))("www"w);
-                        assert(result.match);
-                        assert(result.value == None());
-                        assert(result.rest == positional("www"w, 1, 1));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateAnd!(parseString!"w"))("www"d);
-                        assert(result.match);
-                        assert(result.value == None());
-                        assert(result.rest == positional("www"d, 1, 1));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateAnd!(parseString!"w"))(testRange("www"));
-                        assert(result.match);
-                        assert(result.value == None());
-                        assert(result.rest == positional(testRange("www"), 1, 1));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateAnd!(parseString!"w"))(testRange("www"w));
-                        assert(result.match);
-                        assert(result.value == None());
-                        assert(result.rest == positional(testRange("www"w), 1, 1));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateAnd!(parseString!"w"))(testRange("www"d));
-                        assert(result.match);
-                        assert(result.value == None());
-                        assert(result.rest == positional(testRange("www"d), 1, 1));
-                    }}
-                }
-                /* "w" &"w"    <= "www" */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))("www");
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional("ww", 1, 2));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))("www"w);
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional("ww"w, 1, 2));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))("www"d);
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional("ww"d, 1, 2));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))(testRange("www"));
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional(testRange("ww"), 1, 2));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))(testRange("www"w));
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional(testRange("ww"w), 1, 2));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))(testRange("www"d));
-                        assert(result.match);
-                        assert(result.value == "w");
-                        assert(result.rest == positional(testRange("ww"d), 1, 2));
-                    }}
-                }
-                /* ("w" &"w")+ <= "www" */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))))("www");
-                        assert(result.match);
-                        assert(result.value == ["w", "w"]);
-                        assert(result.rest == positional("w", 1, 3));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))))("www"w);
-                        assert(result.match);
-                        assert(result.value == ["w", "w"]);
-                        assert(result.rest == positional("w"w, 1, 3));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))))("www"d);
-                        assert(result.match);
-                        assert(result.value == ["w", "w"]);
-                        assert(result.rest == positional("w"d, 1, 3));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))))(testRange("www"));
-                        assert(result.match);
-                        assert(result.value == ["w", "w"]);
-                        assert(result.rest == positional(testRange("w"), 1, 3));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))))(testRange("www"w));
-                        assert(result.match);
-                        assert(result.value == ["w", "w"]);
-                        assert(result.rest == positional(testRange("w"w), 1, 3));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))))(testRange("www"d));
-                        assert(result.match);
-                        assert(result.value == ["w", "w"]);
-                        assert(result.rest == positional(testRange("w"d), 1, 3));
-                    }}
-                }
-                /* ("w" &"w")+ <= "w"   */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))))("w");
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 2));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))))("w"w);
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 2));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))))("w"d);
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 2));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))))(testRange("w"));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 2));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))))(testRange("w"w));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 2));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))))(testRange("w"d));
-                        assert(!result.match);
-                        assert(result.error == Error(q{"w"}, 1, 2));
-                    }}
-                }
+                assert(getResult!(combinateAnd!(parseString!"w"))("www" ) == result(true, None.init, positional("www" , 1, 1), Error.init));
+                assert(getResult!(combinateAnd!(parseString!"w"))("www"w) == result(true, None.init, positional("www"w, 1, 1), Error.init));
+                assert(getResult!(combinateAnd!(parseString!"w"))("www"d) == result(true, None.init, positional("www"d, 1, 1), Error.init));
+                assert(getResult!(combinateAnd!(parseString!"w"))(testRange("www" )) == result(true, None.init, positional(testRange("www" ), 1, 1), Error.init));
+                assert(getResult!(combinateAnd!(parseString!"w"))(testRange("www"w)) == result(true, None.init, positional(testRange("www"w), 1, 1), Error.init));
+                assert(getResult!(combinateAnd!(parseString!"w"))(testRange("www"d)) == result(true, None.init, positional(testRange("www"d), 1, 1), Error.init));
+
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))("www" ) == result(true, "w", positional("ww" , 1, 2), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))("www"w) == result(true, "w", positional("ww"w, 1, 2), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))("www"d) == result(true, "w", positional("ww"d, 1, 2), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))(testRange("www" )) == result(true, "w", positional(testRange("ww" ), 1, 2), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))(testRange("www"w)) == result(true, "w", positional(testRange("ww"w), 1, 2), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))(testRange("www"d)) == result(true, "w", positional(testRange("ww"d), 1, 2), Error.init));
+
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("www" ) == result(true, "ww", positional("w" , 1, 3), Error.init));
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("www"w) == result(true, "ww", positional("w"w, 1, 3), Error.init));
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("www"d) == result(true, "ww", positional("w"d, 1, 3), Error.init));
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("www" )) == result(true, "ww", positional(testRange("w" ), 1, 3), Error.init));
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("www"w)) == result(true, "ww", positional(testRange("w"w), 1, 3), Error.init));
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("www"d)) == result(true, "ww", positional(testRange("w"d), 1, 3), Error.init));
+
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("w" ) == result(false, "", positional("" ), Error(q{"w"}, 1, 2)));
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("w"w) == result(false, "", positional(""w), Error(q{"w"}, 1, 2)));
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("w"d) == result(false, "", positional(""d), Error(q{"w"}, 1, 2)));
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("w" )) == result(false, "", positional(testRange("" )), Error(q{"w"}, 1, 2)));
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("w"w)) == result(false, "", positional(testRange(""w)), Error(q{"w"}, 1, 2)));
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("w"d)) == result(false, "", positional(testRange(""d)), Error(q{"w"}, 1, 2)));
                 return true;
             };
             debug(ctpg_ct) static assert(dg());
@@ -1136,44 +614,12 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                /* ("w" ^"s")+ <= "wwws" */ version(all){
-                    /* string          */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s"))))("wwws");
-                        assert(result.match);
-                        assert(result.value == ["w", "w"]);
-                        assert(result.rest == positional("ws", 1, 3));
-                    }}
-                    /* wstring         */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s"))))("wwws"w);
-                        assert(result.match);
-                        assert(result.value == ["w", "w"]);
-                        assert(result.rest == positional("ws"w, 1, 3));
-                    }}
-                    /* dstring         */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s"))))("wwws"d);
-                        assert(result.match);
-                        assert(result.value == ["w", "w"]);
-                        assert(result.rest == positional("ws"d, 1, 3));
-                    }}
-                    /* TestRange!char  */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s"))))(testRange("wwws"));
-                        assert(result.match);
-                        assert(result.value == ["w", "w"]);
-                        assert(result.rest == positional(testRange("ws"), 1, 3));
-                    }}
-                    /* TestRange!wchar */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s"))))(testRange("wwws"w));
-                        assert(result.match);
-                        assert(result.value == ["w", "w"]);
-                        assert(result.rest == positional(testRange("ws"w), 1, 3));
-                    }}
-                    /* TestRange!dchar */ version(all){{
-                        auto result = getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s"))))(testRange("wwws"d));
-                        assert(result.match);
-                        assert(result.value == ["w", "w"]);
-                        assert(result.rest == positional(testRange("ws"d), 1, 3));
-                    }}
-                }
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))("wwws" ) == result(true, "ww", positional("ws" , 1, 3), Error.init));
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))("wwws"w) == result(true, "ww", positional("ws"w, 1, 3), Error.init));
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))("wwws"d) == result(true, "ww", positional("ws"d, 1, 3), Error.init));
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))(testRange("wwws" )) == result(true, "ww", positional(testRange("ws" ), 1, 3), Error.init));
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))(testRange("wwws"w)) == result(true, "ww", positional(testRange("ws"w), 1, 3), Error.init));
+                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))(testRange("wwws"d)) == result(true, "ww", positional(testRange("ws"d), 1, 3), Error.init));
                 return true;
             };
             debug(ctpg_ct) static assert(dg());
@@ -1224,33 +670,19 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                version(all){{
-                    auto result = getResult!(
-                        combinateConvert!(
-                            combinateMore1!(parseString!"w"),
-                            function(string[] ws)@safe pure nothrow{
-                                return ws.length;
-                            }
-                        )
-                    )("www");
-                    assert(result.match);
-                    assert(result.rest.range == "");
-                    assert(result.value == 3);
-                }}
-                version(all){{
-                    auto result = getResult!(
-                        combinateConvert!(
-                            combinateMore1!(parseString!"w"),
-                            function(string[] ws)@safe pure nothrow{
-                                return ws.length;
-                            }
-                        )
-                    )("a");
-                    assert(!result.match);
-                    assert(result.error.need == q{"w"});
-                    assert(result.error.line == 1);
-                    assert(result.error.column == 1);
-                }}
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www" ) == result(true, 3u, positional("" , 1, 4), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www"w) == result(true, 3u, positional(""w, 1, 4), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www"d) == result(true, 3u, positional(""d, 1, 4), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www" )) == result(true, 3u, positional(testRange("" ), 1, 4), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www"w)) == result(true, 3u, positional(testRange(""w), 1, 4), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www"d)) == result(true, 3u, positional(testRange(""d), 1, 4), Error.init));
+
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a" ) == result(false, 0u, positional("" ), Error(q{"w"}, 1, 1)));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a"w) == result(false, 0u, positional(""w), Error(q{"w"}, 1, 1)));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a"d) == result(false, 0u, positional(""d), Error(q{"w"}, 1, 1)));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a" )) == result(false, 0u, positional(testRange("" )), Error(q{"w"}, 1, 1)));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a"w)) == result(false, 0u, positional(testRange(""w)), Error(q{"w"}, 1, 1)));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a"d)) == result(false, 0u, positional(testRange(""d)), Error(q{"w"}, 1, 1)));
                 return true;
             };
             debug(ctpg_ct) static assert(dg());
@@ -1279,37 +711,19 @@ struct Error{
 
         debug(ctpg) unittest{
             enum dg = {
-                version(all){{
-                    auto result = getResult!(
-                        combinateString!(
-                            combinateCheck!(
-                                combinateMore0!(parseString!"w"),
-                                function(string[] ws){
-                                    return ws.length == 5;
-                                }
-                            )
-                        )
-                    )("wwwww");
-                    assert(result.match);
-                    assert(result.value == "wwwww");
-                    assert(result.rest.range == "");
-                }}
-                version(all){{
-                    auto result = getResult!(
-                        combinateString!(
-                            combinateCheck!(
-                                combinateMore0!(parseString!"w"),
-                                function(string[] ws){
-                                    return ws.length == 5;
-                                }
-                            )
-                        )
-                    )("wwww");
-                    assert(!result.match);
-                    assert(result.error.need == "passing check");
-                    assert(result.error.line == 1);
-                    assert(result.error.column == 1);
-                }}
+                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwwww" ) == result(true, "wwwww", positional("" , 1, 6), Error.init));
+                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwwww"w) == result(true, "wwwww", positional(""w, 1, 6), Error.init));
+                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwwww"d) == result(true, "wwwww", positional(""d, 1, 6), Error.init));
+                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwwww" )) == result(true, "wwwww", positional(testRange("" ), 1, 6), Error.init));
+                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwwww"w)) == result(true, "wwwww", positional(testRange(""w), 1, 6), Error.init));
+                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwwww"d)) == result(true, "wwwww", positional(testRange(""d), 1, 6), Error.init));
+
+                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwww" ) == result(false, "", positional("" ), Error("passing check", 1, 1)));
+                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwww"w) == result(false, "", positional(""w), Error("passing check", 1, 1)));
+                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwww"d) == result(false, "", positional(""d), Error("passing check", 1, 1)));
+                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwww" )) == result(false, "", positional(testRange("" )), Error("passing check", 1, 1)));
+                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwww"w)) == result(false, "", positional(testRange(""w)), Error("passing check", 1, 1)));
+                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwww"d)) == result(false, "", positional(testRange(""d)), Error("passing check", 1, 1)));
                 return true;
             };
             debug(ctpg_ct) static assert(dg());
