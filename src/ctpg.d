@@ -16,10 +16,11 @@ import std.conv;
 import std.math;
 import std.range;
 import std.traits;
-import std.typecons;
 import std.typetuple;
 import std.utf;
 import std.functional;
+
+public import std.typecons;
 
 alias Tuple!() None;
 alias void*[size_t][size_t][string] memo_t;
@@ -258,7 +259,7 @@ struct Error{
             alias combinateUnTuple!(combinateSequenceImpl!(parsers)) combinateSequence;
         }
 
-        private template combinateSequenceImpl(parsers...){
+        template combinateSequenceImpl(parsers...){
             alias CombinateSequenceImplType!(parsers) ResultType;
             Result!(Range, ResultType) parse(Range)(Positional!Range input, ref memo_t memo){
                 typeof(return) result;
@@ -1561,7 +1562,7 @@ struct Error{
     }
 }
 
-mixin template ctpg(string src){
+mixin template generateParsers(string src){
     mixin(parse!defs(src));
 }
 
@@ -2941,68 +2942,3 @@ unittest{
     dg();
 }
 
-version(all) public:
-
-version(unittest) mixin ctpg!q{
-    int root = addExp $;
-
-    int addExp = mulExp (("+" / "-") addExp)? >> (int lhs, Option!(Tuple!(string, int)) rhs){
-        if(rhs.some){
-            final switch(rhs.value[0]){
-                case "+":{
-                    return lhs + rhs.value[1];
-                }
-                case "-":{
-                    return lhs - rhs.value[1];
-                }
-            }
-        }else{
-            return lhs;
-        }
-    };
-
-    int mulExp = primary (("*" / "/") mulExp)? >> (int lhs, Option!(Tuple!(string, int)) rhs){
-        if(rhs.some){
-            final switch(rhs.value[0]){
-                case "*":{
-                    return lhs * rhs.value[1];
-                }
-                case "/":{
-                    return lhs / rhs.value[1];
-                }
-            }
-        }else{
-            return lhs;
-        }
-    };
-
-    int primary = !"(" addExp !")" / intLit_p;
-
-    None recursive = A $;
-
-    None A = !"a" !A !"a" / !"a";
-};
-
-unittest{
-    enum dg = {
-        assert(parse!root("5*8+3*20") == 100);
-        assert(parse!root("5*(8+3)*20") == 1100);
-        try{
-            parse!root("5*(8+3)20");
-        }catch(Exception e){
-            assert(e.msg == "1: 8: error EOF is needed");
-        }
-
-        assert( isMatch!recursive("a"));
-        assert( isMatch!recursive("aaa"));
-        assert(!isMatch!recursive("aaaaa"));
-        assert( isMatch!recursive("aaaaaaa"));
-        assert(!isMatch!recursive("aaaaaaaaa"));
-        assert(!isMatch!recursive("aaaaaaaaaaa"));
-        assert(!isMatch!recursive("aaaaaaaaaaaaa"));
-        assert( isMatch!recursive("aaaaaaaaaaaaaaa"));
-        return true;
-    };
-    debug(ctpg_compile_time) static assert(dg());
-    dg();
-}
