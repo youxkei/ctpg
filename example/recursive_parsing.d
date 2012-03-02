@@ -6,11 +6,11 @@
 
 import ctpg;
 
-mixin generateParsers!q{
+mixin(generateParsers(q{
     None recursive = A $;
 
     None A = !"a" !A !"a" / !"a";
-};
+}));
 
 void main(){
     enum dg = {

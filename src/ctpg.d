@@ -10,17 +10,15 @@ This module implements a compile time parser generator.
 
 module ctpg;
 
-import std.algorithm;
-import std.array;
-import std.conv;
-import std.math;
-import std.range;
-import std.traits;
-import std.typetuple;
-import std.utf;
-import std.functional;
+import std.array: save, empty;
+import std.conv: to;
+import std.range: isForwardRange, ElementType;
+import std.traits: CommonType, isCallable, ReturnType, isSomeChar, isSomeString, Unqual, isAssignable, isArray;
+import std.typetuple: staticMap, TypeTuple;
 
-public import std.typecons;
+import std.utf: decode;
+
+public import std.typecons: Tuple, isTuple, tuple;
 
 alias Tuple!() None;
 alias void*[size_t][size_t][string] memo_t;
@@ -47,6 +45,7 @@ struct Positional(Range){
         Range range;
         size_t line = 1;
         size_t column = 1;
+        size_t callerLine = 1;
 
         //cannot apply some qualifiers due to unclearness of Range
         typeof(this) save(){
@@ -64,8 +63,8 @@ struct Positional(Range){
     }
 }
 
-Positional!Range positional(Range)(Range range, size_t line = 1, size_t column = 1){
-    return Positional!Range(range, line, column);
+Positional!Range positional(Range)(Range range, size_t line = 1, size_t column = 1, size_t callerLine = 1){
+    return Positional!Range(range, line, column, callerLine);
 }
 
 struct Result(Range, T){
@@ -844,7 +843,7 @@ struct Error{
                 static if(isSomeString!Range){
                     if(input.range.length){
                         size_t idx;
-                        dchar c = std.utf.decode(input.range, idx);
+                        dchar c = decode(input.range, idx);
                         if(low <= c && c <= high){
                             result.match = true;
                             result.value = to!string(c);
@@ -856,7 +855,7 @@ struct Error{
                     }
                 }else{
                     if(!input.range.empty){
-                        dchar c = decode(input.range);
+                        dchar c = decodeRange(input.range);
                         if(low <= c && c <= high){
                             result.match = true;
                             result.value = to!string(c);
@@ -1129,6 +1128,9 @@ struct Error{
             dg();
         }
     }
+}
+
+/* getters */ version(all){
 }
 
 /* useful parser */ version(all){
@@ -1562,21 +1564,21 @@ struct Error{
     }
 }
 
-mixin template generateParsers(string src){
-    mixin(parse!defs(src));
+string generateParsers(size_t callerLine = __LINE__)(string src){
+    return parse!(defs, callerLine)(src);
 }
 
-template getSource(string src){
-    enum getSource = getResult!(defs!())(src).value;
+string getSource(size_t callerLine = __LINE__)(string src){
+    return getResult!(defs!(), callerLine)(src).value;
 }
 
-auto getResult(alias fun, Range)(Range input){
+auto getResult(alias fun, size_t callerLine = __LINE__, Range)(Range input){
     memo_t memo;
-    return fun.parse(Positional!Range(input), memo);
+    return fun.parse(Positional!Range(input, 1, 1, callerLine), memo);
 }
 
-auto parse(alias fun)(string src){
-    auto result = getResult!(fun!())(src);
+auto parse(alias fun, size_t callerLine = __LINE__)(string src){
+    auto result = getResult!(fun!(), __LINE__)(src);
     if(result.match){
         return result.value;
     }else{
@@ -2749,6 +2751,7 @@ version(unittest) template TestParser(T){
 }
 
 version(unittest) struct TestRange(T){
+    static assert(isForwardRange!(typeof(this)));
     immutable(T)[] source;
     @property T front(){ return source[0]; }
     @property void popFront(){ source = source[1..$]; }
@@ -2772,7 +2775,7 @@ template staticConvertString(string tstring, T){
         enum staticConvertString = mixin("\"" ~ tstring ~ "\"w");
     }else static if(is(T == dstring)){
         enum staticConvertString = mixin("\"" ~ tstring ~ "\"d");
-    }else static if(isInputRange!T){
+    }else static if(isForwardRange!T){
         static if(is(Unqual!(ElementType!T) == char)){
             alias tstring staticConvertString;
         }else static if(is(Unqual!(ElementType!T) == wchar)){
@@ -2782,6 +2785,8 @@ template staticConvertString(string tstring, T){
         }else{
             static assert(false);
         }
+    }else{
+        static assert(false);
     }
 }
 
@@ -2800,7 +2805,7 @@ Tuple!(size_t, "line", size_t, "column") countBreadth(string str)in{
     typeof(return) result;
     size_t idx;
     while(idx < str.length){
-        auto c = std.utf.decode(str, idx);
+        auto c = decode(str, idx);
         if(c == '\n'){
             result.line++;
             result.column = 0;
@@ -2884,7 +2889,8 @@ unittest{
     static assert(is(CommonParserType!(TestParser!string, TestParser!int) == void));
 }
 
-dchar decode(Range)(ref Range range){
+dchar decodeRange(Range)(ref Range range){
+    static assert(isForwardRange!Range);
     static assert(isSomeChar!(Unqual!(ElementType!Range)));
     dchar result;
     static if(is(Unqual!(ElementType!Range) == char)){
@@ -2944,14 +2950,14 @@ dchar decode(Range)(ref Range range){
 
 unittest{
     enum dg = {
-        assert(decode([testRange("\u0001")][0]) == '\u0001');
-        assert(decode([testRange("\u0081")][0]) == '\u0081');
-        assert(decode([testRange("\u0801")][0]) == '\u0801');
-        assert(decode([testRange("\U00012345")][0]) == '\U00012345');
-        assert(decode([testRange("\u0001"w)][0]) == '\u0001');
-        assert(decode([testRange("\uE001"w)][0]) == '\uE001');
-        assert(decode([testRange("\U00012345"w)][0]) == '\U00012345');
-        assert(decode([testRange("\U0010FFFE")][0]) == '\U0010FFFE');
+        assert(decodeRange([testRange("\u0001")][0]) == '\u0001');
+        assert(decodeRange([testRange("\u0081")][0]) == '\u0081');
+        assert(decodeRange([testRange("\u0801")][0]) == '\u0801');
+        assert(decodeRange([testRange("\U00012345")][0]) == '\U00012345');
+        assert(decodeRange([testRange("\u0001"w)][0]) == '\u0001');
+        assert(decodeRange([testRange("\uE001"w)][0]) == '\uE001');
+        assert(decodeRange([testRange("\U00012345"w)][0]) == '\U00012345');
+        assert(decodeRange([testRange("\U0010FFFE")][0]) == '\U0010FFFE');
         return true;
     };
     debug(ctpg_compile_time) static assert(dg());

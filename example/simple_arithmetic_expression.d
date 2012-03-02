@@ -7,7 +7,7 @@
 import ctpg;
 import std.conv: to;
 
-mixin generateParsers!q{
+mixin(generateParsers(q{
     int root = addExp $;
 
     int addExp =
@@ -23,7 +23,7 @@ mixin generateParsers!q{
     int primary = !"(" addExp !")" / int_;
 
     int int_ = s( [0-9]+ ) >> (string int_){ return to!int(int_); };
-};
+}));
 
 void main(){
     enum dg ={
@@ -37,6 +37,7 @@ void main(){
         return true;
     };
     static assert(dg());
+    pragma(msg, parse!root("5*8+3*50"));
     import std.stdio; writeln(parse!root("5*(8+3)*50"));
     dg();
 }
