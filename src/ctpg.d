@@ -1131,6 +1131,51 @@ struct Error{
 }
 
 /* getters */ version(all){
+    /* getLine */ version(all){
+        template getLine(){
+            alias size_t ResultType;
+            Result!(Range, ResultType) parse(Range)(Positional!Range input, ref memo_t memo){
+                return result(true, input.line, input, Error.init);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n" ) == result(true, 3u, positional("" , 3, 1), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n"w) == result(true, 3u, positional(""w, 3, 1), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n"d) == result(true, 3u, positional(""d, 3, 1), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n" )) == result(true, 3u, positional(testRange("" ), 3, 1), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"w)) == result(true, 3u, positional(testRange(""w), 3, 1), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"d)) == result(true, 3u, positional(testRange(""d), 3, 1), Error.init));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+    }
+
+    /* getCallerLine */ version(all){
+        template getCallerLine(){
+            alias size_t ResultType;
+            Result!(Range, ResultType) parse(Range)(Positional!Range input, ref memo_t memo){
+                return result(true, input.callerLine, input, Error.init);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                assert(getResult!(getCallerLine!())("" ) == result(true, cast(size_t)__LINE__, positional("" , 1, 1), Error.init));
+                assert(getResult!(getCallerLine!())(""w) == result(true, cast(size_t)__LINE__, positional(""w, 1, 1), Error.init));
+                assert(getResult!(getCallerLine!())(""d) == result(true, cast(size_t)__LINE__, positional(""d, 1, 1), Error.init));
+                assert(getResult!(getCallerLine!())(testRange("" )) == result(true, cast(size_t)__LINE__, positional(testRange("" ), 1, 1), Error.init));
+                assert(getResult!(getCallerLine!())(testRange(""w)) == result(true, cast(size_t)__LINE__, positional(testRange(""w), 1, 1), Error.init));
+                assert(getResult!(getCallerLine!())(testRange(""d)) == result(true, cast(size_t)__LINE__, positional(testRange(""d), 1, 1), Error.init));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+    }
 }
 
 /* useful parser */ version(all){
