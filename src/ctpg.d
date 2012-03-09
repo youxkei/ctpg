@@ -1184,6 +1184,8 @@ struct Error{
             alias parseCharRange!(dchar.min, dchar.max) parseAnyChar;
         }
 
+        alias parseAnyChar any;
+
         unittest{
             enum dg = {
                 /* \a <= "hoge"       */ version(all){
