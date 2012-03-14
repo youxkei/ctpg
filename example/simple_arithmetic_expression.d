@@ -32,7 +32,7 @@ void main(){
         try{
             parse!root("5*(8+3)20");
         }catch(Exception e){
-            assert(e.msg == "1: 8: error EOF is needed");
+            assert(e.msg == "1: error EOF is needed");
         } 
         return true;
     };

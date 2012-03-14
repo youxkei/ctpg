@@ -1491,12 +1491,22 @@ auto parse(alias fun, size_t callerLine = __LINE__)(string src){
     if(result.match){
         return result.value;
     }else{
-        throw new Exception(result.error.line.to!string() ~ q{: } ~ result.error.column.to!string() ~ q{: error } ~ result.error.need ~ q{ is needed});
+        throw new Exception(result.error.line.to!string() ~ q{: error } ~ result.error.need ~ q{ is needed});
     }
 }
 
 bool isMatch(alias fun)(string src){
     return getResult!(fun!())(src).match;
+}
+
+template checkNotDefined(bool b, string line, alias nonterminal){
+    static if(b){
+        alias parser checkNotDefined;
+    }else{
+        mixin("#line " ~ line ~ q{
+            static assert(false, "error " ~ parser.stringof ~ "is not defined.");
+        });
+    }
 }
 
 /* ctpg */ version(all){
@@ -2308,21 +2318,6 @@ bool isMatch(alias fun)(string src){
         }
     }
 
-    /* usefulLit */ version(none){
-        template usefulLit(){
-            alias string ResultType;
-            Result!(string, ResultType) parse(Input!string, input, ref memo_t memo){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinameChoice!(
-                        combinateMemoize!(parseString!`\a`),
-                        combinateMemoize!(parseString!`\ss`),
-                        combinateMemoize!(parseString!`\s`),
-                    ))
-                )).parse(input, memo);
-            }
-        }
-    }
-
     /* id */ version(all){
         template id(){
             alias string ResultType;
@@ -2382,8 +2377,12 @@ bool isMatch(alias fun)(string src){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo){
                 return combinateMemoize!(combinateConvert!(
-                    id!(),
-                    function(string id) => "combinateMemoize!(" ~ id ~ "!())"
+                    combinateMemoize!(combinateSequence!(
+                        getCallerLine!(),
+                        getLine!(),
+                        id!()
+                    )),
+                    function(size_t callerLine, size_t line, string id) => "combinateMemoize!(" ~ id ~ "!())"
                 )).parse(input, memo);
             }
         }
