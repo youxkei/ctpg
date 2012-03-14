@@ -51,10 +51,11 @@ struct Input(Range){
         size_t position;
         size_t line = 1;
         size_t callerLine = 1;
+        string callerFile;
 
         //cannot apply some qualifiers due to unclearness of Range
         Input save(){
-            return Input(range.save, position, line, callerLine);
+            return Input(range.save, position, line, callerLine, callerFile);
         }
 
         bool isEnd(){
@@ -63,7 +64,7 @@ struct Input(Range){
 
         pure @safe nothrow
         bool opEquals(Input lhs){
-            return position == lhs.position && line == lhs.line && callerLine == lhs.callerLine;
+            return position == lhs.position && line == lhs.line && callerLine == lhs.callerLine && callerFile == lhs.callerFile;
         }
     }
 }
@@ -72,8 +73,8 @@ Input!Range makeInput(Range)(Range range){
     return Input!Range(range);
 }
 
-Input!Range makeInput(Range)(Range range, size_t position, size_t line = 1, size_t callerLine = __LINE__){
-    return Input!Range(range, position, line, callerLine);
+Input!Range makeInput(Range)(Range range, size_t position, size_t line = 1, size_t callerLine = __LINE__, string callerFile = __FILE__){
+    return Input!Range(range, position, line, callerLine, callerFile);
 }
 
 struct Result(Range, T){
@@ -755,10 +756,7 @@ struct Error{
         template parseNone(){
             alias None ResultType;
             Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
-                typeof(return) result;
-                result.match = true;
-                result.rest = input;
-                return result;
+                return result(true, None.init, input, Error.init);
             }
         }
 
@@ -793,6 +791,7 @@ struct Error{
                         result.rest.position = input.position + breadth.width;
                         result.rest.line = input.line + breadth.line;
                         result.rest.callerLine = input.callerLine;
+                        result.rest.callerFile = input.callerFile;
                         return result;
                     }
                 }else{
@@ -809,6 +808,7 @@ struct Error{
                     result.rest.position = input.position + breadth.width;
                     result.rest.line = input.line + breadth.line;
                     result.rest.callerLine = input.callerLine;
+                    result.rest.callerFile = input.callerFile;
                     return result;
                 }
             Lerror:
@@ -871,6 +871,7 @@ struct Error{
                             result.rest.position = input.position + 1;
                             result.rest.line = c == '\n' ? input.line + 1 : input.line;
                             result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
                             return result;
                         }
                     }
@@ -884,6 +885,7 @@ struct Error{
                             result.rest.position = input.position + 1;
                             result.rest.line = c == '\n' ? input.line + 1 : input.line;
                             result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
                             return result;
                         }
                     }
@@ -941,6 +943,7 @@ struct Error{
                                 result.rest.position = input.position + 6;
                                 result.rest.line = input.line;
                                 result.rest.callerLine = input.callerLine;
+                                result.rest.callerFile = input.callerFile;
                                 return result;
                             }
                             case 'U':{
@@ -950,6 +953,7 @@ struct Error{
                                 result.rest.position = input.position + 10;
                                 result.rest.line = input.line;
                                 result.rest.callerLine = input.callerLine;
+                                result.rest.callerFile = input.callerFile;
                                 return result;
                             }
                             case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
@@ -959,6 +963,7 @@ struct Error{
                                 result.rest.position = input.position + 2;
                                 result.rest.line = input.line;
                                 result.rest.callerLine = input.callerLine;
+                                result.rest.callerFile = input.callerFile;
                                 return result;
                             }
                             default:{
@@ -985,6 +990,7 @@ struct Error{
                                 result.rest.position = input.position + 6;
                                 result.rest.line = input.line;
                                 result.rest.callerLine = input.callerLine;
+                                result.rest.callerFile = input.callerFile;
                                 return result;
                             }
                             case 'U':{
@@ -1001,6 +1007,7 @@ struct Error{
                                 result.rest.position = input.position + 10;
                                 result.rest.line = input.line;
                                 result.rest.callerLine = input.callerLine;
+                                result.rest.callerFile = input.callerFile;
                                 return result;
                             }
                             case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
@@ -1011,6 +1018,7 @@ struct Error{
                                 result.rest.range = input.range;
                                 result.rest.line = input.line;
                                 result.rest.callerLine = input.callerLine;
+                                result.rest.callerFile = input.callerFile;
                                 return result;
                             }
                             default:{
@@ -1079,6 +1087,7 @@ struct Error{
                         result.rest.position = input.position + 1;
                         result.rest.line = (input.range[0] == '\n' ? input.line + 1 : input.line);
                         result.rest.callerLine = input.callerLine;
+                        result.rest.callerFile = input.callerFile;
                         return result;
                     }
                 }else{
@@ -1092,6 +1101,7 @@ struct Error{
                             result.rest.position = input.position + 1;
                             result.rest.line = (c == '\n' ? input.line + 1 : input.line);
                             result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
                             return result;
                         }
                     }
@@ -1131,6 +1141,7 @@ struct Error{
                 if(input.range.empty){
                     result.match = true;
                     result.rest.callerLine = input.callerLine;
+                    result.rest.callerFile = input.callerFile;
                 }else{
                     result.error = Error("EOF", input.line);
                 }
@@ -1205,6 +1216,15 @@ struct Error{
             };
             debug(ctpg_compile_time) static assert(dg());
             dg();
+        }
+    }
+
+    /* getCallerFile */ version(all){
+        template getCallerFile(){
+            alias string ResultType;
+            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
+                return result(true, input.callerFile, input, Error.init);
+            }
         }
     }
 }
@@ -1473,21 +1493,21 @@ struct Error{
     }
 }
 
-string generateParsers(size_t callerLine = __LINE__)(string src){
-    return parse!(defs, callerLine)(src);
+string generateParsers(size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
+    return parse!(defs, callerLine, callerFile)(src);
 }
 
-string getSource(size_t callerLine = __LINE__)(string src){
-    return getResult!(defs!(), callerLine)(src).value;
+string getSource(size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
+    return getResult!(defs!(), callerLine, callerFile)(src).value;
 }
 
-auto getResult(alias fun, size_t callerLine = __LINE__, Range)(Range input){
+auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range input){
     memo_t memo;
-    return fun.parse(Input!Range(input, 0, 1, callerLine), memo);
+    return fun.parse(Input!Range(input, 0, 1, callerLine, callerFile), memo);
 }
 
-auto parse(alias fun, size_t callerLine = __LINE__)(string src){
-    auto result = getResult!(fun!(), __LINE__)(src);
+auto parse(alias fun, size_t callerLine = __LINE__, string CallerFile = __FILE__)(string src){
+    auto result = getResult!(fun!(), callerLine, callerFile)(src);
     if(result.match){
         return result.value;
     }else{
