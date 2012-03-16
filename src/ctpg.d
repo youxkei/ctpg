@@ -1506,7 +1506,7 @@ auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FI
     return fun.parse(Input!Range(input, 0, 1, callerLine, callerFile), memo);
 }
 
-auto parse(alias fun, size_t callerLine = __LINE__, string CallerFile = __FILE__)(string src){
+auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
     auto result = getResult!(fun!(), callerLine, callerFile)(src);
     if(result.match){
         return result.value;
@@ -1517,16 +1517,6 @@ auto parse(alias fun, size_t callerLine = __LINE__, string CallerFile = __FILE__
 
 bool isMatch(alias fun)(string src){
     return getResult!(fun!())(src).match;
-}
-
-template checkNotDefined(bool b, string line, alias nonterminal){
-    static if(b){
-        alias parser checkNotDefined;
-    }else{
-        mixin("#line " ~ line ~ q{
-            static assert(false, "error " ~ parser.stringof ~ "is not defined.");
-        });
-    }
 }
 
 /* ctpg */ version(all){
@@ -1550,11 +1540,11 @@ template checkNotDefined(bool b, string line, alias nonterminal){
 
         unittest{
             enum dg = {
-                string src = q{
+                cast(void)__LINE__;
+                auto result = getResult!(defs!())(q{
                     bool hoge = !"hello" $ >> {return false;};
                     Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
-                };
-                auto result = getResult!(defs!())(src);
+                });
                 assert(result.match);
                 assert(result.rest.range == "");
                 assert(
@@ -1580,7 +1570,7 @@ template checkNotDefined(bool b, string line, alias nonterminal){
                         "Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){"
                             "return combinateMemoize!(combinateConvert!("
                                 "combinateMemoize!(combinateMore0!("
-                                    "combinateMemoize!(hoge!())"
+                                    "combinateMemoize!(checkNonterminal!(__traits(compiles,hoge),`hoge`,`" ~ (__LINE__ - 27).to!string() ~ "`,`src\\ctpg.d`,hoge!()))"
                                 ")),"
                                 "function(){"
                                     "return tuple(\"foo\");"
@@ -1630,6 +1620,7 @@ template checkNotDefined(bool b, string line, alias nonterminal){
 
         unittest{
             enum dg = {
+                cast(void)__LINE__;
                 version(all){{
                     auto result = getResult!(def!())(`bool hoge = !"hello" $ >> {return false;};`);
                     assert(result.match);
@@ -1664,7 +1655,7 @@ template checkNotDefined(bool b, string line, alias nonterminal){
                             "alias None ResultType;"
                             "Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){"
                                 "return combinateMemoize!(combinateSequence!("
-                                    "combinateMemoize!(A!()),"
+                                    "combinateMemoize!(checkNonterminal!(__traits(compiles,A),`A`,`" ~ (__LINE__ - 9).to!string() ~ "`,`src\\ctpg.d`,A!())),"
                                     "combinateMemoize!(parseEOF!())"
                                 ")).parse(input, memo);"
                             "}"
@@ -2103,13 +2094,7 @@ template checkNotDefined(bool b, string line, alias nonterminal){
                     auto result = getResult!(primaryExp!())("int");
                     assert(result.match);
                     assert(result.rest.range == "");
-                    assert(result.value == "combinateMemoize!(int!())");
-                }}
-                version(all){{
-                    auto result = getResult!(primaryExp!())("select!(true)(\"true\", \"false\")");
-                    assert(result.match);
-                    assert(result.rest.range == "");
-                    assert(result.value == "combinateMemoize!(select!(true)(\"true\", \"false\")!())");
+                    assert(result.value == "combinateMemoize!(checkNonterminal!(__traits(compiles,int),`int`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,int!()))");
                 }}
                 version(all){{
                     auto result = getResult!(primaryExp!())("###このコメントは表示されません###");
@@ -2354,10 +2339,7 @@ template checkNotDefined(bool b, string line, alias nonterminal){
                                 combinateMemoize!(parseCharRange!('0','9')),
                                 combinateMemoize!(parseCharRange!('A','Z')),
                                 combinateMemoize!(parseCharRange!('a','z')),
-                                combinateMemoize!(parseString!"_"),
-                                combinateMemoize!(parseString!","),
-                                combinateMemoize!(parseString!"!"),
-                                combinateMemoize!(arch!("(", ")"))
+                                combinateMemoize!(parseString!"_")
                             ))
                         ))
                     ))
@@ -2379,12 +2361,6 @@ template checkNotDefined(bool b, string line, alias nonterminal){
                     assert(result.rest.range == "");
                     assert(result.value == "int");
                 }}
-                version(all){{
-                    auto result = getResult!(id!())("select!(true)(\"true\", \"false\")");
-                    assert(result.match);
-                    assert(result.rest.range == "");
-                    assert(result.value == "select!(true)(\"true\", \"false\")");
-                }}
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -2393,16 +2369,27 @@ template checkNotDefined(bool b, string line, alias nonterminal){
     }
 
     /* nonterminal */ version(all){
+        template checkNonterminal(bool defined, string name, string line, string file, alias nonterminal){
+            static if(defined){
+                alias nonterminal checkNonterminal;
+            }else{
+                mixin("#line " ~ line ~ " \"" ~ file ~ "\"" ~ q{
+                    static assert(false, name ~ " is not defined");
+                });
+            }
+        }
+
         template nonterminal(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo){
                 return combinateMemoize!(combinateConvert!(
                     combinateMemoize!(combinateSequence!(
                         getCallerLine!(),
+                        getCallerFile!(),
                         getLine!(),
                         id!()
                     )),
-                    function(size_t callerLine, size_t line, string id) => "combinateMemoize!(" ~ id ~ "!())"
+                    function(size_t callerLine, string callerFile, size_t line, string id) => "combinateMemoize!(checkNonterminal!(__traits(compiles," ~ id ~ "),`" ~ id ~ "`,`" ~ (callerLine + line - 1).to!string() ~ "`,`" ~ callerFile ~ "`," ~ id ~ "!()))"
                 )).parse(input, memo);
             }
         }
@@ -2413,19 +2400,13 @@ template checkNotDefined(bool b, string line, alias nonterminal){
                     auto result = getResult!(nonterminal!())("A");
                     assert(result.match);
                     assert(result.rest.range == "");
-                    assert(result.value == "combinateMemoize!(A!())");
+                    assert(result.value == "combinateMemoize!(checkNonterminal!(__traits(compiles,A),`A`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,A!()))");
                 }}
                 version(all){{
                     auto result = getResult!(nonterminal!())("int");
                     assert(result.match);
                     assert(result.rest.range == "");
-                    assert(result.value == "combinateMemoize!(int!())");
-                }}
-                version(all){{
-                    auto result = getResult!(nonterminal!())("select!(true)(\"true\", \"false\")");
-                    assert(result.match);
-                    assert(result.rest.range == "");
-                    assert(result.value == "combinateMemoize!(select!(true)(\"true\", \"false\")!())");
+                    assert(result.value == "combinateMemoize!(checkNonterminal!(__traits(compiles,int),`int`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,int!()))");
                 }}
                 return true;
             };
@@ -2566,7 +2547,10 @@ template checkNotDefined(bool b, string line, alias nonterminal){
                                     combinateMemoize!(combinateNot!(
                                         combinateMemoize!(parseString!close)
                                     )),
-                                    combinateMemoize!(parseAnyChar!())
+                                    combinateMemoize!(combinateChoice!(
+                                        combinateMemoize!(parseAnyChar!()),
+                                        combinateMemoize!(parseStringLiteral!())
+                                    ))
                                 ))
                             ))
                         )),
