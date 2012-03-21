@@ -647,16 +647,27 @@ struct Error{
     }
 
     /* combinateConvert */ version(all){
-        template CombinateConvertType(alias converter){
-            static if(isCallable!converter){
-                alias ReturnType!converter CombinateConvertType;
-            }else static if(is(converter == struct) || is(converter == class)){
+        template CombinateConvertType(alias converter, T){
+            static if(is(converter == struct) || is(converter == class)){
                 alias converter CombinateConvertType;
+            }else static if(isCallable!converter){
+                alias ReturnType!converter CombinateConvertType;
+            }else static if(__traits(compiles, converter(T.init))){
+                alias ReturnType!(() => converter(T.init)) CombinateConvertType;
+            }else{
+                static assert(false);
             }
         }
 
+        unittest{
+            static assert(is(CombinateConvertType!(to!int, string) == int));
+            static assert(is(CombinateConvertType!(to!string, int) == string));
+            static const(real)[] func(T)(T t){ static assert(false); }
+            static assert(is(CombinateConvertType!(func, float) == const(real)[]));
+        }
+
         template combinateConvert(alias parser, alias converter){
-            alias CombinateConvertType!converter ResultType;
+            alias CombinateConvertType!(converter, ParserType!parser) ResultType;
             Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
                 typeof(return) result;
                 auto r = parser.parse(input, memo);
@@ -668,7 +679,7 @@ struct Error{
                         }else static if(__traits(compiles, new converter(r.value.field))){
                             result.value = new converter(r.value.field);
                         }else{
-                            static assert(false, converter.mangleof ~ " cannot call with argument type " ~ typeof(r.value.field).stringof);
+                            static assert(false, converter.stringof ~ " cannot call with argument type " ~ typeof(r.value.field).stringof);
                         }
                     }else{
                         static if(__traits(compiles, converter(r.value))){

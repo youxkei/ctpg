@@ -20,9 +20,7 @@ mixin(generateParsers(q{
         / primary !"/" mulExp >> (int lhs, int rhs){ return lhs / rhs; }
         / primary;
 
-    int primary = !"(" addExp !")" / int_;
-
-    int int_ = s( [0-9]+ ) >> (string int_){ return to!int(int_); };
+    int primary = !"(" addExp !")" / s( [0-9]+ ) >> to!int;
 }));
 
 void main(){
