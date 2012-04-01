@@ -13,6 +13,7 @@ module ctpg;
 import std.array: save, empty;
 import std.conv: to;
 import std.range: isForwardRange, ElementType;
+import std.regex: ctRegex, match, regex;
 import std.traits: CommonType, isCallable, ReturnType, isSomeChar, isSomeString, Unqual, isAssignable, isArray;
 import std.typetuple: staticMap, TypeTuple;
 
@@ -38,29 +39,33 @@ Option!T option(T)(bool some, T value){
     return Option!T(some, value);
 }
 
-struct Input(Range){
-    static assert(isForwardRange!Range && isSomeChar!(ElementType!Range));
-
+struct Input(R){
+    static assert(isSomeString!R || isForwardRange!R);
     invariant(){
         assert(line >= 1);
         assert(callerLine >= 1);
     }
 
     public{
-        Range range;
+        R range;
         size_t position;
         size_t line = 1;
         size_t callerLine = 1;
         string callerFile;
 
-        //cannot apply some qualifiers due to unclearness of Range
+        // cannot apply some qualifiers due to unclearness of Range
+        @property
         Input save(){
             return Input(range.save, position, line, callerLine, callerFile);
         }
 
-        bool isEnd(){
+        // ditto
+        @property
+        bool empty(){
             return range.empty;
         }
+
+        alias empty isEnd;
 
         pure @safe nothrow
         bool opEquals(Input lhs){
@@ -134,17 +139,16 @@ struct Error{
             }
 
             template combinateMemoize(alias parser){
-                alias ParserType!parser ResultType;
-                Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
+                Result!(R, ParserType!(R, parser)) combinateMemoize(R)(Input!R input, ref memo_t memo){
                     auto memo0 = parser.mangleof in memo;
                     if(memo0){
                         auto memo1 = input.position in *memo0;
                         if(memo1){
                             Object p = *memo1;
-                            return (cast(Wrapper!(Result!(Range, ParserType!parser)))p).value;
+                            return (cast(Wrapper!(Result!(R, ParserType!(R, parser))))p).value;
                         }
                     }
-                    auto result = parser.parse(input, memo);
+                    auto result = parser(input, memo);
                     memo[parser.mangleof][input.position] = wrap(result);
                     return result;
                 }
@@ -157,20 +161,33 @@ struct Error{
     }
 
     /* combinateUnTuple */ version(all){
+        private template CombinateUnTupleType(R, alias parser){
+            alias ParserType!(R, parser) ResultType;
+            static if(isTuple!ResultType && ResultType.length == 1){
+                alias ResultType.Types[0] CombinateUnTupleType;
+            }else{
+                alias ResultType CombinateUnTupleType;
+            }
+        }
+
+        unittest{
+            static assert(is(CombinateUnTupleType!(string, TestParser!int) == int));
+        }
+
         template combinateUnTuple(alias parser){
-            static if(isTuple!(ParserType!parser) && ParserType!parser.Types.length == 1){
-                alias ParserType!parser.Types[0] ResultType;
-                Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
+            Result!(R, CombinateUnTupleType!(R, parser)) combinateUnTuple(R)(Input!R input, ref memo_t memo){
+                alias ParserType!(R, parser) ResultType;
+                static if(isTuple!ResultType && ResultType.length == 1){
                     typeof(return) result;
-                    auto r = parser.parse(input, memo);
+                    auto r = parser(input, memo);
                     result.match = r.match;
                     result.value = r.value[0];
                     result.rest = r.rest;
                     result.error = r.error;
                     return result;
+                }else{
+                    return parser(input, memo);
                 }
-            }else{
-                alias parser combinateUnTuple;
             }
         }
 
@@ -253,37 +270,50 @@ struct Error{
     }
 
     /* combinateString */ version(all){
-        template combinateString(alias parser){
-            alias string ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
-                typeof(return) result;
-                auto r = parser.parse(input, memo);
-                if(r.match){
-                    result.match = true;
-                    result.value = flat(r.value);
-                    result.rest = r.rest;
-                }else{
-                    result.error = r.error;
-                }
-                return result;
-            }
+        template combinateFlat(alias parser){
+            alias combinateConvert!(parser, flat) combinateFlat;
         }
     }
 
     /* combinateSequence */ version(all){
+        template CombinateSequenceImplType(R, parsers...){
+            alias Tuple!(staticMap!(flatTuple, staticMap!(ParserType2!R.ParserType, parsers))) CombinateSequenceImplType;
+        }
+
+        unittest{
+            static assert(is(CombinateSequenceImplType!(string, TestParser!string, TestParser!string) == Tuple!(string, string)));
+            static assert(is(CombinateSequenceImplType!(string, TestParser!int, TestParser!long) == Tuple!(int, long)));
+            static assert(is(CombinateSequenceImplType!(string, TestParser!(Tuple!(int, long)), TestParser!uint) == Tuple!(int, long, uint)));
+            static assert(is(CombinateSequenceImplType!(string, TestParser!(Tuple!(int, long)), TestParser!(Tuple!(uint, ulong))) == Tuple!(int, long, uint, ulong)));
+            static assert(is(CombinateSequenceImplType!(string, TestParser!(Tuple!(Tuple!(byte, short), long)), TestParser!(Tuple!(uint, ulong))) == Tuple!(Tuple!(byte, short), long, uint, ulong)));
+        }
+
+        template flatTuple(T){
+            static if(isTuple!T){
+                alias T.Types flatTuple;
+            }else{
+                alias T flatTuple;
+            }
+        }
+
+        unittest{
+            static assert(is(flatTuple!(string) == string));
+            static assert(is(flatTuple!(Tuple!(string)) == TypeTuple!string));
+            static assert(is(flatTuple!(Tuple!(Tuple!(string))) == TypeTuple!(Tuple!string)));
+        }
+
         template combinateSequence(parsers...){
             alias combinateUnTuple!(combinateSequenceImpl!(parsers)) combinateSequence;
         }
 
         template combinateSequenceImpl(parsers...){
-            alias CombinateSequenceImplType!(parsers) ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
+            Result!(R, CombinateSequenceImplType!(R, parsers)) combinateSequenceImpl(R)(Input!R input, ref memo_t memo){
                 typeof(return) result;
                 static if(parsers.length == 1){
-                    auto r = parsers[0].parse(input, memo);
+                    auto r = parsers[0](input, memo);
                     if(r.match){
                         result.match = true;
-                        static if(isTuple!(ParserType!(parsers[0]))){
+                        static if(isTuple!(ParserType!(R, parsers[0]))){
                             result.value = r.value;
                         }else{
                             result.value = tuple(r.value);
@@ -293,12 +323,12 @@ struct Error{
                         result.error = r.error;
                     }
                 }else{
-                    auto r1 = parsers[0].parse(input, memo);
+                    auto r1 = parsers[0](input, memo);
                     if(r1.match){
-                        auto r2 = combinateSequenceImpl!(parsers[1..$]).parse(r1.rest, memo);
+                        auto r2 = .combinateSequenceImpl!(parsers[1..$])(r1.rest, memo);
                         if(r2.match){
                             result.match = true;
-                            static if(isTuple!(ParserType!(parsers[0]))){
+                            static if(isTuple!(ParserType!(R, parsers[0]))){
                                 result.value = tuple(r1.value.field, r2.value.field);
                             }else{
                                 result.value = tuple(r1.value, r2.value.field);
@@ -352,28 +382,37 @@ struct Error{
     }
 
     /* combinateChoice */ version(all){
+        template CombinateChoiceType(R, parsers...){
+            static assert(parsers.length > 0);
+
+            static if(parsers.length == 1){
+                alias ParserType!(R, parsers[0]) CombinateChoiceType;
+            }else{
+                alias CommonType!(ParserType!(R, parsers[0]), CombinateChoiceType!(R, parsers[1..$])) CombinateChoiceType;
+            }
+        }
+
+        unittest{
+            static assert(is(CombinateChoiceType!(string, TestParser!string, TestParser!string) == string));
+            static assert(is(CombinateChoiceType!(string, TestParser!int, TestParser!long) == long));
+            static assert(is(CombinateChoiceType!(string, TestParser!byte, TestParser!short, TestParser!int) == int));
+            static assert(is(CombinateChoiceType!(string, TestParser!string, TestParser!int) == void));
+        }
+
         template combinateChoice(parsers...){
-            alias CommonParserType!(parsers) ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
+            Result!(R, CombinateChoiceType!(R, parsers)) combinateChoice(R)(Input!R input, ref memo_t memo){
                 static assert(parsers.length > 0);
+
                 static if(parsers.length == 1){
-                    return parsers[0].parse(input, memo);
+                    return parsers[0](input, memo);
                 }else{
                     typeof(return) result;
-                    auto r1 = parsers[0].parse(input.save, memo);
-                    if(r1.match){
-                        result = r1;
+                    auto input1 = input.save;
+                    result = parsers[0](input1, memo);
+                    if(result.match){
                         return result;
-                    }else{
-                        result.error = r1.error;
                     }
-                    auto r2 = combinateChoice!(parsers[1..$]).parse(input, memo);
-                    if(r2.match){
-                        result = r2;
-                        return result;
-                    }else{
-                        result.error.need ~= " or " ~ r2.error.need;
-                    }
+                    result = .combinateChoice!(parsers[1..$])(input, memo);
                     return result;
                 }
             }
@@ -395,12 +434,12 @@ struct Error{
                 assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("w"w)) == result(true, "w", makeInput(testRange(""w), 1), Error.init));
                 assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("w"d)) == result(true, "w", makeInput(testRange(""d), 1), Error.init));
 
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("" ) == result(false, "", makeInput("" ), Error(q{"h" or "w"})));
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(""w) == result(false, "", makeInput(""w), Error(q{"h" or "w"})));
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(""d) == result(false, "", makeInput(""d), Error(q{"h" or "w"})));
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("" )) == result(false, "", makeInput(testRange("" )), Error(q{"h" or "w"})));
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange(""w)) == result(false, "", makeInput(testRange(""w)), Error(q{"h" or "w"})));
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange(""d)) == result(false, "", makeInput(testRange(""d)), Error(q{"h" or "w"})));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("" ) == result(false, "", makeInput("" ), Error(q{"w"})));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(""w) == result(false, "", makeInput(""w), Error(q{"w"})));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(""d) == result(false, "", makeInput(""d), Error(q{"w"})));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("" )) == result(false, "", makeInput(testRange("" )), Error(q{"w"})));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange(""w)) == result(false, "", makeInput(testRange(""w)), Error(q{"w"})));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange(""d)) == result(false, "", makeInput(testRange(""d)), Error(q{"w"})));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -409,76 +448,72 @@ struct Error{
     }
 
     /* combinateMore */ version(all){
-        template combinateMore(int n, alias parser, alias sep){
-            alias ParserType!(parser)[] ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
+        template combinateMore(int n, alias parser, alias sep = success){
+            Result!(R, ParserType!(R, parser)[]) combinateMore(R)(Input!R input, ref memo_t memo){
                 typeof(return) result;
-                Input!Range rest = input;
+                auto rest = input;
                 while(true){
                     auto input1 = rest.save;
-                    auto r1 = parser.parse(input1, memo);
+                    auto r1 = parser(input1, memo);
                     if(r1.match){
                         result.value = result.value ~ r1.value;
                         rest = r1.rest;
                         auto input2 = rest.save;
-                        auto r2 = sep.parse(input2, memo);
+                        auto r2 = sep(input2, memo);
                         if(r2.match){
                             rest = r2.rest;
-                        }else{
-                            break;
-                        }
-                    }else{
-                        if(result.value.length < n){
-                            result.error = r1.error;
-                            return result;
-                        }else{
-                            break;
+                            continue;
                         }
                     }
+                    if(result.value.length < n){
+                        result.error = r1.error;
+                        return result;
+                    }else{
+                        result.match = true;
+                        result.rest = rest;
+                        return result;
+                    }
                 }
-                result.match = true;
-                result.rest = rest;
-                return result;
             }
         }
 
-        template combinateMore0(alias parser, alias sep = parseNone!()){
+        template combinateMore0(alias parser, alias sep = success){
             alias combinateMore!(0, parser, sep) combinateMore0;
         }
 
-        template combinateMore1(alias parser, alias sep = parseNone!()){
+        template combinateMore1(alias parser, alias sep = success){
             alias combinateMore!(1, parser, sep) combinateMore1;
         }
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))("www w" ) == result(true, "www", makeInput(" w" , 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))("www w"w) == result(true, "www", makeInput(" w"w, 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))("www w"d) == result(true, "www", makeInput(" w"d, 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange("www w" )) == result(true, "www", makeInput(testRange(" w" ), 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange("www w"w)) == result(true, "www", makeInput(testRange(" w"w), 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange("www w"d)) == result(true, "www", makeInput(testRange(" w"d), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))("www w" ) == result(true, "www", makeInput(" w" , 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))("www w"w) == result(true, "www", makeInput(" w"w, 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))("www w"d) == result(true, "www", makeInput(" w"d, 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange("www w" )) == result(true, "www", makeInput(testRange(" w" ), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange("www w"w)) == result(true, "www", makeInput(testRange(" w"w), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange("www w"d)) == result(true, "www", makeInput(testRange(" w"d), 3), Error.init));
 
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(" w" ) == result(true, "", makeInput(" w" , 0), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(" w"w) == result(true, "", makeInput(" w"w, 0), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(" w"d) == result(true, "", makeInput(" w"d, 0), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange(" w" )) == result(true, "", makeInput(testRange(" w" ), 0), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange(" w"w)) == result(true, "", makeInput(testRange(" w"w), 0), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange(" w"d)) == result(true, "", makeInput(testRange(" w"d), 0), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(" w" ) == result(true, "", makeInput(" w" , 0), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(" w"w) == result(true, "", makeInput(" w"w, 0), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(" w"d) == result(true, "", makeInput(" w"d, 0), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange(" w" )) == result(true, "", makeInput(testRange(" w" ), 0), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange(" w"w)) == result(true, "", makeInput(testRange(" w"w), 0), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange(" w"d)) == result(true, "", makeInput(testRange(" w"d), 0), Error.init));
 
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))("www w" ) == result(true, "www", makeInput(" w" , 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))("www w"w) == result(true, "www", makeInput(" w"w, 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))("www w"d) == result(true, "www", makeInput(" w"d, 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange("www w" )) == result(true, "www", makeInput(testRange(" w" ), 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange("www w"w)) == result(true, "www", makeInput(testRange(" w"w), 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange("www w"d)) == result(true, "www", makeInput(testRange(" w"d), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))("www w" ) == result(true, "www", makeInput(" w" , 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))("www w"w) == result(true, "www", makeInput(" w"w, 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))("www w"d) == result(true, "www", makeInput(" w"d, 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange("www w" )) == result(true, "www", makeInput(testRange(" w" ), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange("www w"w)) == result(true, "www", makeInput(testRange(" w"w), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange("www w"d)) == result(true, "www", makeInput(testRange(" w"d), 3), Error.init));
 
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(" w" ) == result(false, "", makeInput("" ), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(" w"w) == result(false, "", makeInput(""w), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(" w"d) == result(false, "", makeInput(""d), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange(" w" )) == result(false, "", makeInput(testRange("" )), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange(" w"w)) == result(false, "", makeInput(testRange(""w)), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange(" w"d)) == result(false, "", makeInput(testRange(""d)), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(" w" ) == result(false, "", makeInput("" ), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(" w"w) == result(false, "", makeInput(""w), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(" w"d) == result(false, "", makeInput(""d), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange(" w" )) == result(false, "", makeInput(testRange("" )), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange(" w"w)) == result(false, "", makeInput(testRange(""w)), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange(" w"d)) == result(false, "", makeInput(testRange(""d)), Error(q{"w"})));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -488,11 +523,11 @@ struct Error{
 
     /* combinateOption */ version(all){
         template combinateOption(alias parser){
-            alias Option!(ParserType!parser) ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
+            Result!(R, Option!(ParserType!(R, parser))) combinateOption(R)(Input!R input, ref memo_t memo){
                 typeof(return) result;
                 result.match = true;
-                auto r = parser.parse(input.save, memo);
+                auto input1 = input.save;
+                auto r = parser(input1, memo);
                 if(r.match){
                     result.value = r.value;
                     result.value.some = true;
@@ -528,10 +563,9 @@ struct Error{
 
     /* combinateNone */ version(all){
         template combinateNone(alias parser){
-            alias None ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
+            Result!(R, None) combinateNone(R)(Input!R input, ref memo_t memo){
                 typeof(return) result;
-                auto r = parser.parse(input, memo);
+                auto r = parser(input, memo);
                 if(r.match){
                     result.match = true;
                     result.rest = r.rest;
@@ -571,13 +605,13 @@ struct Error{
         }
     }
 
-    /* combinateAnd */ version(all){
-        template combinateAnd(alias parser){
-            alias None ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
+    /* combinateAndPred */ version(all){
+        template combinateAndPred(alias parser){
+            Result!(R, None) combinateAndPred(R)(Input!R input, ref memo_t memo){
                 typeof(return) result;
                 result.rest = input;
-                auto r = parser.parse(input, memo);
+                auto input1 = input.save;
+                auto r = parser(input1, memo);
                 result.match = r.match;
                 result.error = r.error;
                 return result;
@@ -586,33 +620,33 @@ struct Error{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateAnd!(parseString!"w"))("www" ) == result(true, None.init, makeInput("www" , 0), Error.init));
-                assert(getResult!(combinateAnd!(parseString!"w"))("www"w) == result(true, None.init, makeInput("www"w, 0), Error.init));
-                assert(getResult!(combinateAnd!(parseString!"w"))("www"d) == result(true, None.init, makeInput("www"d, 0), Error.init));
-                assert(getResult!(combinateAnd!(parseString!"w"))(testRange("www" )) == result(true, None.init, makeInput(testRange("www" ), 0), Error.init));
-                assert(getResult!(combinateAnd!(parseString!"w"))(testRange("www"w)) == result(true, None.init, makeInput(testRange("www"w), 0), Error.init));
-                assert(getResult!(combinateAnd!(parseString!"w"))(testRange("www"d)) == result(true, None.init, makeInput(testRange("www"d), 0), Error.init));
+                assert(getResult!(combinateAndPred!(parseString!"w"))("www" ) == result(true, None.init, makeInput("www" , 0), Error.init));
+                assert(getResult!(combinateAndPred!(parseString!"w"))("www"w) == result(true, None.init, makeInput("www"w, 0), Error.init));
+                assert(getResult!(combinateAndPred!(parseString!"w"))("www"d) == result(true, None.init, makeInput("www"d, 0), Error.init));
+                assert(getResult!(combinateAndPred!(parseString!"w"))(testRange("www" )) == result(true, None.init, makeInput(testRange("www" ), 0), Error.init));
+                assert(getResult!(combinateAndPred!(parseString!"w"))(testRange("www"w)) == result(true, None.init, makeInput(testRange("www"w), 0), Error.init));
+                assert(getResult!(combinateAndPred!(parseString!"w"))(testRange("www"d)) == result(true, None.init, makeInput(testRange("www"d), 0), Error.init));
 
-                assert(getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))("www" ) == result(true, "w", makeInput("ww" , 1), Error.init));
-                assert(getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))("www"w) == result(true, "w", makeInput("ww"w, 1), Error.init));
-                assert(getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))("www"d) == result(true, "w", makeInput("ww"d, 1), Error.init));
-                assert(getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))(testRange("www" )) == result(true, "w", makeInput(testRange("ww" ), 1), Error.init));
-                assert(getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))(testRange("www"w)) == result(true, "w", makeInput(testRange("ww"w), 1), Error.init));
-                assert(getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))(testRange("www"d)) == result(true, "w", makeInput(testRange("ww"d), 1), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))("www" ) == result(true, "w", makeInput("ww" , 1), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))("www"w) == result(true, "w", makeInput("ww"w, 1), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))("www"d) == result(true, "w", makeInput("ww"d, 1), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))(testRange("www" )) == result(true, "w", makeInput(testRange("ww" ), 1), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))(testRange("www"w)) == result(true, "w", makeInput(testRange("ww"w), 1), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))(testRange("www"d)) == result(true, "w", makeInput(testRange("ww"d), 1), Error.init));
 
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("www" ) == result(true, "ww", makeInput("w" , 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("www"w) == result(true, "ww", makeInput("w"w, 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("www"d) == result(true, "ww", makeInput("w"d, 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("www" )) == result(true, "ww", makeInput(testRange("w" ), 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("www"w)) == result(true, "ww", makeInput(testRange("w"w), 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("www"d)) == result(true, "ww", makeInput(testRange("w"d), 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))("www" ) == result(true, "ww", makeInput("w" , 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))("www"w) == result(true, "ww", makeInput("w"w, 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))("www"d) == result(true, "ww", makeInput("w"d, 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))(testRange("www" )) == result(true, "ww", makeInput(testRange("w" ), 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))(testRange("www"w)) == result(true, "ww", makeInput(testRange("w"w), 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))(testRange("www"d)) == result(true, "ww", makeInput(testRange("w"d), 2), Error.init));
 
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("w" ) == result(false, "", makeInput("" ), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("w"w) == result(false, "", makeInput(""w), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("w"d) == result(false, "", makeInput(""d), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("w" )) == result(false, "", makeInput(testRange("" )), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("w"w)) == result(false, "", makeInput(testRange(""w)), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("w"d)) == result(false, "", makeInput(testRange(""d)), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))("w" ) == result(false, "", makeInput("" ), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))("w"w) == result(false, "", makeInput(""w), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))("w"d) == result(false, "", makeInput(""d), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))(testRange("w" )) == result(false, "", makeInput(testRange("" )), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))(testRange("w"w)) == result(false, "", makeInput(testRange(""w)), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))(testRange("w"d)) == result(false, "", makeInput(testRange(""d)), Error(q{"w"})));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -620,25 +654,25 @@ struct Error{
         }
     }
 
-    /* combinateNot */ version(all){
-        template combinateNot(alias parser){
-            alias None ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
+    /* combinateNotPred */ version(all){
+        template combinateNotPred(alias parser){
+            Result!(R, None) combinateNotPred(R)(Input!R input, ref memo_t memo){
                 typeof(return) result;
                 result.rest = input;
-                result.match = !parser.parse(input.save, memo).match;
+                auto input1 = input.save;
+                result.match = !parser(input1, memo).match;
                 return result;
             }
         }
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))("wwws" ) == result(true, "ww", makeInput("ws" , 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))("wwws"w) == result(true, "ww", makeInput("ws"w, 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))("wwws"d) == result(true, "ww", makeInput("ws"d, 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))(testRange("wwws" )) == result(true, "ww", makeInput(testRange("ws" ), 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))(testRange("wwws"w)) == result(true, "ww", makeInput(testRange("ws"w), 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))(testRange("wwws"d)) == result(true, "ww", makeInput(testRange("ws"d), 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))("wwws" ) == result(true, "ww", makeInput("ws" , 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))("wwws"w) == result(true, "ww", makeInput("ws"w, 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))("wwws"d) == result(true, "ww", makeInput("ws"d, 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))(testRange("wwws" )) == result(true, "ww", makeInput(testRange("ws" ), 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))(testRange("wwws"w)) == result(true, "ww", makeInput(testRange("ws"w), 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))(testRange("wwws"d)) == result(true, "ww", makeInput(testRange("ws"d), 2), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -653,7 +687,9 @@ struct Error{
             }else static if(isCallable!converter){
                 alias ReturnType!converter CombinateConvertType;
             }else static if(__traits(compiles, converter(T.init))){
-                alias ReturnType!(() => converter(T.init)) CombinateConvertType;
+                alias typeof(converter(T.init)) CombinateConvertType;
+            }else static if(__traits(compiles, converter(T.init.field))){
+                alias typeof(converter(T.init.field)) CombinateConvertType;
             }else{
                 static assert(false);
             }
@@ -667,29 +703,22 @@ struct Error{
         }
 
         template combinateConvert(alias parser, alias converter){
-            alias CombinateConvertType!(converter, ParserType!parser) ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
+            Result!(R, CombinateConvertType!(converter, ParserType!(R, parser))) combinateConvert(R)(Input!R input, ref memo_t memo){
                 typeof(return) result;
-                auto r = parser.parse(input, memo);
+                auto r = parser(input, memo);
                 if(r.match){
                     result.match = true;
-                    static if(isTuple!(ParserType!parser)){
                         static if(__traits(compiles, converter(r.value.field))){
                             result.value = converter(r.value.field);
                         }else static if(__traits(compiles, new converter(r.value.field))){
                             result.value = new converter(r.value.field);
-                        }else{
-                            static assert(false, converter.stringof ~ " cannot call with argument type " ~ typeof(r.value.field).stringof);
-                        }
-                    }else{
-                        static if(__traits(compiles, converter(r.value))){
+                        }else static if(__traits(compiles, converter(r.value))){
                             result.value = converter(r.value);
                         }else static if(__traits(compiles, new converter(r.value))){
                             result.value = new converter(r.value);
                         }else{
-                            static assert(false, converter.mangleof ~ " cannot call with argument type " ~ typeof(r.value).stringof);
+                            static assert(false, converter.stringof ~ " cannot call with argument type " ~ typeof(r.value).stringof);
                         }
-                    }
                     result.rest = r.rest;
                 }else{
                     result.error = r.error;
@@ -722,10 +751,9 @@ struct Error{
 
     /* combinateCheck */ version(all){
         template combinateCheck(alias parser, alias checker){
-            alias ParserType!parser ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
+            Result!(R, ParserType!(R, parser)) combinateCheck(R)(Input!R input, ref memo_t memo){
                 typeof(return) result;
-                auto r = parser.parse(input, memo);
+                auto r = parser(input, memo);
                 if(r.match){
                     if(checker(r.value)){
                         result = r;
@@ -741,19 +769,19 @@ struct Error{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwwww" ) == result(true, "wwwww", makeInput("" , 5), Error.init));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwwww"w) == result(true, "wwwww", makeInput(""w, 5), Error.init));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwwww"d) == result(true, "wwwww", makeInput(""d, 5), Error.init));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwwww" )) == result(true, "wwwww", makeInput(testRange("" ), 5), Error.init));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwwww"w)) == result(true, "wwwww", makeInput(testRange(""w), 5), Error.init));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwwww"d)) == result(true, "wwwww", makeInput(testRange(""d), 5), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwwww" ) == result(true, "wwwww", makeInput("" , 5), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwwww"w) == result(true, "wwwww", makeInput(""w, 5), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwwww"d) == result(true, "wwwww", makeInput(""d, 5), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwwww" )) == result(true, "wwwww", makeInput(testRange("" ), 5), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwwww"w)) == result(true, "wwwww", makeInput(testRange(""w), 5), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwwww"d)) == result(true, "wwwww", makeInput(testRange(""d), 5), Error.init));
 
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwww" ) == result(false, "", makeInput("" ), Error("passing check")));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwww"w) == result(false, "", makeInput(""w), Error("passing check")));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwww"d) == result(false, "", makeInput(""d), Error("passing check")));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwww" )) == result(false, "", makeInput(testRange("" )), Error("passing check")));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwww"w)) == result(false, "", makeInput(testRange(""w)), Error("passing check")));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwww"d)) == result(false, "", makeInput(testRange(""d)), Error("passing check")));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwww" ) == result(false, "", makeInput("" ), Error("passing check")));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwww"w) == result(false, "", makeInput(""w), Error("passing check")));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwww"d) == result(false, "", makeInput(""d), Error("passing check")));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwww" )) == result(false, "", makeInput(testRange("" )), Error("passing check")));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwww"w)) == result(false, "", makeInput(testRange(""w)), Error("passing check")));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwww"d)) == result(false, "", makeInput(testRange(""d)), Error("passing check")));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -763,22 +791,19 @@ struct Error{
 }
 
 /* parsers */ version(all){
-    /* parseNone */ version(all){
-        template parseNone(){
-            alias None ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
-                return result(true, None.init, input, Error.init);
-            }
+    /* success */ version(all){
+        Result!(R, None) success(R)(Input!R input, ref memo_t memo){
+            return result(true, None.init, input, Error.init);
         }
 
         unittest{
             enum dg = {
-                assert(getResult!(parseNone!())("hoge" ) == result(true, None.init, makeInput("hoge" , 0), Error.init));
-                assert(getResult!(parseNone!())("hoge"w) == result(true, None.init, makeInput("hoge"w, 0), Error.init));
-                assert(getResult!(parseNone!())("hoge"d) == result(true, None.init, makeInput("hoge"d, 0), Error.init));
-                assert(getResult!(parseNone!())(testRange("hoge" )) == result(true, None.init, makeInput(testRange("hoge" ), 0), Error.init));
-                assert(getResult!(parseNone!())(testRange("hoge"w)) == result(true, None.init, makeInput(testRange("hoge"w), 0), Error.init));
-                assert(getResult!(parseNone!())(testRange("hoge"d)) == result(true, None.init, makeInput(testRange("hoge"d), 0), Error.init));
+                assert(getResult!(success)("hoge" ) == result(true, None.init, makeInput("hoge" , 0), Error.init));
+                assert(getResult!(success)("hoge"w) == result(true, None.init, makeInput("hoge"w, 0), Error.init));
+                assert(getResult!(success)("hoge"d) == result(true, None.init, makeInput("hoge"d, 0), Error.init));
+                assert(getResult!(success)(testRange("hoge" )) == result(true, None.init, makeInput(testRange("hoge" ), 0), Error.init));
+                assert(getResult!(success)(testRange("hoge"w)) == result(true, None.init, makeInput(testRange("hoge"w), 0), Error.init));
+                assert(getResult!(success)(testRange("hoge"d)) == result(true, None.init, makeInput(testRange("hoge"d), 0), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -786,15 +811,23 @@ struct Error{
         }
     }
 
+    /* failure */ version(all){
+        template failure(string msg){
+            Result!(R, None) failure(R)(Input!R input, ref memo_t memo){
+                return result(false, None.init, Input!R.init, Error(msg, input.line));
+            }
+        }
+    }
+
     /* parseString */ version(all){
         template parseString(string str) if(str.length > 0){
-            alias string ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range ainput, ref memo_t memo){
-                auto input = ainput;
+            Result!(R, string) parseString(R)(Input!R input, ref memo_t memo){
+                static assert(isSomeString!R || (isForwardRange!R && isSomeChar!(ElementType!R)));
+
                 enum breadth = countBreadth(str);
-                enum convertedString = staticConvertString!(str, Range);
+                enum convertedString = staticConvertString!(str, R);
                 typeof(return) result;
-                static if(isSomeString!Range){
+                static if(isSomeString!R){
                     if(input.range.length >= convertedString.length && convertedString == input.range[0..convertedString.length]){
                         result.match = true;
                         result.value = str;
@@ -867,11 +900,12 @@ struct Error{
     /* parseCharRange */ version(all){
         template parseCharRange(dchar low, dchar high){
             static assert(low <= high);
-            alias string ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range _input, ref memo_t memo){
-                auto input = _input;
+
+            Result!(R, string) parseCharRange(R)(Input!R input, ref memo_t memo){
+                static assert(isSomeString!R || (isForwardRange!R && isSomeChar!(ElementType!R)));
+
                 typeof(return) result;
-                static if(isSomeString!Range){
+                static if(isSomeString!R){
                     if(input.range.length){
                         size_t idx;
                         dchar c = decode(input.range, idx);
@@ -940,144 +974,143 @@ struct Error{
     }
 
     /* parseEscapeSequence */ version(all){
-        template parseEscapeSequence(){
-            alias string ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
-                typeof(return) result;
-                static if(isSomeString!Range){
-                    if(input.range[0] == '\\'){
-                        switch(input.range[1]){
-                            case 'u':{
-                                result.match = true;
-                                result.value = input.range[0..6].to!string();
-                                result.rest.range = input.range[6..$];
-                                result.rest.position = input.position + 6;
-                                result.rest.line = input.line;
-                                result.rest.callerLine = input.callerLine;
-                                result.rest.callerFile = input.callerFile;
-                                return result;
-                            }
-                            case 'U':{
-                                result.match = true;
-                                result.value = input.range[0..10].to!string();
-                                result.rest.range = input.range[10..$];
-                                result.rest.position = input.position + 10;
-                                result.rest.line = input.line;
-                                result.rest.callerLine = input.callerLine;
-                                result.rest.callerFile = input.callerFile;
-                                return result;
-                            }
-                            case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
-                                result.match = true;
-                                result.value = input.range[0..2].to!string();
-                                result.rest.range = input.range[2..$];
-                                result.rest.position = input.position + 2;
-                                result.rest.line = input.line;
-                                result.rest.callerLine = input.callerLine;
-                                result.rest.callerFile = input.callerFile;
-                                return result;
-                            }
-                            default:{
-                            }
+        Result!(R, string) parseEscapeSequence(R)(Input!R input, ref memo_t memo){
+            static assert(isSomeString!R || (isForwardRange!R && isSomeChar!(ElementType!R)));
+
+            typeof(return) result;
+            static if(isSomeString!R){
+                if(input.range[0] == '\\'){
+                    switch(input.range[1]){
+                        case 'u':{
+                            result.match = true;
+                            result.value = input.range[0..6].to!string();
+                            result.rest.range = input.range[6..$];
+                            result.rest.position = input.position + 6;
+                            result.rest.line = input.line;
+                            result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
+                            return result;
                         }
-                    }
-                }else{
-                    auto c1 = input.range.front;
-                    if(c1 == '\\'){
-                        input.range.popFront;
-                        auto c2 = input.range.front;
-                        switch(c2){
-                            case 'u':{
-                                result.match = true;
-                                input.range.popFront;
-                                char[6] data;
-                                data[0..2] = "\\u";
-                                foreach(idx; 2..6){
-                                    data[idx] = cast(char)input.range.front;
-                                    input.range.popFront;
-                                }
-                                result.value = to!string(data);
-                                result.rest.range = input.range;
-                                result.rest.position = input.position + 6;
-                                result.rest.line = input.line;
-                                result.rest.callerLine = input.callerLine;
-                                result.rest.callerFile = input.callerFile;
-                                return result;
-                            }
-                            case 'U':{
-                                result.match = true;
-                                input.range.popFront;
-                                char[10] data;
-                                data[0..2] = "\\U";
-                                foreach(idx; 2..10){
-                                    data[idx] = cast(char)input.range.front;
-                                    input.range.popFront;
-                                }
-                                result.value = to!string(data);
-                                result.rest.range = input.range;
-                                result.rest.position = input.position + 10;
-                                result.rest.line = input.line;
-                                result.rest.callerLine = input.callerLine;
-                                result.rest.callerFile = input.callerFile;
-                                return result;
-                            }
-                            case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
-                                result.match = true;
-                                input.range.popFront;
-                                result.value = "\\" ~ to!string(c2);
-                                result.rest.position = input.position + 2;
-                                result.rest.range = input.range;
-                                result.rest.line = input.line;
-                                result.rest.callerLine = input.callerLine;
-                                result.rest.callerFile = input.callerFile;
-                                return result;
-                            }
-                            default:{
-                            }
+                        case 'U':{
+                            result.match = true;
+                            result.value = input.range[0..10].to!string();
+                            result.rest.range = input.range[10..$];
+                            result.rest.position = input.position + 10;
+                            result.rest.line = input.line;
+                            result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
+                            return result;
+                        }
+                        case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
+                            result.match = true;
+                            result.value = input.range[0..2].to!string();
+                            result.rest.range = input.range[2..$];
+                            result.rest.position = input.position + 2;
+                            result.rest.line = input.line;
+                            result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
+                            return result;
+                        }
+                        default:{
                         }
                     }
                 }
-                result.error = Error("escape sequence", input.line);
-                return result;
+            }else{
+                auto c1 = input.range.front;
+                if(c1 == '\\'){
+                    input.range.popFront;
+                    auto c2 = input.range.front;
+                    switch(c2){
+                        case 'u':{
+                            result.match = true;
+                            input.range.popFront;
+                            char[6] data;
+                            data[0..2] = "\\u";
+                            foreach(idx; 2..6){
+                                data[idx] = cast(char)input.range.front;
+                                input.range.popFront;
+                            }
+                            result.value = to!string(data);
+                            result.rest.range = input.range;
+                            result.rest.position = input.position + 6;
+                            result.rest.line = input.line;
+                            result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
+                            return result;
+                        }
+                        case 'U':{
+                            result.match = true;
+                            input.range.popFront;
+                            char[10] data;
+                            data[0..2] = "\\U";
+                            foreach(idx; 2..10){
+                                data[idx] = cast(char)input.range.front;
+                                input.range.popFront;
+                            }
+                            result.value = to!string(data);
+                            result.rest.range = input.range;
+                            result.rest.position = input.position + 10;
+                            result.rest.line = input.line;
+                            result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
+                            return result;
+                        }
+                        case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
+                            result.match = true;
+                            input.range.popFront;
+                            result.value = "\\" ~ to!string(c2);
+                            result.rest.position = input.position + 2;
+                            result.rest.range = input.range;
+                            result.rest.line = input.line;
+                            result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
+                            return result;
+                        }
+                        default:{
+                        }
+                    }
+                }
             }
+            result.error = Error("escape sequence", input.line);
+            return result;
         }
 
         unittest{
             enum dg = {
-                assert(getResult!(parseEscapeSequence!())(`\"hoge` ) == result(true, `\"`, makeInput("hoge" , 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(`\"hoge`w) == result(true, `\"`, makeInput("hoge"w, 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(`\"hoge`d) == result(true, `\"`, makeInput("hoge"d, 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge` )) == result(true, `\"`, makeInput(testRange("hoge" ), 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge`w)) == result(true, `\"`, makeInput(testRange("hoge"w), 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge`d)) == result(true, `\"`, makeInput(testRange("hoge"d), 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\"hoge` ) == result(true, `\"`, makeInput("hoge" , 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\"hoge`w) == result(true, `\"`, makeInput("hoge"w, 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\"hoge`d) == result(true, `\"`, makeInput("hoge"d, 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\"hoge` )) == result(true, `\"`, makeInput(testRange("hoge" ), 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\"hoge`w)) == result(true, `\"`, makeInput(testRange("hoge"w), 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\"hoge`d)) == result(true, `\"`, makeInput(testRange("hoge"d), 2), Error.init));
 
-                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge` ) == result(true, `\U0010FFFF`, makeInput("hoge" , 10), Error.init));
-                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge`w) == result(true, `\U0010FFFF`, makeInput("hoge"w, 10), Error.init));
-                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge`d) == result(true, `\U0010FFFF`, makeInput("hoge"d, 10), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge` )) == result(true, `\U0010FFFF`, makeInput(testRange("hoge" ), 10), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge`w)) == result(true, `\U0010FFFF`, makeInput(testRange("hoge"w), 10), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge`d)) == result(true, `\U0010FFFF`, makeInput(testRange("hoge"d), 10), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\U0010FFFFhoge` ) == result(true, `\U0010FFFF`, makeInput("hoge" , 10), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\U0010FFFFhoge`w) == result(true, `\U0010FFFF`, makeInput("hoge"w, 10), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\U0010FFFFhoge`d) == result(true, `\U0010FFFF`, makeInput("hoge"d, 10), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\U0010FFFFhoge` )) == result(true, `\U0010FFFF`, makeInput(testRange("hoge" ), 10), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\U0010FFFFhoge`w)) == result(true, `\U0010FFFF`, makeInput(testRange("hoge"w), 10), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\U0010FFFFhoge`d)) == result(true, `\U0010FFFF`, makeInput(testRange("hoge"d), 10), Error.init));
 
-                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge` ) == result(true, `\u10FF`, makeInput("hoge" , 6), Error.init));
-                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge`w) == result(true, `\u10FF`, makeInput("hoge"w, 6), Error.init));
-                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge`d) == result(true, `\u10FF`, makeInput("hoge"d, 6), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge` )) == result(true, `\u10FF`, makeInput(testRange("hoge" ), 6), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge`w)) == result(true, `\u10FF`, makeInput(testRange("hoge"w), 6), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge`d)) == result(true, `\u10FF`, makeInput(testRange("hoge"d), 6), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\u10FFhoge` ) == result(true, `\u10FF`, makeInput("hoge" , 6), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\u10FFhoge`w) == result(true, `\u10FF`, makeInput("hoge"w, 6), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\u10FFhoge`d) == result(true, `\u10FF`, makeInput("hoge"d, 6), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\u10FFhoge` )) == result(true, `\u10FF`, makeInput(testRange("hoge" ), 6), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\u10FFhoge`w)) == result(true, `\u10FF`, makeInput(testRange("hoge"w), 6), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\u10FFhoge`d)) == result(true, `\u10FF`, makeInput(testRange("hoge"d), 6), Error.init));
 
-                assert(getResult!(parseEscapeSequence!())(`\nhoge` ) == result(true, `\n`, makeInput("hoge" , 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(`\nhoge`w) == result(true, `\n`, makeInput("hoge"w, 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(`\nhoge`d) == result(true, `\n`, makeInput("hoge"d, 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge` )) == result(true, `\n`, makeInput(testRange("hoge" ), 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge`w)) == result(true, `\n`, makeInput(testRange("hoge"w), 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge`d)) == result(true, `\n`, makeInput(testRange("hoge"d), 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\nhoge` ) == result(true, `\n`, makeInput("hoge" , 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\nhoge`w) == result(true, `\n`, makeInput("hoge"w, 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\nhoge`d) == result(true, `\n`, makeInput("hoge"d, 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\nhoge` )) == result(true, `\n`, makeInput(testRange("hoge" ), 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\nhoge`w)) == result(true, `\n`, makeInput(testRange("hoge"w), 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\nhoge`d)) == result(true, `\n`, makeInput(testRange("hoge"d), 2), Error.init));
 
-                assert(getResult!(parseEscapeSequence!())("鬱hoge" ) == result(false, "", makeInput("" ), Error("escape sequence")));
-                assert(getResult!(parseEscapeSequence!())("鬱hoge"w) == result(false, "", makeInput(""w), Error("escape sequence")));
-                assert(getResult!(parseEscapeSequence!())("鬱hoge"d) == result(false, "", makeInput(""d), Error("escape sequence")));
-                assert(getResult!(parseEscapeSequence!())(testRange("鬱hoge" )) == result(false, "", makeInput(testRange("" )), Error("escape sequence")));
-                assert(getResult!(parseEscapeSequence!())(testRange("鬱hoge"w)) == result(false, "", makeInput(testRange(""w)), Error("escape sequence")));
-                assert(getResult!(parseEscapeSequence!())(testRange("鬱hoge"d)) == result(false, "", makeInput(testRange(""d)), Error("escape sequence")));
+                assert(getResult!(parseEscapeSequence)("鬱hoge" ) == result(false, "", makeInput("" ), Error("escape sequence")));
+                assert(getResult!(parseEscapeSequence)("鬱hoge"w) == result(false, "", makeInput(""w), Error("escape sequence")));
+                assert(getResult!(parseEscapeSequence)("鬱hoge"d) == result(false, "", makeInput(""d), Error("escape sequence")));
+                assert(getResult!(parseEscapeSequence)(testRange("鬱hoge" )) == result(false, "", makeInput(testRange("" )), Error("escape sequence")));
+                assert(getResult!(parseEscapeSequence)(testRange("鬱hoge"w)) == result(false, "", makeInput(testRange(""w)), Error("escape sequence")));
+                assert(getResult!(parseEscapeSequence)(testRange("鬱hoge"d)) == result(false, "", makeInput(testRange(""d)), Error("escape sequence")));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1086,57 +1119,56 @@ struct Error{
     }
 
     /* parseSpace */ version(all){
-        template parseSpace(){
-            alias string ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
-                typeof(return) result;
-                static if(isSomeString!Range){
-                    if(input.range.length > 0 && (input.range[0] == ' ' || input.range[0] == '\n' || input.range[0] == '\t' || input.range[0] == '\r' || input.range[0] == '\f')){
+        Result!(R, string) parseSpace(R)(Input!R input, ref memo_t memo){
+            static assert(isSomeString!R || (isForwardRange!R && isSomeChar!(ElementType!R)));
+
+            typeof(return) result;
+            static if(isSomeString!R){
+                if(input.range.length > 0 && (input.range[0] == ' ' || input.range[0] == '\n' || input.range[0] == '\t' || input.range[0] == '\r' || input.range[0] == '\f')){
+                    result.match = true;
+                    result.value = input.range[0..1].to!string();
+                    result.rest.range = input.range[1..$];
+                    result.rest.position = input.position + 1;
+                    result.rest.line = (input.range[0] == '\n' ? input.line + 1 : input.line);
+                    result.rest.callerLine = input.callerLine;
+                    result.rest.callerFile = input.callerFile;
+                    return result;
+                }
+            }else{
+                if(!input.range.empty){
+                    Unqual!(ElementType!R) c = input.range.front;
+                    if(c == ' ' || c == '\n' || c == '\t' || c == '\r' || c == '\f'){
                         result.match = true;
-                        result.value = input.range[0..1].to!string();
-                        result.rest.range = input.range[1..$];
+                        result.value = c.to!string();
+                        input.range.popFront;
+                        result.rest.range = input.range;
                         result.rest.position = input.position + 1;
-                        result.rest.line = (input.range[0] == '\n' ? input.line + 1 : input.line);
+                        result.rest.line = (c == '\n' ? input.line + 1 : input.line);
                         result.rest.callerLine = input.callerLine;
                         result.rest.callerFile = input.callerFile;
                         return result;
                     }
-                }else{
-                    if(!input.range.empty){
-                        Unqual!(ElementType!Range) c = input.range.front;
-                        if(c == ' ' || c == '\n' || c == '\t' || c == '\r' || c == '\f'){
-                            result.match = true;
-                            result.value = c.to!string();
-                            input.range.popFront;
-                            result.rest.range = input.range;
-                            result.rest.position = input.position + 1;
-                            result.rest.line = (c == '\n' ? input.line + 1 : input.line);
-                            result.rest.callerLine = input.callerLine;
-                            result.rest.callerFile = input.callerFile;
-                            return result;
-                        }
-                    }
                 }
-                result.error = Error("space", input.line);
-                return result;
             }
+            result.error = Error("space", input.line);
+            return result;
         }
 
         version(all) unittest{
             enum dg = {
-                assert(getResult!(parseSpace!())("\thoge" ) == result(true, "\t", makeInput("hoge" , 1), Error.init));
-                assert(getResult!(parseSpace!())("\thoge"w) == result(true, "\t", makeInput("hoge"w, 1), Error.init));
-                assert(getResult!(parseSpace!())("\thoge"d) == result(true, "\t", makeInput("hoge"d, 1), Error.init));
-                assert(getResult!(parseSpace!())(testRange("\thoge"))  == result(true, "\t", makeInput(testRange("hoge"),  1), Error.init));
-                assert(getResult!(parseSpace!())(testRange("\thoge"w)) == result(true, "\t", makeInput(testRange("hoge"w), 1), Error.init));
-                assert(getResult!(parseSpace!())(testRange("\thoge"d)) == result(true, "\t", makeInput(testRange("hoge"d), 1), Error.init));
+                assert(getResult!(parseSpace)("\thoge" ) == result(true, "\t", makeInput("hoge" , 1), Error.init));
+                assert(getResult!(parseSpace)("\thoge"w) == result(true, "\t", makeInput("hoge"w, 1), Error.init));
+                assert(getResult!(parseSpace)("\thoge"d) == result(true, "\t", makeInput("hoge"d, 1), Error.init));
+                assert(getResult!(parseSpace)(testRange("\thoge"))  == result(true, "\t", makeInput(testRange("hoge"),  1), Error.init));
+                assert(getResult!(parseSpace)(testRange("\thoge"w)) == result(true, "\t", makeInput(testRange("hoge"w), 1), Error.init));
+                assert(getResult!(parseSpace)(testRange("\thoge"d)) == result(true, "\t", makeInput(testRange("hoge"d), 1), Error.init));
 
-                assert(getResult!(parseSpace!())("hoge" ) == result(false, "", makeInput("" ), Error("space")));
-                assert(getResult!(parseSpace!())("hoge"w) == result(false, "", makeInput(""w), Error("space")));
-                assert(getResult!(parseSpace!())("hoge"d) == result(false, "", makeInput(""d), Error("space")));
-                assert(getResult!(parseSpace!())(testRange("hoge" )) == result(false, "", makeInput(testRange("" )), Error("space")));
-                assert(getResult!(parseSpace!())(testRange("hoge"w)) == result(false, "", makeInput(testRange(""w)), Error("space")));
-                assert(getResult!(parseSpace!())(testRange("hoge"d)) == result(false, "", makeInput(testRange(""d)), Error("space")));
+                assert(getResult!(parseSpace)("hoge" ) == result(false, "", makeInput("" ), Error("space")));
+                assert(getResult!(parseSpace)("hoge"w) == result(false, "", makeInput(""w), Error("space")));
+                assert(getResult!(parseSpace)("hoge"d) == result(false, "", makeInput(""d), Error("space")));
+                assert(getResult!(parseSpace)(testRange("hoge" )) == result(false, "", makeInput(testRange("" )), Error("space")));
+                assert(getResult!(parseSpace)(testRange("hoge"w)) == result(false, "", makeInput(testRange(""w)), Error("space")));
+                assert(getResult!(parseSpace)(testRange("hoge"d)) == result(false, "", makeInput(testRange(""d)), Error("space")));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1145,16 +1177,107 @@ struct Error{
     }
 
     /* parseEOF */ version(all){
-        template parseEOF(){
-            alias None ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
+        Result!(R, None) parseEOF(R)(Input!R input, ref memo_t memo){
+            typeof(return) result;
+            if(input.empty){
+                result.match = true;
+                result.rest.callerLine = input.callerLine;
+                result.rest.callerFile = input.callerFile;
+            }else{
+                result.error = Error("EOF", input.line);
+            }
+            return result;
+        }
+
+        unittest{
+            enum dg = {
+                assert(getResult!(parseEOF)("" ) == result(true, None.init, makeInput("" , 0), Error.init));
+                assert(getResult!(parseEOF)(""w) == result(true, None.init, makeInput(""w, 0), Error.init));
+                assert(getResult!(parseEOF)(""d) == result(true, None.init, makeInput(""d, 0), Error.init));
+                assert(getResult!(parseEOF)(testRange("" )) == result(true, None.init, makeInput(testRange("" ), 0), Error.init));
+                assert(getResult!(parseEOF)(testRange(""w)) == result(true, None.init, makeInput(testRange(""w), 0), Error.init));
+                assert(getResult!(parseEOF)(testRange(""d)) == result(true, None.init, makeInput(testRange(""d), 0), Error.init));
+
+                assert(getResult!(parseEOF)("hoge" ) == result(false, None.init, makeInput("" ), Error("EOF")));
+                assert(getResult!(parseEOF)("hoge"w) == result(false, None.init, makeInput(""w), Error("EOF")));
+                assert(getResult!(parseEOF)("hoge"d) == result(false, None.init, makeInput(""d), Error("EOF")));
+                assert(getResult!(parseEOF)(testRange("hoge" )) == result(false, None.init, makeInput(testRange("" )), Error("EOF")));
+                assert(getResult!(parseEOF)(testRange("hoge"w)) == result(false, None.init, makeInput(testRange(""w)), Error("EOF")));
+                assert(getResult!(parseEOF)(testRange("hoge"d)) == result(false, None.init, makeInput(testRange(""d)), Error("EOF")));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+    }
+
+    /* parseElem */ version(all){
+        template RangeElementType(R){
+            static assert(isSomeString!R || isForwardRange!R);
+
+            static if(isSomeString!R){
+                alias typeof(R.init[0]) RangeElementType;
+            }else static if(isForwardRange!R){
+                alias ElementType!R RangeElementType;
+            }
+        }
+
+        Result!(R, RangeElementType!R) parseElem(R)(Input!R input, ref memo_t memo){
+            static assert(isSomeString!R || isForwardRange!R);
+
+            typeof(return) result;
+            if(!input.empty){
+                result.match = true;
+                static if(isSomeString!R){
+                    result.value = input.range[0];
+                    result.rest.range = input.range[1..$];
+                    result.rest.position = input.position + 1;
+                    if(input[0] == '\n'){
+                        result.rest.line = input.line + 1;
+                    }else{
+                        result.rest.line = input.line;
+                    }
+                }else{
+                    result.value = input.range.front;
+                    input.range.popFront;
+                    result.rest.range = input.range;
+                    result.rest.position = input.position + 1;
+                    static if(isSomeChar!(ElementType!R)){
+                        if(input.range.front == '\n'){
+                            result.rest.line = input.line + 1;
+                        }else{
+                            result.rest.line = input.line;
+                        }
+                    }else{
+                        result.rest.line = input.line;
+                    }
+                }
+                result.rest.callerLine = input.callerLine;
+                result.rest.callerFile = input.callerFile;
+            }else{
+                result.error.line = input.line;
+                result.error.need = "";
+            }
+            return result;
+        }
+    }
+
+    /* parseRegex */ version(all){
+        template parseRegex(string src){
+            Result!(R, string) parseRegex(R)(Input!R input, ref memo_t memo){
+                static assert(isSomeString!R);
+
                 typeof(return) result;
-                if(input.range.empty){
+                auto captures = input.range.match(regex("^" ~ src));
+                if(!captures.empty){
                     result.match = true;
+                    result.value = captures.hit;
+                    result.rest.range = captures.post;
+                    result.rest.position = input.position + 1;
                     result.rest.callerLine = input.callerLine;
                     result.rest.callerFile = input.callerFile;
                 }else{
-                    result.error = Error("EOF", input.line);
+                    result.error = Error("", input.line);
                 }
                 return result;
             }
@@ -1162,22 +1285,9 @@ struct Error{
 
         unittest{
             enum dg = {
-                assert(getResult!(parseEOF!())("" ) == result(true, None.init, makeInput("" , 0), Error.init));
-                assert(getResult!(parseEOF!())(""w) == result(true, None.init, makeInput(""w, 0), Error.init));
-                assert(getResult!(parseEOF!())(""d) == result(true, None.init, makeInput(""d, 0), Error.init));
-                assert(getResult!(parseEOF!())(testRange("" )) == result(true, None.init, makeInput(testRange("" ), 0), Error.init));
-                assert(getResult!(parseEOF!())(testRange(""w)) == result(true, None.init, makeInput(testRange(""w), 0), Error.init));
-                assert(getResult!(parseEOF!())(testRange(""d)) == result(true, None.init, makeInput(testRange(""d), 0), Error.init));
-
-                assert(getResult!(parseEOF!())("hoge" ) == result(false, None.init, makeInput("" ), Error("EOF")));
-                assert(getResult!(parseEOF!())("hoge"w) == result(false, None.init, makeInput(""w), Error("EOF")));
-                assert(getResult!(parseEOF!())("hoge"d) == result(false, None.init, makeInput(""d), Error("EOF")));
-                assert(getResult!(parseEOF!())(testRange("hoge" )) == result(false, None.init, makeInput(testRange("" )), Error("EOF")));
-                assert(getResult!(parseEOF!())(testRange("hoge"w)) == result(false, None.init, makeInput(testRange(""w)), Error("EOF")));
-                assert(getResult!(parseEOF!())(testRange("hoge"d)) == result(false, None.init, makeInput(testRange(""d)), Error("EOF")));
-                return true;
+                assert(getResult!(parseRegex!r"\w\w\w")("abcdef") == result(true, "efg", makeInput("", 3), Error.init));
             };
-            debug(ctpg_compile_time) static assert(dg());
+            version(none) debug(ctpg_compile_time) static assert(dg());
             dg();
         }
     }
@@ -1185,21 +1295,18 @@ struct Error{
 
 /* getters */ version(all){
     /* getLine */ version(all){
-        template getLine(){
-            alias size_t ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
-                return result(true, input.line, input, Error.init);
-            }
+        Result!(R, size_t) getLine(R)(Input!R input, ref memo_t memo){
+            return result(true, input.line, input, Error.init);
         }
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n" ) == result(true, 3u, makeInput("" , 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n"w) == result(true, 3u, makeInput(""w, 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n"d) == result(true, 3u, makeInput(""d, 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n" )) == result(true, 3u, makeInput(testRange("" ), 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"w)) == result(true, 3u, makeInput(testRange(""w), 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"d)) == result(true, 3u, makeInput(testRange(""d), 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces, getLine))("\n\n" ) == result(true, 3u, makeInput("" , 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces, getLine))("\n\n"w) == result(true, 3u, makeInput(""w, 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces, getLine))("\n\n"d) == result(true, 3u, makeInput(""d, 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces, getLine))(testRange("\n\n" )) == result(true, 3u, makeInput(testRange("" ), 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces, getLine))(testRange("\n\n"w)) == result(true, 3u, makeInput(testRange(""w), 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces, getLine))(testRange("\n\n"d)) == result(true, 3u, makeInput(testRange(""d), 2, 3), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1208,21 +1315,18 @@ struct Error{
     }
 
     /* getCallerLine */ version(all){
-        template getCallerLine(){
-            alias size_t ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
-                return result(true, input.callerLine, input, Error.init);
-            }
+        Result!(R, size_t) getCallerLine(R)(Input!R input, ref memo_t memo){
+            return result(true, input.callerLine, input, Error.init);
         }
 
         unittest{
             enum dg = {
-                assert(getResult!(getCallerLine!())("" ) == result(true, cast(size_t)__LINE__, makeInput("" , 0), Error.init));
-                assert(getResult!(getCallerLine!())(""w) == result(true, cast(size_t)__LINE__, makeInput(""w, 0), Error.init));
-                assert(getResult!(getCallerLine!())(""d) == result(true, cast(size_t)__LINE__, makeInput(""d, 0), Error.init));
-                assert(getResult!(getCallerLine!())(testRange("" )) == result(true, cast(size_t)__LINE__, makeInput(testRange("" ), 0), Error.init));
-                assert(getResult!(getCallerLine!())(testRange(""w)) == result(true, cast(size_t)__LINE__, makeInput(testRange(""w), 0), Error.init));
-                assert(getResult!(getCallerLine!())(testRange(""d)) == result(true, cast(size_t)__LINE__, makeInput(testRange(""d), 0), Error.init));
+                assert(getResult!(getCallerLine)("" ) == result(true, cast(size_t)__LINE__, makeInput("" , 0), Error.init));
+                assert(getResult!(getCallerLine)(""w) == result(true, cast(size_t)__LINE__, makeInput(""w, 0), Error.init));
+                assert(getResult!(getCallerLine)(""d) == result(true, cast(size_t)__LINE__, makeInput(""d, 0), Error.init));
+                assert(getResult!(getCallerLine)(testRange("" )) == result(true, cast(size_t)__LINE__, makeInput(testRange("" ), 0), Error.init));
+                assert(getResult!(getCallerLine)(testRange(""w)) == result(true, cast(size_t)__LINE__, makeInput(testRange(""w), 0), Error.init));
+                assert(getResult!(getCallerLine)(testRange(""d)) == result(true, cast(size_t)__LINE__, makeInput(testRange(""d), 0), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1231,52 +1335,47 @@ struct Error{
     }
 
     /* getCallerFile */ version(all){
-        template getCallerFile(){
-            alias string ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
-                return result(true, input.callerFile, input, Error.init);
-            }
+        Result!(R, string) getCallerFile(R)(Input!R input, ref memo_t memo){
+            return result(true, input.callerFile, input, Error.init);
         }
     }
 }
 
 /* useful parser */ version(all){
     /* parseAnyChar */ version(all){
-        template parseAnyChar(){
-            alias parseCharRange!(dchar.min, dchar.max) parseAnyChar;
-        }
+        alias parseCharRange!(dchar.min, dchar.max) parseAnyChar;
 
         alias parseAnyChar any;
 
         unittest{
             enum dg = {
-                assert(getResult!(parseAnyChar!())("hoge" ) == result(true, "h", makeInput("oge" , 1), Error.init));
-                assert(getResult!(parseAnyChar!())("hoge"w) == result(true, "h", makeInput("oge"w, 1), Error.init));
-                assert(getResult!(parseAnyChar!())("hoge"d) == result(true, "h", makeInput("oge"d, 1), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("hoge" )) == result(true, "h", makeInput(testRange("oge" ), 1), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("hoge"w)) == result(true, "h", makeInput(testRange("oge"w), 1), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("hoge"d)) == result(true, "h", makeInput(testRange("oge"d), 1), Error.init));
+                assert(getResult!(parseAnyChar)("hoge" ) == result(true, "h", makeInput("oge" , 1), Error.init));
+                assert(getResult!(parseAnyChar)("hoge"w) == result(true, "h", makeInput("oge"w, 1), Error.init));
+                assert(getResult!(parseAnyChar)("hoge"d) == result(true, "h", makeInput("oge"d, 1), Error.init));
+                assert(getResult!(parseAnyChar)(testRange("hoge" )) == result(true, "h", makeInput(testRange("oge" ), 1), Error.init));
+                assert(getResult!(parseAnyChar)(testRange("hoge"w)) == result(true, "h", makeInput(testRange("oge"w), 1), Error.init));
+                assert(getResult!(parseAnyChar)(testRange("hoge"d)) == result(true, "h", makeInput(testRange("oge"d), 1), Error.init));
 
-                assert(getResult!(parseAnyChar!())("\U00012345" ) == result(true, "\U00012345", makeInput("" , 1), Error.init));
-                assert(getResult!(parseAnyChar!())("\U00012345"w) == result(true, "\U00012345", makeInput(""w, 1), Error.init));
-                assert(getResult!(parseAnyChar!())("\U00012345"d) == result(true, "\U00012345", makeInput(""d, 1), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("\U00012345" )) == result(true, "\U00012345", makeInput(testRange("" ), 1), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("\U00012345"w)) == result(true, "\U00012345", makeInput(testRange(""w), 1), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("\U00012345"d)) == result(true, "\U00012345", makeInput(testRange(""d), 1), Error.init));
+                assert(getResult!(parseAnyChar)("\U00012345" ) == result(true, "\U00012345", makeInput("" , 1), Error.init));
+                assert(getResult!(parseAnyChar)("\U00012345"w) == result(true, "\U00012345", makeInput(""w, 1), Error.init));
+                assert(getResult!(parseAnyChar)("\U00012345"d) == result(true, "\U00012345", makeInput(""d, 1), Error.init));
+                assert(getResult!(parseAnyChar)(testRange("\U00012345" )) == result(true, "\U00012345", makeInput(testRange("" ), 1), Error.init));
+                assert(getResult!(parseAnyChar)(testRange("\U00012345"w)) == result(true, "\U00012345", makeInput(testRange(""w), 1), Error.init));
+                assert(getResult!(parseAnyChar)(testRange("\U00012345"d)) == result(true, "\U00012345", makeInput(testRange(""d), 1), Error.init));
 
-                assert(getResult!(parseAnyChar!())("\nhoge" ) == result(true, "\n", makeInput("hoge" , 1, 2), Error.init));
-                assert(getResult!(parseAnyChar!())("\nhoge"w) == result(true, "\n", makeInput("hoge"w, 1, 2), Error.init));
-                assert(getResult!(parseAnyChar!())("\nhoge"d) == result(true, "\n", makeInput("hoge"d, 1, 2), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("\nhoge" )) == result(true, "\n", makeInput(testRange("hoge" ), 1, 2), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("\nhoge"w)) == result(true, "\n", makeInput(testRange("hoge"w), 1, 2), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("\nhoge"d)) == result(true, "\n", makeInput(testRange("hoge"d), 1, 2), Error.init));
+                assert(getResult!(parseAnyChar)("\nhoge" ) == result(true, "\n", makeInput("hoge" , 1, 2), Error.init));
+                assert(getResult!(parseAnyChar)("\nhoge"w) == result(true, "\n", makeInput("hoge"w, 1, 2), Error.init));
+                assert(getResult!(parseAnyChar)("\nhoge"d) == result(true, "\n", makeInput("hoge"d, 1, 2), Error.init));
+                assert(getResult!(parseAnyChar)(testRange("\nhoge" )) == result(true, "\n", makeInput(testRange("hoge" ), 1, 2), Error.init));
+                assert(getResult!(parseAnyChar)(testRange("\nhoge"w)) == result(true, "\n", makeInput(testRange("hoge"w), 1, 2), Error.init));
+                assert(getResult!(parseAnyChar)(testRange("\nhoge"d)) == result(true, "\n", makeInput(testRange("hoge"d), 1, 2), Error.init));
 
-                assert(getResult!(parseAnyChar!())("" ) == result(false, "", makeInput("" ), Error("any char")));
-                assert(getResult!(parseAnyChar!())(""w) == result(false, "", makeInput(""w), Error("any char")));
-                assert(getResult!(parseAnyChar!())(""d) == result(false, "", makeInput(""d), Error("any char")));
-                assert(getResult!(parseAnyChar!())(testRange("" )) == result(false, "", makeInput(testRange("" )), Error("any char")));
-                assert(getResult!(parseAnyChar!())(testRange(""w)) == result(false, "", makeInput(testRange(""w)), Error("any char")));
-                assert(getResult!(parseAnyChar!())(testRange(""d)) == result(false, "", makeInput(testRange(""d)), Error("any char")));
+                assert(getResult!(parseAnyChar)("" ) == result(false, "", makeInput("" ), Error("any char")));
+                assert(getResult!(parseAnyChar)(""w) == result(false, "", makeInput(""w), Error("any char")));
+                assert(getResult!(parseAnyChar)(""d) == result(false, "", makeInput(""d), Error("any char")));
+                assert(getResult!(parseAnyChar)(testRange("" )) == result(false, "", makeInput(testRange("" )), Error("any char")));
+                assert(getResult!(parseAnyChar)(testRange(""w)) == result(false, "", makeInput(testRange(""w)), Error("any char")));
+                assert(getResult!(parseAnyChar)(testRange(""d)) == result(false, "", makeInput(testRange(""d)), Error("any char")));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1285,26 +1384,23 @@ struct Error{
     }
 
     /* parseSpaces */ version(all){
-        template parseSpaces(){
-            alias combinateNone!(combinateMore0!(parseSpace!())) parseSpaces;
-        }
+        alias combinateNone!(combinateMore0!(parseSpace)) parseSpaces;
 
         unittest{
-            static assert(is(parseSpaces!().ResultType));
             enum dg = {
-                assert(getResult!(parseSpaces!())("\t \rhoge" ) == result(true, None.init, makeInput("hoge" , 3), Error.init));
-                assert(getResult!(parseSpaces!())("\t \rhoge"w) == result(true, None.init, makeInput("hoge"w, 3), Error.init));
-                assert(getResult!(parseSpaces!())("\t \rhoge"d) == result(true, None.init, makeInput("hoge"d, 3), Error.init));
-                assert(getResult!(parseSpaces!())(testRange("\t \rhoge" )) == result(true, None.init, makeInput(testRange("hoge" ), 3), Error.init));
-                assert(getResult!(parseSpaces!())(testRange("\t \rhoge"w)) == result(true, None.init, makeInput(testRange("hoge"w), 3), Error.init));
-                assert(getResult!(parseSpaces!())(testRange("\t \rhoge"d)) == result(true, None.init, makeInput(testRange("hoge"d), 3), Error.init));
+                assert(getResult!(parseSpaces)("\t \rhoge" ) == result(true, None.init, makeInput("hoge" , 3), Error.init));
+                assert(getResult!(parseSpaces)("\t \rhoge"w) == result(true, None.init, makeInput("hoge"w, 3), Error.init));
+                assert(getResult!(parseSpaces)("\t \rhoge"d) == result(true, None.init, makeInput("hoge"d, 3), Error.init));
+                assert(getResult!(parseSpaces)(testRange("\t \rhoge" )) == result(true, None.init, makeInput(testRange("hoge" ), 3), Error.init));
+                assert(getResult!(parseSpaces)(testRange("\t \rhoge"w)) == result(true, None.init, makeInput(testRange("hoge"w), 3), Error.init));
+                assert(getResult!(parseSpaces)(testRange("\t \rhoge"d)) == result(true, None.init, makeInput(testRange("hoge"d), 3), Error.init));
 
-                assert(getResult!(parseSpaces!())("hoge" ) == result(true, None.init, makeInput("hoge" , 0), Error.init));
-                assert(getResult!(parseSpaces!())("hoge"w) == result(true, None.init, makeInput("hoge"w, 0), Error.init));
-                assert(getResult!(parseSpaces!())("hoge"d) == result(true, None.init, makeInput("hoge"d, 0), Error.init));
-                assert(getResult!(parseSpaces!())(testRange("hoge" )) == result(true, None.init, makeInput(testRange("hoge" ), 0), Error.init));
-                assert(getResult!(parseSpaces!())(testRange("hoge"w)) == result(true, None.init, makeInput(testRange("hoge"w), 0), Error.init));
-                assert(getResult!(parseSpaces!())(testRange("hoge"d)) == result(true, None.init, makeInput(testRange("hoge"d), 0), Error.init));
+                assert(getResult!(parseSpaces)("hoge" ) == result(true, None.init, makeInput("hoge" , 0), Error.init));
+                assert(getResult!(parseSpaces)("hoge"w) == result(true, None.init, makeInput("hoge"w, 0), Error.init));
+                assert(getResult!(parseSpaces)("hoge"d) == result(true, None.init, makeInput("hoge"d, 0), Error.init));
+                assert(getResult!(parseSpaces)(testRange("hoge" )) == result(true, None.init, makeInput(testRange("hoge" ), 0), Error.init));
+                assert(getResult!(parseSpaces)(testRange("hoge"w)) == result(true, None.init, makeInput(testRange("hoge"w), 0), Error.init));
+                assert(getResult!(parseSpaces)(testRange("hoge"d)) == result(true, None.init, makeInput(testRange("hoge"d), 0), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1313,59 +1409,55 @@ struct Error{
     }
 
     /* parseIdent */ version(all){
-        template parseIdent(){
-            alias combinateMemoize!(combinateString!(
-                combinateMemoize!(combinateSequence!(
-                    combinateMemoize!(combinateChoice!(
-                        combinateMemoize!(parseString!"_"),
-                        combinateMemoize!(parseCharRange!('a','z')),
-                        combinateMemoize!(parseCharRange!('A','Z'))
-                    )),
-                    combinateMemoize!(combinateMore0!(parseIdentChar!()))
-                ))
-            )) parseIdent;
-        }
+        alias combinateChoice!(
+           parseString!"_",
+           parseCharRange!('a','z'),
+           parseCharRange!('A','Z'),
+           parseCharRange!('0','9')
+        ) parseIdentChar;
+
+        alias combinateFlat!(
+            combinateSequence!(
+                combinateChoice!(
+                    parseString!"_",
+                    parseCharRange!('a','z'),
+                    parseCharRange!('A','Z')
+                ),
+                combinateMore0!(parseIdentChar)
+            )
+        ) parseIdent;
 
         alias parseIdent ident_p;
 
-        private template parseIdentChar(){
-            alias combinateChoice!(
-                parseString!"_",
-                parseCharRange!('a','z'),
-                parseCharRange!('A','Z'),
-                parseCharRange!('0','9')
-            ) parseIdentChar;
-        }
-
         unittest{
             enum dg = {
-                assert(getResult!(parseIdent!())("hoge" ) == result(true, "hoge", makeInput("" , 4), Error.init));
-                assert(getResult!(parseIdent!())("hoge"w) == result(true, "hoge", makeInput(""w, 4), Error.init));
-                assert(getResult!(parseIdent!())("hoge"d) == result(true, "hoge", makeInput(""d, 4), Error.init));
-                assert(getResult!(parseIdent!())(testRange("hoge" )) == result(true, "hoge", makeInput(testRange("" ), 4), Error.init));
-                assert(getResult!(parseIdent!())(testRange("hoge"w)) == result(true, "hoge", makeInput(testRange(""w), 4), Error.init));
-                assert(getResult!(parseIdent!())(testRange("hoge"d)) == result(true, "hoge", makeInput(testRange(""d), 4), Error.init));
+                assert(getResult!(parseIdent)("hoge" ) == result(true, "hoge", makeInput("" , 4), Error.init));
+                assert(getResult!(parseIdent)("hoge"w) == result(true, "hoge", makeInput(""w, 4), Error.init));
+                assert(getResult!(parseIdent)("hoge"d) == result(true, "hoge", makeInput(""d, 4), Error.init));
+                assert(getResult!(parseIdent)(testRange("hoge" )) == result(true, "hoge", makeInput(testRange("" ), 4), Error.init));
+                assert(getResult!(parseIdent)(testRange("hoge"w)) == result(true, "hoge", makeInput(testRange(""w), 4), Error.init));
+                assert(getResult!(parseIdent)(testRange("hoge"d)) == result(true, "hoge", makeInput(testRange(""d), 4), Error.init));
 
-                assert(getResult!(parseIdent!())("_0" ) == result(true, "_0", makeInput("" , 2), Error.init));
-                assert(getResult!(parseIdent!())("_0"w) == result(true, "_0", makeInput(""w, 2), Error.init));
-                assert(getResult!(parseIdent!())("_0"d) == result(true, "_0", makeInput(""d, 2), Error.init));
-                assert(getResult!(parseIdent!())(testRange("_0" )) == result(true, "_0", makeInput(testRange("" ), 2), Error.init));
-                assert(getResult!(parseIdent!())(testRange("_0"w)) == result(true, "_0", makeInput(testRange(""w), 2), Error.init));
-                assert(getResult!(parseIdent!())(testRange("_0"d)) == result(true, "_0", makeInput(testRange(""d), 2), Error.init));
+                assert(getResult!(parseIdent)("_0" ) == result(true, "_0", makeInput("" , 2), Error.init));
+                assert(getResult!(parseIdent)("_0"w) == result(true, "_0", makeInput(""w, 2), Error.init));
+                assert(getResult!(parseIdent)("_0"d) == result(true, "_0", makeInput(""d, 2), Error.init));
+                assert(getResult!(parseIdent)(testRange("_0" )) == result(true, "_0", makeInput(testRange("" ), 2), Error.init));
+                assert(getResult!(parseIdent)(testRange("_0"w)) == result(true, "_0", makeInput(testRange(""w), 2), Error.init));
+                assert(getResult!(parseIdent)(testRange("_0"d)) == result(true, "_0", makeInput(testRange(""d), 2), Error.init));
 
-                assert(getResult!(parseIdent!())("0" ) == result(false, "", makeInput("" ), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())("0"w) == result(false, "", makeInput(""w), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())("0"d) == result(false, "", makeInput(""d), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())(testRange("0" )) == result(false, "", makeInput(testRange("" )), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())(testRange("0"w)) == result(false, "", makeInput(testRange(""w)), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())(testRange("0"d)) == result(false, "", makeInput(testRange(""d)), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent)("0" ) == result(false, "", makeInput("" ), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent)("0"w) == result(false, "", makeInput(""w), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent)("0"d) == result(false, "", makeInput(""d), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent)(testRange("0" )) == result(false, "", makeInput(testRange("" )), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent)(testRange("0"w)) == result(false, "", makeInput(testRange(""w)), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent)(testRange("0"d)) == result(false, "", makeInput(testRange(""d)), Error("c: 'A' <= c <= 'Z'")));
 
-                assert(getResult!(parseIdent!())("あ" ) == result(false, "", makeInput("" ), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())("あ"w) == result(false, "", makeInput(""w), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())("あ"d) == result(false, "", makeInput(""d), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())(testRange("あ" )) == result(false, "", makeInput(testRange("" )), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())(testRange("あ"w)) == result(false, "", makeInput(testRange(""w)), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())(testRange("あ"d)) == result(false, "", makeInput(testRange(""d)), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent)("あ" ) == result(false, "", makeInput("" ), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent)("あ"w) == result(false, "", makeInput(""w), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent)("あ"d) == result(false, "", makeInput(""d), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent)(testRange("あ" )) == result(false, "", makeInput(testRange("" )), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent)(testRange("あ"w)) == result(false, "", makeInput(testRange(""w)), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent)(testRange("あ"d)) == result(false, "", makeInput(testRange(""d)), Error("c: 'A' <= c <= 'Z'")));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1374,74 +1466,72 @@ struct Error{
     }
 
     /* parseStringLiteral */ version(all){
-        template parseStringLiteral(){
-            alias combinateChoice!(
-                combinateString!(
-                    combinateSequence!(
-                        parseString!"\"",
-                        combinateMore0!(
-                            combinateSequence!(
-                                combinateNot!(parseString!"\""),
-                                combinateChoice!(
-                                    parseEscapeSequence!(),
-                                    parseAnyChar!()
-                                )
+        alias combinateChoice!(
+            combinateFlat!(
+                combinateSequence!(
+                    parseString!"\"",
+                    combinateMore0!(
+                        combinateSequence!(
+                            combinateNotPred!(parseString!"\""),
+                            combinateChoice!(
+                                parseEscapeSequence,
+                                parseAnyChar
                             )
-                        ),
-                        parseString!"\""
-                    )
-                ),
-                combinateString!(
-                    combinateSequence!(
-                        parseString!"r\"",
-                        combinateMore0!(
-                            combinateSequence!(
-                                combinateNot!(parseString!"\""),
-                                parseAnyChar!()
-                            )
-                        ),
-                        parseString!"\""
-                    )
-                ),
-                combinateString!(
-                    combinateSequence!(
-                        parseString!"`",
-                        combinateMore0!(
-                            combinateSequence!(
-                                combinateNot!(parseString!"`"),
-                                parseAnyChar!()
-                            )
-                        ),
-                        parseString!"`"
-                    )
+                        )
+                    ),
+                    parseString!"\""
                 )
-            ) parseStringLiteral;
-        }
+            ),
+            combinateFlat!(
+                combinateSequence!(
+                    parseString!"r\"",
+                    combinateMore0!(
+                        combinateSequence!(
+                            combinateNotPred!(parseString!"\""),
+                            parseAnyChar
+                        )
+                    ),
+                    parseString!"\""
+                )
+            ),
+            combinateFlat!(
+                combinateSequence!(
+                    parseString!"`",
+                    combinateMore0!(
+                        combinateSequence!(
+                            combinateNotPred!(parseString!"`"),
+                            parseAnyChar
+                        )
+                    ),
+                    parseString!"`"
+                )
+            )
+        ) parseStringLiteral;
 
         alias parseStringLiteral strLit_p;
 
         unittest{
             enum dg = {
-                assert(getResult!(parseStringLiteral!())(`"表が怖い噂のソフト"` ) == result(true, `"表が怖い噂のソフト"`, makeInput("" , 11), Error.init));
-                assert(getResult!(parseStringLiteral!())(`"表が怖い噂のソフト"`w) == result(true, `"表が怖い噂のソフト"`, makeInput(""w, 11), Error.init));
-                assert(getResult!(parseStringLiteral!())(`"表が怖い噂のソフト"`d) == result(true, `"表が怖い噂のソフト"`, makeInput(""d, 11), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange(`"表が怖い噂のソフト"` )) == result(true, `"表が怖い噂のソフト"`, makeInput(testRange("" ), 11), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange(`"表が怖い噂のソフト"`w)) == result(true, `"表が怖い噂のソフト"`, makeInput(testRange(""w), 11), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange(`"表が怖い噂のソフト"`d)) == result(true, `"表が怖い噂のソフト"`, makeInput(testRange(""d), 11), Error.init));
+                assert(getResult!(parseStringLiteral)(`"表が怖い噂のソフト"` ) == result(true, `"表が怖い噂のソフト"`, makeInput("" , 11), Error.init));
+                assert(getResult!(parseStringLiteral)(`"表が怖い噂のソフト"`w) == result(true, `"表が怖い噂のソフト"`, makeInput(""w, 11), Error.init));
+                assert(getResult!(parseStringLiteral)(`"表が怖い噂のソフト"`d) == result(true, `"表が怖い噂のソフト"`, makeInput(""d, 11), Error.init));
+                assert(getResult!(parseStringLiteral)(testRange(`"表が怖い噂のソフト"` )) == result(true, `"表が怖い噂のソフト"`, makeInput(testRange("" ), 11), Error.init));
+                assert(getResult!(parseStringLiteral)(testRange(`"表が怖い噂のソフト"`w)) == result(true, `"表が怖い噂のソフト"`, makeInput(testRange(""w), 11), Error.init));
+                assert(getResult!(parseStringLiteral)(testRange(`"表が怖い噂のソフト"`d)) == result(true, `"表が怖い噂のソフト"`, makeInput(testRange(""d), 11), Error.init));
 
-                assert(getResult!(parseStringLiteral!())(`r"表が怖い噂のソフト"` ) == result(true, `r"表が怖い噂のソフト"`, makeInput("" , 12), Error.init));
-                assert(getResult!(parseStringLiteral!())(`r"表が怖い噂のソフト"`w) == result(true, `r"表が怖い噂のソフト"`, makeInput(""w, 12), Error.init));
-                assert(getResult!(parseStringLiteral!())(`r"表が怖い噂のソフト"`d) == result(true, `r"表が怖い噂のソフト"`, makeInput(""d, 12), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange(`r"表が怖い噂のソフト"` )) == result(true, `r"表が怖い噂のソフト"`, makeInput(testRange("" ), 12), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange(`r"表が怖い噂のソフト"`w)) == result(true, `r"表が怖い噂のソフト"`, makeInput(testRange(""w), 12), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange(`r"表が怖い噂のソフト"`d)) == result(true, `r"表が怖い噂のソフト"`, makeInput(testRange(""d), 12), Error.init));
+                assert(getResult!(parseStringLiteral)(`r"表が怖い噂のソフト"` ) == result(true, `r"表が怖い噂のソフト"`, makeInput("" , 12), Error.init));
+                assert(getResult!(parseStringLiteral)(`r"表が怖い噂のソフト"`w) == result(true, `r"表が怖い噂のソフト"`, makeInput(""w, 12), Error.init));
+                assert(getResult!(parseStringLiteral)(`r"表が怖い噂のソフト"`d) == result(true, `r"表が怖い噂のソフト"`, makeInput(""d, 12), Error.init));
+                assert(getResult!(parseStringLiteral)(testRange(`r"表が怖い噂のソフト"` )) == result(true, `r"表が怖い噂のソフト"`, makeInput(testRange("" ), 12), Error.init));
+                assert(getResult!(parseStringLiteral)(testRange(`r"表が怖い噂のソフト"`w)) == result(true, `r"表が怖い噂のソフト"`, makeInput(testRange(""w), 12), Error.init));
+                assert(getResult!(parseStringLiteral)(testRange(`r"表が怖い噂のソフト"`d)) == result(true, `r"表が怖い噂のソフト"`, makeInput(testRange(""d), 12), Error.init));
 
-                assert(getResult!(parseStringLiteral!())("`表が怖い噂のソフト`" ) == result(true, q{`表が怖い噂のソフト`}, makeInput("" , 11), Error.init));
-                assert(getResult!(parseStringLiteral!())("`表が怖い噂のソフト`"w) == result(true, q{`表が怖い噂のソフト`}, makeInput(""w, 11), Error.init));
-                assert(getResult!(parseStringLiteral!())("`表が怖い噂のソフト`"d) == result(true, q{`表が怖い噂のソフト`}, makeInput(""d, 11), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange("`表が怖い噂のソフト`" )) == result(true, q{`表が怖い噂のソフト`}, makeInput(testRange("" ), 11), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange("`表が怖い噂のソフト`"w)) == result(true, q{`表が怖い噂のソフト`}, makeInput(testRange(""w), 11), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange("`表が怖い噂のソフト`"d)) == result(true, q{`表が怖い噂のソフト`}, makeInput(testRange(""d), 11), Error.init));
+                assert(getResult!(parseStringLiteral)("`表が怖い噂のソフト`" ) == result(true, q{`表が怖い噂のソフト`}, makeInput("" , 11), Error.init));
+                assert(getResult!(parseStringLiteral)("`表が怖い噂のソフト`"w) == result(true, q{`表が怖い噂のソフト`}, makeInput(""w, 11), Error.init));
+                assert(getResult!(parseStringLiteral)("`表が怖い噂のソフト`"d) == result(true, q{`表が怖い噂のソフト`}, makeInput(""d, 11), Error.init));
+                assert(getResult!(parseStringLiteral)(testRange("`表が怖い噂のソフト`" )) == result(true, q{`表が怖い噂のソフト`}, makeInput(testRange("" ), 11), Error.init));
+                assert(getResult!(parseStringLiteral)(testRange("`表が怖い噂のソフト`"w)) == result(true, q{`表が怖い噂のソフト`}, makeInput(testRange(""w), 11), Error.init));
+                assert(getResult!(parseStringLiteral)(testRange("`表が怖い噂のソフト`"d)) == result(true, q{`表が怖い噂のソフト`}, makeInput(testRange(""d), 11), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1450,52 +1540,40 @@ struct Error{
     }
 
     /* parseIntLiteral */ version(all){
-        template parseIntLiteral(){
-            alias combinateChoice!(
-                combinateConvert!(
-                    combinateNone!(parseString!"0"),
-                    function() => 0
-                ),
-                combinateConvert!(
-                    combinateSequence!(
-                        parseCharRange!('1', '9'),
-                        combinateMore0!(parseCharRange!('0', '9'))
-                    ),
-                    function(string head, string[] tails){
-                        int result = head[0] - '0';
-                        foreach(c; tails){
-                            result = result * 10 + c[0] - '0';
-                        }
-                        return result;
-                    }
+        alias combinateChoice!(
+            parseString!"0",
+            combinateFlat!(
+                combinateSequence!(
+                    parseCharRange!('1', '9'),
+                    combinateMore0!(parseCharRange!('0', '9'))
                 )
-            ) parseIntLiteral;
-        }
+            )
+        ) parseIntLiteral;
 
         alias parseIntLiteral intLit_p;
 
         unittest{
             enum dg = {
-                assert(getResult!(parseIntLiteral!())("3141" ) == result(true, 3141, makeInput("" , 4), Error.init));
-                assert(getResult!(parseIntLiteral!())("3141"w) == result(true, 3141, makeInput(""w, 4), Error.init));
-                assert(getResult!(parseIntLiteral!())("3141"d) == result(true, 3141, makeInput(""d, 4), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("3141" )) == result(true, 3141, makeInput(testRange("" ), 4), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("3141"w)) == result(true, 3141, makeInput(testRange(""w), 4), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("3141"d)) == result(true, 3141, makeInput(testRange(""d), 4), Error.init));
+                assert(getResult!(parseIntLiteral)("3141" ) == result(true, "3141", makeInput("" , 4), Error.init));
+                assert(getResult!(parseIntLiteral)("3141"w) == result(true, "3141", makeInput(""w, 4), Error.init));
+                assert(getResult!(parseIntLiteral)("3141"d) == result(true, "3141", makeInput(""d, 4), Error.init));
+                assert(getResult!(parseIntLiteral)(testRange("3141" )) == result(true, "3141", makeInput(testRange("" ), 4), Error.init));
+                assert(getResult!(parseIntLiteral)(testRange("3141"w)) == result(true, "3141", makeInput(testRange(""w), 4), Error.init));
+                assert(getResult!(parseIntLiteral)(testRange("3141"d)) == result(true, "3141", makeInput(testRange(""d), 4), Error.init));
 
-                assert(getResult!(parseIntLiteral!())("0" ) == result(true, 0, makeInput("" , 1), Error.init));
-                assert(getResult!(parseIntLiteral!())("0"w) == result(true, 0, makeInput(""w, 1), Error.init));
-                assert(getResult!(parseIntLiteral!())("0"d) == result(true, 0, makeInput(""d, 1), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("0" )) == result(true, 0, makeInput(testRange("" ), 1), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("0"w)) == result(true, 0, makeInput(testRange(""w), 1), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("0"d)) == result(true, 0, makeInput(testRange(""d), 1), Error.init));
+                assert(getResult!(parseIntLiteral)("0" ) == result(true, "0", makeInput("" , 1), Error.init));
+                assert(getResult!(parseIntLiteral)("0"w) == result(true, "0", makeInput(""w, 1), Error.init));
+                assert(getResult!(parseIntLiteral)("0"d) == result(true, "0", makeInput(""d, 1), Error.init));
+                assert(getResult!(parseIntLiteral)(testRange("0" )) == result(true, "0", makeInput(testRange("" ), 1), Error.init));
+                assert(getResult!(parseIntLiteral)(testRange("0"w)) == result(true, "0", makeInput(testRange(""w), 1), Error.init));
+                assert(getResult!(parseIntLiteral)(testRange("0"d)) == result(true, "0", makeInput(testRange(""d), 1), Error.init));
 
-                assert(getResult!(parseIntLiteral!())("0123" ) == result(true, 0, makeInput("123" , 1), Error.init));
-                assert(getResult!(parseIntLiteral!())("0123"w) == result(true, 0, makeInput("123"w, 1), Error.init));
-                assert(getResult!(parseIntLiteral!())("0123"d) == result(true, 0, makeInput("123"d, 1), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("0123" )) == result(true, 0, makeInput(testRange("123" ), 1), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("0123"w)) == result(true, 0, makeInput(testRange("123"w), 1), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("0123"d)) == result(true, 0, makeInput(testRange("123"d), 1), Error.init));
+                assert(getResult!(parseIntLiteral)("0123" ) == result(true, "0", makeInput("123" , 1), Error.init));
+                assert(getResult!(parseIntLiteral)("0123"w) == result(true, "0", makeInput("123"w, 1), Error.init));
+                assert(getResult!(parseIntLiteral)("0123"d) == result(true, "0", makeInput("123"d, 1), Error.init));
+                assert(getResult!(parseIntLiteral)(testRange("0123" )) == result(true, "0", makeInput(testRange("123" ), 1), Error.init));
+                assert(getResult!(parseIntLiteral)(testRange("0123"w)) == result(true, "0", makeInput(testRange("123"w), 1), Error.init));
+                assert(getResult!(parseIntLiteral)(testRange("0123"d)) == result(true, "0", makeInput(testRange("123"d), 1), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1509,16 +1587,16 @@ string generateParsers(size_t callerLine = __LINE__, string callerFile = __FILE_
 }
 
 string getSource(size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
-    return getResult!(defs!(), callerLine, callerFile)(src).value;
+    return getResult!(defs, callerLine, callerFile)(src).value;
 }
 
-auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range input){
+auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, R)(R input){
     memo_t memo;
-    return fun.parse(Input!Range(input, 0, 1, callerLine, callerFile), memo);
+    return fun(Input!R(input, 0, 1, callerLine, callerFile), memo);
 }
 
 auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
-    auto result = getResult!(fun!(), callerLine, callerFile)(src);
+    auto result = getResult!(fun, callerLine, callerFile)(src);
     if(result.match){
         return result.value;
     }else{
@@ -1526,11 +1604,11 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     }
 }
 
-bool isMatch(alias fun)(string src){
-    return getResult!(fun!())(src).match;
+bool isMatch(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
+    return getResult!(fun, callerLine, callerFile)(src).match;
 }
 
-/* ctpg */ version(all){
+/* ctpg */ version(none){
     /* defs */ version(all){
         template defs(){
             alias string ResultType;
@@ -2650,24 +2728,27 @@ debug void main(){
 private:
 
 version(unittest) template TestParser(T){
-    alias T ResultType;
-    Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
-        typeof(return) result;
-        return result;
+    Result!(R, T) TestParser(R)(Input!R input, ref memo_t memo){
+        return typeof(return).init;
     }
 }
 
 version(unittest) struct TestRange(T){
     static assert(isForwardRange!(typeof(this)));
-    immutable(T)[] source;
-    @property T front(){ return source[0]; }
-    @property void popFront(){ source = source[1..$]; }
-    @property bool empty(){ return source.length == 0; }
-    @property typeof(this) save(){ return this; }
+    immutable(T)[][] source;
+
+    this(immutable(T)[] source){
+        this.source ~= source;
+    }
+
+    pure @safe nothrow const @property T front(){ return source[0][0]; }
+    pure @safe nothrow @property void popFront(){ source[0] = source[0][1..$]; }
+    pure @safe nothrow const @property bool empty(){ return source[0].length == 0; }
+    @property typeof(this) save(){ return typeof(this)(source[0]); }
 
     pure @safe nothrow
     bool opEquals(typeof(this) rhs){
-        return source == rhs.source;
+        return source[0] == rhs.source[0];
     }
 }
 
@@ -2732,57 +2813,32 @@ unittest{
     }());
 }
 
-template ParserType(alias parser){
-    static if(is(parser.ResultType)){
-        alias parser.ResultType ParserType;
+template ParserType(R, alias parser){
+    static if(__traits(compiles, parser(Input!R.init, [memo_t.init][0])) && is(typeof(parser(Input!R.init, [memo_t.init][0])) Unused == Result!(R, T), R, T)){
+        alias T ParserType;
     }else{
         static assert(false);
     }
 }
 
-unittest{
-    static assert(is(ParserType!(TestParser!string) == string));
-    static assert(is(ParserType!(TestParser!int) == int));
-    static assert(is(ParserType!(TestParser!long) == long));
-
-}
-
-template flatTuple(T){
-    static if(isTuple!T){
-        alias T.Types flatTuple;
-    }else{
-        alias T flatTuple;
+template ParserType2(R){
+    template ParserType(alias parser){
+        static if(__traits(compiles, parser(Input!R.init, [memo_t.init][0])) && is(typeof(parser(Input!R.init, [memo_t.init][0])) Unused == Result!(R, T), R, T)){
+            alias T ParserType;
+        }else{
+            static assert(false);
+        }
     }
 }
 
 unittest{
-    static assert(is(flatTuple!(string) == string));
-    static assert(is(flatTuple!(Tuple!(string)) == TypeTuple!string));
-    static assert(is(flatTuple!(Tuple!(Tuple!(string))) == TypeTuple!(Tuple!string)));
+    static assert(is(ParserType!(string, TestParser!string) == string));
+    static assert(is(ParserType!(string, TestParser!int) == int));
+    static assert(is(ParserType!(string, TestParser!long) == long));
 }
 
-template CombinateSequenceImplType(parsers...){
-    alias Tuple!(staticMap!(flatTuple, staticMap!(ParserType, parsers))) CombinateSequenceImplType;
-}
 
-unittest{
-    static assert(is(CombinateSequenceImplType!(TestParser!string, TestParser!string) == Tuple!(string, string)));
-    static assert(is(CombinateSequenceImplType!(TestParser!int, TestParser!long) == Tuple!(int, long)));
-    static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(int, long)), TestParser!uint) == Tuple!(int, long, uint)));
-    static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(int, long)), TestParser!(Tuple!(uint, ulong))) == Tuple!(int, long, uint, ulong)));
-    static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(Tuple!(byte, short), long)), TestParser!(Tuple!(uint, ulong))) == Tuple!(Tuple!(byte, short), long, uint, ulong)));
-}
 
-template CommonParserType(tparsers...){
-    alias CommonType!(staticMap!(ParserType, tparsers)) CommonParserType;
-}
-
-unittest{
-    static assert(is(CommonParserType!(TestParser!string, TestParser!string) == string));
-    static assert(is(CommonParserType!(TestParser!int, TestParser!long) == long));
-    static assert(is(CommonParserType!(TestParser!byte, TestParser!short, TestParser!int) == int));
-    static assert(is(CommonParserType!(TestParser!string, TestParser!int) == void));
-}
 
 dchar decodeRange(Range)(ref Range range){
     static assert(isForwardRange!Range);
