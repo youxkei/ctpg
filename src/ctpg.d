@@ -14,99 +14,103 @@ import std.array: save, empty;
 import std.conv: to;
 import std.range: isForwardRange, ElementType;
 import std.regex: ctRegex, match, regex;
-import std.traits: CommonType, isCallable, ReturnType, isSomeChar, isSomeString, Unqual, isAssignable, isArray;
+import std.traits: CommonType, isCallable, ReturnType, isSomeChar, isSomeString, Unqual, isAssignable, isArray, mangledName;
 import std.typetuple: staticMap, TypeTuple;
 
 import std.utf: decode;
 
 public import std.typecons: Tuple, isTuple, tuple;
 
+debug import std.stdio: writeln;
+
 alias Tuple!() None;
-alias Object[size_t][string] memo_t;
+alias Object[string][size_t] memo_t;
 
-version = memoize;
+version(all) version = memoize;
 
-struct Option(T){
-    public{
-        bool some;
-        T value;
+/* Option */
+    struct Option(T){
+        public{
+            bool some;
+            T value;
 
-        alias value this;
-    }
-}
-
-Option!T option(T)(bool some, T value){
-    return Option!T(some, value);
-}
-
-struct Input(R){
-    static assert(isSomeString!R || isForwardRange!R);
-    invariant(){
-        assert(line >= 1);
-        assert(callerLine >= 1);
-    }
-
-    public{
-        R range;
-        size_t position;
-        size_t line = 1;
-        size_t callerLine = 1;
-        string callerFile;
-
-        // cannot apply some qualifiers due to unclearness of Range
-        @property
-        Input save(){
-            return Input(range.save, position, line, callerLine, callerFile);
-        }
-
-        // ditto
-        @property
-        bool empty(){
-            return range.empty;
-        }
-
-        alias empty isEnd;
-
-        pure @safe nothrow
-        bool opEquals(Input lhs){
-            return position == lhs.position && line == lhs.line && callerLine == lhs.callerLine && callerFile == lhs.callerFile;
+            alias value this;
         }
     }
-}
 
-Input!Range makeInput(Range)(Range range){
-    return Input!Range(range);
-}
+    Option!T option(T)(bool some, T value){
+        return Option!T(some, value);
+    }
 
-Input!Range makeInput(Range)(Range range, size_t position, size_t line = 1, size_t callerLine = __LINE__, string callerFile = __FILE__){
-    return Input!Range(range, position, line, callerLine, callerFile);
-}
-
-struct Result(Range, T){
-    public{
-        bool match;
-        T value;
-        Input!Range rest;
-        Error error;
-
-        pure @safe nothrow
-        void opAssign(U)(Result!(Range, U) rhs)if(isAssignable!(T, U)){
-            match = rhs.match;
-            value = rhs.value;
-            rest = rhs.rest;
-            error = rhs.error;
+/* Input */
+    struct Input(R){
+        static assert(isSomeString!R || isForwardRange!R);
+        invariant(){
+            assert(line >= 1);
         }
 
-        pure @safe nothrow
-        bool opEquals(Result lhs){
-            return match == lhs.match && value == lhs.value && rest == lhs.rest && error == lhs.error;
+        public{
+            R range;
+            size_t position;
+            size_t line = 1;
+            size_t callerLine = 1;
+            string callerFile;
+
+            // cannot apply some qualifiers due to unclearness of Range
+            @property
+            Input save(){
+                return Input(range.save, position, line, callerLine, callerFile);
+            }
+
+            // ditto
+            @property
+            bool empty(){
+                return range.empty;
+            }
+
+            alias empty isEnd;
+
+            pure @safe nothrow const
+            bool opEquals(in Input rhs){
+                return range == rhs.range && position == rhs.position && line == rhs.line && callerLine == rhs.callerLine && callerFile == rhs.callerFile;
+            }
         }
     }
-}
 
-Result!(Range, T) result(Range, T)(bool match, T value, Input!Range rest, Error error){
-    return Result!(Range, T)(match, value, rest, error);
-}
+    Input!R makeInput(R)(R range){
+        return Input!R(range);
+    }
+
+    Input!R makeInput(R)(R range, size_t position, size_t line = 1, size_t callerLine = __LINE__, string callerFile = __FILE__){
+        return Input!R(range, position, line, callerLine, callerFile);
+    }
+
+/* Result */
+    struct Result(Range, T){
+        public{
+            bool match;
+            T value;
+            Input!Range rest;
+            Error error;
+
+            pure @safe nothrow
+            void opAssign(U)(Result!(Range, U) rhs)if(isAssignable!(T, U)){
+                match = rhs.match;
+                value = rhs.value;
+                rest = rhs.rest;
+                error = rhs.error;
+            }
+
+            pure @safe nothrow
+            bool opEquals(Result rhs){
+                return match == rhs.match && value == rhs.value && rest == rhs.rest && error == rhs.error;
+            }
+        }
+    }
+
+    Result!(Range, T) result(Range, T)(bool match, T value, Input!Range rest, Error error){
+        return Result!(Range, T)(match, value, rest, error);
+    }
 
 struct Error{
     invariant(){
@@ -121,6 +125,616 @@ struct Error{
         bool opEquals(in Error rhs){
             return need == rhs.need && line == rhs.line;
         }
+    }
+}
+
+/* TestParser */ version(unittest){
+    template TestParser(T){
+        pure @safe nothrow
+        Result!(R, T) TestParser(R)(Input!R input, ref memo_t memo){
+            return typeof(return).init;
+        }
+    }
+}
+
+/* TestRange */ version(unittest){
+    struct TestRange(T){
+        static assert(isForwardRange!(typeof(this)));
+
+        T source;
+
+        this(T source){
+            this.source = source;
+        }
+
+        pure @safe nothrow const @property typeof(source[0]) front(){ return source[0]; }
+        pure @safe nothrow @property void popFront(){ source = source[1..$]; }
+        pure @safe nothrow const @property bool empty(){ return source.length == 0; }
+        pure @property typeof(this) save(){ return this; }
+
+        pure @safe nothrow const
+        equals_t opEquals(in TestRange rhs){
+            return source == rhs.source;
+        }
+    }
+
+    TestRange!(T) testRange(T)(T source){
+        return TestRange!T(source);
+    }
+}
+
+/* parsers */ version(all){
+    /* success */ version(all){
+        Result!(R, None) _success(R)(Input!R input, ref memo_t memo){
+            return result(true, None.init, input, Error.init);
+        }
+
+        alias combinateMemoize!_success success;
+
+        unittest{
+            enum dg = {
+                assert(getResult!(success)("hoge" ) == result(true, None.init, makeInput("hoge" , 0), Error.init));
+                assert(getResult!(success)("hoge"w) == result(true, None.init, makeInput("hoge"w, 0), Error.init));
+                assert(getResult!(success)("hoge"d) == result(true, None.init, makeInput("hoge"d, 0), Error.init));
+                assert(getResult!(success)(testRange("hoge" )) == result(true, None.init, makeInput(testRange("hoge" ), 0), Error.init));
+                assert(getResult!(success)(testRange("hoge"w)) == result(true, None.init, makeInput(testRange("hoge"w), 0), Error.init));
+                assert(getResult!(success)(testRange("hoge"d)) == result(true, None.init, makeInput(testRange("hoge"d), 0), Error.init));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+    }
+
+    /* failure */ version(all){
+        template failure(string msg){
+            Result!(R, None) _failure(R)(Input!R input, ref memo_t memo){
+                return result(false, None.init, Input!R.init, Error(msg, input.line));
+            }
+
+            alias combinateMemoize!_failure failure;
+        }
+    }
+
+    /* parseString */ version(all){
+        template parseString(string str) if(str.length > 0){
+            Result!(R, string) _parseString(R)(Input!R input, ref memo_t memo){
+                static assert(isSomeString!R || (isForwardRange!R && isSomeChar!(ElementType!R)));
+
+                enum breadth = countBreadth(str);
+                enum convertedString = staticConvertString!(str, R);
+                typeof(return) result;
+                static if(isSomeString!R){
+                    if(input.range.length >= convertedString.length && convertedString == input.range[0..convertedString.length]){
+                        result.match = true;
+                        result.value = str;
+                        result.rest.range = input.range[convertedString.length..$];
+                        result.rest.position = input.position + breadth.width;
+                        result.rest.line = input.line + breadth.line;
+                        result.rest.callerLine = input.callerLine;
+                        result.rest.callerFile = input.callerFile;
+                        return result;
+                    }
+                }else{
+                    foreach(c; convertedString){
+                        if(input.range.empty || c != input.range.front){
+                            goto Lerror;
+                        }else{
+                            input.range.popFront;
+                        }
+                    }
+                    result.match = true;
+                    result.value = str;
+                    result.rest.range = input.range;
+                    result.rest.position = input.position + breadth.width;
+                    result.rest.line = input.line + breadth.line;
+                    result.rest.callerLine = input.callerLine;
+                    result.rest.callerFile = input.callerFile;
+                    return result;
+                }
+            Lerror:
+                result.error = Error('"' ~ str ~ '"', input.line);
+                return result;
+            }
+
+            alias combinateMemoize!_parseString parseString;
+        }
+
+        unittest{
+            enum dg = {
+                assert(getResult!(parseString!"hello")("hello world" ) == result(true, "hello", makeInput(" world" , 5), Error.init));
+                assert(getResult!(parseString!"hello")("hello world"w) == result(true, "hello", makeInput(" world"w, 5), Error.init));
+                assert(getResult!(parseString!"hello")("hello world"d) == result(true, "hello", makeInput(" world"d, 5), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello world" )) == result(true, "hello", makeInput(testRange(" world" ), 5), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello world"w)) == result(true, "hello", makeInput(testRange(" world"w), 5), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello world"d)) == result(true, "hello", makeInput(testRange(" world"d), 5), Error.init));
+
+                assert(getResult!(parseString!"hello")("hello" ) == result(true, "hello", makeInput("" , 5), Error.init));
+                assert(getResult!(parseString!"hello")("hello"w) == result(true, "hello", makeInput(""w, 5), Error.init));
+                assert(getResult!(parseString!"hello")("hello"d) == result(true, "hello", makeInput(""d, 5), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello" )) == result(true, "hello", makeInput(testRange("" ), 5), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello"w)) == result(true, "hello", makeInput(testRange(""w), 5), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello"d)) == result(true, "hello", makeInput(testRange(""d), 5), Error.init));
+
+                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト" ) == result(true, "表が怖い", makeInput("噂のソフト" , 4), Error.init));
+                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト"w) == result(true, "表が怖い", makeInput("噂のソフト"w, 4), Error.init));
+                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト"d) == result(true, "表が怖い", makeInput("噂のソフト"d, 4), Error.init));
+                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト" )) == result(true, "表が怖い", makeInput(testRange("噂のソフト" ), 4), Error.init));
+                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト"w)) == result(true, "表が怖い", makeInput(testRange("噂のソフト"w), 4), Error.init));
+                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト"d)) == result(true, "表が怖い", makeInput(testRange("噂のソフト"d), 4), Error.init));
+
+                assert(getResult!(parseString!"hello")("hllo world" ) == result(false, "", makeInput("" ), Error("\"hello\"")));
+                assert(getResult!(parseString!"hello")("hllo world"w) == result(false, "", makeInput(""w), Error("\"hello\"")));
+                assert(getResult!(parseString!"hello")("hllo world"d) == result(false, "", makeInput(""d), Error("\"hello\"")));
+                assert(getResult!(parseString!"hello")(testRange("hllo world" )) == result(false, "", makeInput(testRange("" )), Error("\"hello\"")));
+                assert(getResult!(parseString!"hello")(testRange("hllo world"w)) == result(false, "", makeInput(testRange(""w)), Error("\"hello\"")));
+                assert(getResult!(parseString!"hello")(testRange("hllo world"d)) == result(false, "", makeInput(testRange(""d)), Error("\"hello\"")));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+    }
+
+    /* parseCharRange */ version(all){
+        template parseCharRange(dchar low, dchar high){
+            static assert(low <= high);
+
+            Result!(R, string) _parseCharRange(R)(Input!R input, ref memo_t memo){
+                static assert(isSomeString!R || (isForwardRange!R && isSomeChar!(ElementType!R)));
+
+                typeof(return) result;
+                static if(isSomeString!R){
+                    if(input.range.length){
+                        size_t idx;
+                        dchar c = decode(input.range, idx);
+                        if(low <= c && c <= high){
+                            result.match = true;
+                            result.value = c.to!string();
+                            result.rest.range = input.range[idx..$];
+                            result.rest.position = input.position + 1;
+                            result.rest.line = c == '\n' ? input.line + 1 : input.line;
+                            result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
+                            return result;
+                        }
+                    }
+                }else{
+                    if(!input.range.empty){
+                        dchar c = decodeRange(input.range);
+                        if(low <= c && c <= high){
+                            result.match = true;
+                            result.value = c.to!string();
+                            result.rest.range = input.range;
+                            result.rest.position = input.position + 1;
+                            result.rest.line = c == '\n' ? input.line + 1 : input.line;
+                            result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
+                            return result;
+                        }
+                    }
+                }
+                if(low == dchar.min && high == dchar.max){
+                    result.error = Error("any char", input.line);
+                }else{
+                    result.error = Error("c: '" ~ low.to!string() ~ "' <= c <= '" ~ high.to!string() ~ "'", input.line);
+                }
+                return result;
+            }
+
+            alias combinateMemoize!_parseCharRange parseCharRange;
+        }
+
+        unittest{
+            enum dg = {
+                assert(getResult!(parseCharRange!('a', 'z'))("hoge" ) == result(true, "h", makeInput("oge" , 1), Error.init));
+                assert(getResult!(parseCharRange!('a', 'z'))("hoge"w) == result(true, "h", makeInput("oge"w, 1), Error.init));
+                assert(getResult!(parseCharRange!('a', 'z'))("hoge"d) == result(true, "h", makeInput("oge"d, 1), Error.init));
+                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge" )) == result(true, "h", makeInput(testRange("oge" ), 1), Error.init));
+                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge"w)) == result(true, "h", makeInput(testRange("oge"w), 1), Error.init));
+                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge"d)) == result(true, "h", makeInput(testRange("oge"d), 1), Error.init));
+
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge" ) == result(true, "\U00012345", makeInput("hoge" , 1), Error.init));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge"w) == result(true, "\U00012345", makeInput("hoge"w, 1), Error.init));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge"d) == result(true, "\U00012345", makeInput("hoge"d, 1), Error.init));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge" )) == result(true, "\U00012345", makeInput(testRange("hoge" ), 1), Error.init));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge"w)) == result(true, "\U00012345", makeInput(testRange("hoge"w), 1), Error.init));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge"d)) == result(true, "\U00012345", makeInput(testRange("hoge"d), 1), Error.init));
+
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("hello world" ) == result(false, "", makeInput("" ), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("hello world"w) == result(false, "", makeInput(""w), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("hello world"d) == result(false, "", makeInput(""d), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("hello world" )) == result(false, "", makeInput(testRange("" )), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("hello world"w)) == result(false, "", makeInput(testRange(""w)), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("hello world"d)) == result(false, "", makeInput(testRange(""d)), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+    }
+
+    /* parseEscapeSequence */ version(all){
+        Result!(R, string) _parseEscapeSequence(R)(Input!R input, ref memo_t memo){
+            static assert(isSomeString!R || (isForwardRange!R && isSomeChar!(ElementType!R)));
+
+            typeof(return) result;
+            static if(isSomeString!R){
+                if(input.range[0] == '\\'){
+                    switch(input.range[1]){
+                        case 'u':{
+                            result.match = true;
+                            result.value = input.range[0..6].to!string();
+                            result.rest.range = input.range[6..$];
+                            result.rest.position = input.position + 6;
+                            result.rest.line = input.line;
+                            result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
+                            return result;
+                        }
+                        case 'U':{
+                            result.match = true;
+                            result.value = input.range[0..10].to!string();
+                            result.rest.range = input.range[10..$];
+                            result.rest.position = input.position + 10;
+                            result.rest.line = input.line;
+                            result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
+                            return result;
+                        }
+                        case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
+                            result.match = true;
+                            result.value = input.range[0..2].to!string();
+                            result.rest.range = input.range[2..$];
+                            result.rest.position = input.position + 2;
+                            result.rest.line = input.line;
+                            result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
+                            return result;
+                        }
+                        default:{
+                        }
+                    }
+                }
+            }else{
+                auto c1 = input.range.front;
+                if(c1 == '\\'){
+                    input.range.popFront;
+                    auto c2 = input.range.front;
+                    switch(c2){
+                        case 'u':{
+                            result.match = true;
+                            input.range.popFront;
+                            char[6] data;
+                            data[0..2] = "\\u";
+                            foreach(idx; 2..6){
+                                data[idx] = cast(char)input.range.front;
+                                input.range.popFront;
+                            }
+                            result.value = to!string(data);
+                            result.rest.range = input.range;
+                            result.rest.position = input.position + 6;
+                            result.rest.line = input.line;
+                            result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
+                            return result;
+                        }
+                        case 'U':{
+                            result.match = true;
+                            input.range.popFront;
+                            char[10] data;
+                            data[0..2] = "\\U";
+                            foreach(idx; 2..10){
+                                data[idx] = cast(char)input.range.front;
+                                input.range.popFront;
+                            }
+                            result.value = to!string(data);
+                            result.rest.range = input.range;
+                            result.rest.position = input.position + 10;
+                            result.rest.line = input.line;
+                            result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
+                            return result;
+                        }
+                        case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
+                            result.match = true;
+                            input.range.popFront;
+                            result.value = "\\" ~ to!string(c2);
+                            result.rest.position = input.position + 2;
+                            result.rest.range = input.range;
+                            result.rest.line = input.line;
+                            result.rest.callerLine = input.callerLine;
+                            result.rest.callerFile = input.callerFile;
+                            return result;
+                        }
+                        default:{
+                        }
+                    }
+                }
+            }
+            result.error = Error("escape sequence", input.line);
+            return result;
+        }
+
+        alias combinateMemoize!_parseEscapeSequence parseEscapeSequence;
+
+        unittest{
+            enum dg = {
+                assert(getResult!(parseEscapeSequence)(`\"hoge` ) == result(true, `\"`, makeInput("hoge" , 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\"hoge`w) == result(true, `\"`, makeInput("hoge"w, 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\"hoge`d) == result(true, `\"`, makeInput("hoge"d, 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\"hoge` )) == result(true, `\"`, makeInput(testRange("hoge" ), 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\"hoge`w)) == result(true, `\"`, makeInput(testRange("hoge"w), 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\"hoge`d)) == result(true, `\"`, makeInput(testRange("hoge"d), 2), Error.init));
+
+                assert(getResult!(parseEscapeSequence)(`\U0010FFFFhoge` ) == result(true, `\U0010FFFF`, makeInput("hoge" , 10), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\U0010FFFFhoge`w) == result(true, `\U0010FFFF`, makeInput("hoge"w, 10), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\U0010FFFFhoge`d) == result(true, `\U0010FFFF`, makeInput("hoge"d, 10), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\U0010FFFFhoge` )) == result(true, `\U0010FFFF`, makeInput(testRange("hoge" ), 10), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\U0010FFFFhoge`w)) == result(true, `\U0010FFFF`, makeInput(testRange("hoge"w), 10), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\U0010FFFFhoge`d)) == result(true, `\U0010FFFF`, makeInput(testRange("hoge"d), 10), Error.init));
+
+                assert(getResult!(parseEscapeSequence)(`\u10FFhoge` ) == result(true, `\u10FF`, makeInput("hoge" , 6), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\u10FFhoge`w) == result(true, `\u10FF`, makeInput("hoge"w, 6), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\u10FFhoge`d) == result(true, `\u10FF`, makeInput("hoge"d, 6), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\u10FFhoge` )) == result(true, `\u10FF`, makeInput(testRange("hoge" ), 6), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\u10FFhoge`w)) == result(true, `\u10FF`, makeInput(testRange("hoge"w), 6), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\u10FFhoge`d)) == result(true, `\u10FF`, makeInput(testRange("hoge"d), 6), Error.init));
+
+                assert(getResult!(parseEscapeSequence)(`\nhoge` ) == result(true, `\n`, makeInput("hoge" , 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\nhoge`w) == result(true, `\n`, makeInput("hoge"w, 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(`\nhoge`d) == result(true, `\n`, makeInput("hoge"d, 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\nhoge` )) == result(true, `\n`, makeInput(testRange("hoge" ), 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\nhoge`w)) == result(true, `\n`, makeInput(testRange("hoge"w), 2), Error.init));
+                assert(getResult!(parseEscapeSequence)(testRange(`\nhoge`d)) == result(true, `\n`, makeInput(testRange("hoge"d), 2), Error.init));
+
+                assert(getResult!(parseEscapeSequence)("鬱hoge" ) == result(false, "", makeInput("" ), Error("escape sequence")));
+                assert(getResult!(parseEscapeSequence)("鬱hoge"w) == result(false, "", makeInput(""w), Error("escape sequence")));
+                assert(getResult!(parseEscapeSequence)("鬱hoge"d) == result(false, "", makeInput(""d), Error("escape sequence")));
+                assert(getResult!(parseEscapeSequence)(testRange("鬱hoge" )) == result(false, "", makeInput(testRange("" )), Error("escape sequence")));
+                assert(getResult!(parseEscapeSequence)(testRange("鬱hoge"w)) == result(false, "", makeInput(testRange(""w)), Error("escape sequence")));
+                assert(getResult!(parseEscapeSequence)(testRange("鬱hoge"d)) == result(false, "", makeInput(testRange(""d)), Error("escape sequence")));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+    }
+
+    /* parseSpace */ version(all){
+        Result!(R, string) _parseSpace(R)(Input!R input, ref memo_t memo){
+            static assert(isSomeString!R || (isForwardRange!R && isSomeChar!(ElementType!R)));
+
+            typeof(return) result;
+            static if(isSomeString!R){
+                if(input.range.length > 0 && (input.range[0] == ' ' || input.range[0] == '\n' || input.range[0] == '\t' || input.range[0] == '\r' || input.range[0] == '\f')){
+                    result.match = true;
+                    result.value = input.range[0..1].to!string();
+                    result.rest.range = input.range[1..$];
+                    result.rest.position = input.position + 1;
+                    result.rest.line = (input.range[0] == '\n' ? input.line + 1 : input.line);
+                    result.rest.callerLine = input.callerLine;
+                    result.rest.callerFile = input.callerFile;
+                    return result;
+                }
+            }else{
+                if(!input.range.empty){
+                    Unqual!(ElementType!R) c = input.range.front;
+                    if(c == ' ' || c == '\n' || c == '\t' || c == '\r' || c == '\f'){
+                        result.match = true;
+                        result.value = c.to!string();
+                        input.range.popFront;
+                        result.rest.range = input.range;
+                        result.rest.position = input.position + 1;
+                        result.rest.line = (c == '\n' ? input.line + 1 : input.line);
+                        result.rest.callerLine = input.callerLine;
+                        result.rest.callerFile = input.callerFile;
+                        return result;
+                    }
+                }
+            }
+            result.error = Error("space", input.line);
+            return result;
+        }
+
+        alias combinateMemoize!_parseSpace parseSpace;
+
+        version(all) unittest{
+            enum dg = {
+                assert(getResult!(parseSpace)("\thoge" ) == result(true, "\t", makeInput("hoge" , 1), Error.init));
+                assert(getResult!(parseSpace)("\thoge"w) == result(true, "\t", makeInput("hoge"w, 1), Error.init));
+                assert(getResult!(parseSpace)("\thoge"d) == result(true, "\t", makeInput("hoge"d, 1), Error.init));
+                assert(getResult!(parseSpace)(testRange("\thoge"))  == result(true, "\t", makeInput(testRange("hoge"),  1), Error.init));
+                assert(getResult!(parseSpace)(testRange("\thoge"w)) == result(true, "\t", makeInput(testRange("hoge"w), 1), Error.init));
+                assert(getResult!(parseSpace)(testRange("\thoge"d)) == result(true, "\t", makeInput(testRange("hoge"d), 1), Error.init));
+
+                assert(getResult!(parseSpace)("hoge" ) == result(false, "", makeInput("" ), Error("space")));
+                assert(getResult!(parseSpace)("hoge"w) == result(false, "", makeInput(""w), Error("space")));
+                assert(getResult!(parseSpace)("hoge"d) == result(false, "", makeInput(""d), Error("space")));
+                assert(getResult!(parseSpace)(testRange("hoge" )) == result(false, "", makeInput(testRange("" )), Error("space")));
+                assert(getResult!(parseSpace)(testRange("hoge"w)) == result(false, "", makeInput(testRange(""w)), Error("space")));
+                assert(getResult!(parseSpace)(testRange("hoge"d)) == result(false, "", makeInput(testRange(""d)), Error("space")));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+    }
+
+    /* parseEOF */ version(all){
+        Result!(R, None) _parseEOF(R)(Input!R input, ref memo_t memo){
+            typeof(return) result;
+            if(input.empty){
+                result.match = true;
+                result.rest.callerLine = input.callerLine;
+                result.rest.callerFile = input.callerFile;
+            }else{
+                result.error = Error("EOF", input.line);
+            }
+            return result;
+        }
+
+        alias combinateMemoize!_parseEOF parseEOF;
+
+        unittest{
+            enum dg = {
+                assert(getResult!(parseEOF)("" ) == result(true, None.init, makeInput("" , 0), Error.init));
+                assert(getResult!(parseEOF)(""w) == result(true, None.init, makeInput(""w, 0), Error.init));
+                assert(getResult!(parseEOF)(""d) == result(true, None.init, makeInput(""d, 0), Error.init));
+                assert(getResult!(parseEOF)(testRange("" )) == result(true, None.init, makeInput(testRange("" ), 0), Error.init));
+                assert(getResult!(parseEOF)(testRange(""w)) == result(true, None.init, makeInput(testRange(""w), 0), Error.init));
+                assert(getResult!(parseEOF)(testRange(""d)) == result(true, None.init, makeInput(testRange(""d), 0), Error.init));
+
+                assert(getResult!(parseEOF)("hoge" ) == result(false, None.init, makeInput("" ), Error("EOF")));
+                assert(getResult!(parseEOF)("hoge"w) == result(false, None.init, makeInput(""w), Error("EOF")));
+                assert(getResult!(parseEOF)("hoge"d) == result(false, None.init, makeInput(""d), Error("EOF")));
+                assert(getResult!(parseEOF)(testRange("hoge" )) == result(false, None.init, makeInput(testRange("" )), Error("EOF")));
+                assert(getResult!(parseEOF)(testRange("hoge"w)) == result(false, None.init, makeInput(testRange(""w)), Error("EOF")));
+                assert(getResult!(parseEOF)(testRange("hoge"d)) == result(false, None.init, makeInput(testRange(""d)), Error("EOF")));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+    }
+
+    /* parseElem */ version(all){
+        template RangeElementType(R){
+            static assert(isForwardRange!R);
+
+            static if(isSomeString!R){
+                alias typeof(R.init[0]) RangeElementType;
+            }else{
+                alias ElementType!R RangeElementType;
+            }
+        }
+
+        Result!(R, RangeElementType!R) _parseElem(R)(Input!R input, ref memo_t memo){
+            static assert(isForwardRange!R);
+
+            typeof(return) result;
+            if(!input.empty){
+                result.match = true;
+                static if(isSomeString!R){
+                    result.value = input.range[0];
+                    result.rest.range = input.range[1..$];
+                    result.rest.position = input.position + 1;
+                    if(input[0] == '\n'){
+                        result.rest.line = input.line + 1;
+                    }else{
+                        result.rest.line = input.line;
+                    }
+                }else{
+                    result.value = input.range.front;
+                    input.range.popFront;
+                    result.rest.range = input.range;
+                    result.rest.position = input.position + 1;
+                    static if(isSomeChar!(ElementType!R)){
+                        if(input.range.front == '\n'){
+                            result.rest.line = input.line + 1;
+                        }else{
+                            result.rest.line = input.line;
+                        }
+                    }else{
+                        result.rest.line = input.line;
+                    }
+                }
+                result.rest.callerLine = input.callerLine;
+                result.rest.callerFile = input.callerFile;
+            }else{
+                result.error.line = input.line;
+                result.error.need = "";
+            }
+            return result;
+        }
+
+        alias combinateMemoize!_parseElem parseElem;
+    }
+
+    /* parseRegex */ version(none){
+        template _parseRegex(string src){
+            Result!(R, string) parseRegex(R)(Input!R input, ref memo_t memo){
+                static assert(isSomeString!R);
+
+                typeof(return) result;
+                auto captures = input.range.match(regex("^" ~ src));
+                if(!captures.empty){
+                    result.match = true;
+                    result.value = captures.hit;
+                    result.rest.range = captures.post;
+                    result.rest.position = input.position + 1;
+                    result.rest.callerLine = input.callerLine;
+                    result.rest.callerFile = input.callerFile;
+                }else{
+                    result.error = Error("", input.line);
+                }
+                return result;
+            }
+        }
+
+        alias combinateMemoize!_parseRegex parseRegex;
+
+        unittest{
+            enum dg = {
+                assert(getResult!(parseRegex!r"\w\w\w")("abcdef") == result(true, "efg", makeInput("", 3), Error.init));
+            };
+            version(none) debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+    }
+}
+
+/* getters */ version(all){
+    /* getLine */ version(all){
+        Result!(R, size_t) _getLine(R)(Input!R input, ref memo_t memo){
+            return result(true, input.line, input, Error.init);
+        }
+
+        alias combinateMemoize!_getLine getLine;
+
+        unittest{
+            enum dg = {
+                assert(getResult!(combinateSequence!(parseSpaces, getLine))("\n\n" ) == result(true, 3u, makeInput("" , 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces, getLine))("\n\n"w) == result(true, 3u, makeInput(""w, 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces, getLine))("\n\n"d) == result(true, 3u, makeInput(""d, 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces, getLine))(testRange("\n\n" )) == result(true, 3u, makeInput(testRange("" ), 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces, getLine))(testRange("\n\n"w)) == result(true, 3u, makeInput(testRange(""w), 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces, getLine))(testRange("\n\n"d)) == result(true, 3u, makeInput(testRange(""d), 2, 3), Error.init));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+    }
+
+    /* getCallerLine */ version(all){
+        Result!(R, size_t) _getCallerLine(R)(Input!R input, ref memo_t memo){
+            return result(true, input.callerLine, input, Error.init);
+        }
+
+        alias combinateMemoize!_getCallerLine getCallerLine;
+
+        unittest{
+            enum dg = {
+                assert(getResult!(getCallerLine)("" ) == result(true, cast(size_t)__LINE__, makeInput("" , 0), Error.init));
+                assert(getResult!(getCallerLine)(""w) == result(true, cast(size_t)__LINE__, makeInput(""w, 0), Error.init));
+                assert(getResult!(getCallerLine)(""d) == result(true, cast(size_t)__LINE__, makeInput(""d, 0), Error.init));
+                assert(getResult!(getCallerLine)(testRange("" )) == result(true, cast(size_t)__LINE__, makeInput(testRange("" ), 0), Error.init));
+                assert(getResult!(getCallerLine)(testRange(""w)) == result(true, cast(size_t)__LINE__, makeInput(testRange(""w), 0), Error.init));
+                assert(getResult!(getCallerLine)(testRange(""d)) == result(true, cast(size_t)__LINE__, makeInput(testRange(""d), 0), Error.init));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+    }
+
+    /* getCallerFile */ version(all){
+        Result!(R, string) _getCallerFile(R)(Input!R input, ref memo_t memo){
+            return result(true, input.callerFile, input, Error.init);
+        }
+
+        alias combinateMemoize!_getCallerFile getCallerFile;
     }
 }
 
@@ -140,16 +754,16 @@ struct Error{
 
             template combinateMemoize(alias parser){
                 Result!(R, ParserType!(R, parser)) combinateMemoize(R)(Input!R input, ref memo_t memo){
-                    auto memo0 = parser.mangleof in memo;
+                    auto memo0 = input.position in memo;
                     if(memo0){
-                        auto memo1 = input.position in *memo0;
+                        auto memo1 = mangledName!parser in *memo0;
                         if(memo1){
                             Object p = *memo1;
-                            return (cast(Wrapper!(Result!(R, ParserType!(R, parser))))p).value;
+                            return (cast(Wrapper!(typeof(return)))p).value;
                         }
                     }
                     auto result = parser(input, memo);
-                    memo[parser.mangleof][input.position] = wrap(result);
+                    memo[input.position][mangledName!parser] = wrap(result);
                     return result;
                 }
             }
@@ -175,7 +789,7 @@ struct Error{
         }
 
         template combinateUnTuple(alias parser){
-            Result!(R, CombinateUnTupleType!(R, parser)) combinateUnTuple(R)(Input!R input, ref memo_t memo){
+            Result!(R, CombinateUnTupleType!(R, parser)) _combinateUnTuple(R)(Input!R input, ref memo_t memo){
                 alias ParserType!(R, parser) ResultType;
                 static if(isTuple!ResultType && ResultType.length == 1){
                     typeof(return) result;
@@ -189,6 +803,8 @@ struct Error{
                     return parser(input, memo);
                 }
             }
+
+            alias combinateMemoize!_combinateUnTuple combinateUnTuple;
         }
 
         unittest{
@@ -269,7 +885,29 @@ struct Error{
         }
     }
 
-    /* combinateString */ version(all){
+    /* combinateFlat */ version(all){
+        string flat(Arg)(Arg arg){
+            static if(is(Arg == Tuple!(string, string[]))){
+                string result = arg[0];
+                foreach(elem; arg[1]){
+                    result ~= elem;
+                }
+                return result;
+            }else{
+                string result;
+                static if(isTuple!Arg || isArray!Arg){
+                    if(arg.length){
+                        foreach(elem; arg){
+                            result ~= flat(elem);
+                        }
+                    }
+                }else{
+                    result = arg.to!string();
+                }
+                return result;
+            }
+        }
+
         template combinateFlat(alias parser){
             alias combinateConvert!(parser, flat) combinateFlat;
         }
@@ -400,7 +1038,7 @@ struct Error{
         }
 
         template combinateChoice(parsers...){
-            Result!(R, CombinateChoiceType!(R, parsers)) combinateChoice(R)(Input!R input, ref memo_t memo){
+            Result!(R, CombinateChoiceType!(R, parsers)) _combinateChoice(R)(Input!R input, ref memo_t memo){
                 static assert(parsers.length > 0);
 
                 static if(parsers.length == 1){
@@ -416,7 +1054,9 @@ struct Error{
                     return result;
                 }
             }
+            alias combinateMemoize!_combinateChoice combinateChoice;
         }
+
 
         unittest{
             enum dg = {
@@ -449,7 +1089,7 @@ struct Error{
 
     /* combinateMore */ version(all){
         template combinateMore(int n, alias parser, alias sep = success){
-            Result!(R, ParserType!(R, parser)[]) combinateMore(R)(Input!R input, ref memo_t memo){
+            Result!(R, ParserType!(R, parser)[]) _combinateMore(R)(Input!R input, ref memo_t memo){
                 typeof(return) result;
                 auto rest = input;
                 while(true){
@@ -475,6 +1115,8 @@ struct Error{
                     }
                 }
             }
+
+            alias combinateMemoize!_combinateMore combinateMore;
         }
 
         template combinateMore0(alias parser, alias sep = success){
@@ -523,7 +1165,7 @@ struct Error{
 
     /* combinateOption */ version(all){
         template combinateOption(alias parser){
-            Result!(R, Option!(ParserType!(R, parser))) combinateOption(R)(Input!R input, ref memo_t memo){
+            Result!(R, Option!(ParserType!(R, parser))) _combinateOption(R)(Input!R input, ref memo_t memo){
                 typeof(return) result;
                 result.match = true;
                 auto input1 = input.save;
@@ -537,6 +1179,8 @@ struct Error{
                 }
                 return result;
             }
+
+            alias combinateMemoize!_combinateOption combinateOption;
         }
 
         unittest{
@@ -563,7 +1207,7 @@ struct Error{
 
     /* combinateNone */ version(all){
         template combinateNone(alias parser){
-            Result!(R, None) combinateNone(R)(Input!R input, ref memo_t memo){
+            Result!(R, None) _combinateNone(R)(Input!R input, ref memo_t memo){
                 typeof(return) result;
                 auto r = parser(input, memo);
                 if(r.match){
@@ -574,6 +1218,8 @@ struct Error{
                 }
                 return result;
             }
+
+            alias combinateMemoize!_combinateNone combinateNone;
         }
 
         unittest{
@@ -607,7 +1253,7 @@ struct Error{
 
     /* combinateAndPred */ version(all){
         template combinateAndPred(alias parser){
-            Result!(R, None) combinateAndPred(R)(Input!R input, ref memo_t memo){
+            Result!(R, None) _combinateAndPred(R)(Input!R input, ref memo_t memo){
                 typeof(return) result;
                 result.rest = input;
                 auto input1 = input.save;
@@ -616,6 +1262,8 @@ struct Error{
                 result.error = r.error;
                 return result;
             }
+
+            alias combinateMemoize!_combinateAndPred combinateAndPred;
         }
 
         unittest{
@@ -656,13 +1304,15 @@ struct Error{
 
     /* combinateNotPred */ version(all){
         template combinateNotPred(alias parser){
-            Result!(R, None) combinateNotPred(R)(Input!R input, ref memo_t memo){
+            Result!(R, None) _combinateNotPred(R)(Input!R input, ref memo_t memo){
                 typeof(return) result;
                 result.rest = input;
                 auto input1 = input.save;
                 result.match = !parser(input1, memo).match;
                 return result;
             }
+
+            alias combinateMemoize!_combinateNotPred combinateNotPred;
         }
 
         unittest{
@@ -703,7 +1353,7 @@ struct Error{
         }
 
         template combinateConvert(alias parser, alias converter){
-            Result!(R, CombinateConvertType!(converter, ParserType!(R, parser))) combinateConvert(R)(Input!R input, ref memo_t memo){
+            Result!(R, CombinateConvertType!(converter, ParserType!(R, parser))) _combinateConvert(R)(Input!R input, ref memo_t memo){
                 typeof(return) result;
                 auto r = parser(input, memo);
                 if(r.match){
@@ -725,6 +1375,8 @@ struct Error{
                 }
                 return result;
             }
+
+            alias combinateMemoize!_combinateConvert combinateConvert;
         }
 
         unittest{
@@ -751,7 +1403,7 @@ struct Error{
 
     /* combinateCheck */ version(all){
         template combinateCheck(alias parser, alias checker){
-            Result!(R, ParserType!(R, parser)) combinateCheck(R)(Input!R input, ref memo_t memo){
+            Result!(R, ParserType!(R, parser)) _combinateCheck(R)(Input!R input, ref memo_t memo){
                 typeof(return) result;
                 auto r = parser(input, memo);
                 if(r.match){
@@ -765,6 +1417,8 @@ struct Error{
                 }
                 return result;
             }
+
+            alias combinateMemoize!_combinateCheck combinateCheck;
         }
 
         unittest{
@@ -786,557 +1440,6 @@ struct Error{
             };
             debug(ctpg_compile_time) static assert(dg());
             dg();
-        }
-    }
-}
-
-/* parsers */ version(all){
-    /* success */ version(all){
-        Result!(R, None) success(R)(Input!R input, ref memo_t memo){
-            return result(true, None.init, input, Error.init);
-        }
-
-        unittest{
-            enum dg = {
-                assert(getResult!(success)("hoge" ) == result(true, None.init, makeInput("hoge" , 0), Error.init));
-                assert(getResult!(success)("hoge"w) == result(true, None.init, makeInput("hoge"w, 0), Error.init));
-                assert(getResult!(success)("hoge"d) == result(true, None.init, makeInput("hoge"d, 0), Error.init));
-                assert(getResult!(success)(testRange("hoge" )) == result(true, None.init, makeInput(testRange("hoge" ), 0), Error.init));
-                assert(getResult!(success)(testRange("hoge"w)) == result(true, None.init, makeInput(testRange("hoge"w), 0), Error.init));
-                assert(getResult!(success)(testRange("hoge"d)) == result(true, None.init, makeInput(testRange("hoge"d), 0), Error.init));
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-    }
-
-    /* failure */ version(all){
-        template failure(string msg){
-            Result!(R, None) failure(R)(Input!R input, ref memo_t memo){
-                return result(false, None.init, Input!R.init, Error(msg, input.line));
-            }
-        }
-    }
-
-    /* parseString */ version(all){
-        template parseString(string str) if(str.length > 0){
-            Result!(R, string) parseString(R)(Input!R input, ref memo_t memo){
-                static assert(isSomeString!R || (isForwardRange!R && isSomeChar!(ElementType!R)));
-
-                enum breadth = countBreadth(str);
-                enum convertedString = staticConvertString!(str, R);
-                typeof(return) result;
-                static if(isSomeString!R){
-                    if(input.range.length >= convertedString.length && convertedString == input.range[0..convertedString.length]){
-                        result.match = true;
-                        result.value = str;
-                        result.rest.range = input.range[convertedString.length..$];
-                        result.rest.position = input.position + breadth.width;
-                        result.rest.line = input.line + breadth.line;
-                        result.rest.callerLine = input.callerLine;
-                        result.rest.callerFile = input.callerFile;
-                        return result;
-                    }
-                }else{
-                    foreach(c; convertedString){
-                        if(input.range.empty || c != input.range.front){
-                            goto Lerror;
-                        }else{
-                            input.range.popFront;
-                        }
-                    }
-                    result.match = true;
-                    result.value = str;
-                    result.rest.range = input.range;
-                    result.rest.position = input.position + breadth.width;
-                    result.rest.line = input.line + breadth.line;
-                    result.rest.callerLine = input.callerLine;
-                    result.rest.callerFile = input.callerFile;
-                    return result;
-                }
-            Lerror:
-                result.error = Error('"' ~ str ~ '"', input.line);
-                return result;
-            }
-        }
-
-        unittest{
-            enum dg = {
-                assert(getResult!(parseString!"hello")("hello world" ) == result(true, "hello", makeInput(" world" , 5), Error.init));
-                assert(getResult!(parseString!"hello")("hello world"w) == result(true, "hello", makeInput(" world"w, 5), Error.init));
-                assert(getResult!(parseString!"hello")("hello world"d) == result(true, "hello", makeInput(" world"d, 5), Error.init));
-                assert(getResult!(parseString!"hello")(testRange("hello world" )) == result(true, "hello", makeInput(testRange(" world" ), 5), Error.init));
-                assert(getResult!(parseString!"hello")(testRange("hello world"w)) == result(true, "hello", makeInput(testRange(" world"w), 5), Error.init));
-                assert(getResult!(parseString!"hello")(testRange("hello world"d)) == result(true, "hello", makeInput(testRange(" world"d), 5), Error.init));
-
-                assert(getResult!(parseString!"hello")("hello" ) == result(true, "hello", makeInput("" , 5), Error.init));
-                assert(getResult!(parseString!"hello")("hello"w) == result(true, "hello", makeInput(""w, 5), Error.init));
-                assert(getResult!(parseString!"hello")("hello"d) == result(true, "hello", makeInput(""d, 5), Error.init));
-                assert(getResult!(parseString!"hello")(testRange("hello" )) == result(true, "hello", makeInput(testRange("" ), 5), Error.init));
-                assert(getResult!(parseString!"hello")(testRange("hello"w)) == result(true, "hello", makeInput(testRange(""w), 5), Error.init));
-                assert(getResult!(parseString!"hello")(testRange("hello"d)) == result(true, "hello", makeInput(testRange(""d), 5), Error.init));
-
-                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト" ) == result(true, "表が怖い", makeInput("噂のソフト" , 4), Error.init));
-                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト"w) == result(true, "表が怖い", makeInput("噂のソフト"w, 4), Error.init));
-                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト"d) == result(true, "表が怖い", makeInput("噂のソフト"d, 4), Error.init));
-                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト" )) == result(true, "表が怖い", makeInput(testRange("噂のソフト" ), 4), Error.init));
-                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト"w)) == result(true, "表が怖い", makeInput(testRange("噂のソフト"w), 4), Error.init));
-                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト"d)) == result(true, "表が怖い", makeInput(testRange("噂のソフト"d), 4), Error.init));
-
-                assert(getResult!(parseString!"hello")("hllo world" ) == result(false, "", makeInput("" ), Error("\"hello\"")));
-                assert(getResult!(parseString!"hello")("hllo world"w) == result(false, "", makeInput(""w), Error("\"hello\"")));
-                assert(getResult!(parseString!"hello")("hllo world"d) == result(false, "", makeInput(""d), Error("\"hello\"")));
-                assert(getResult!(parseString!"hello")(testRange("hllo world" )) == result(false, "", makeInput(testRange("" )), Error("\"hello\"")));
-                assert(getResult!(parseString!"hello")(testRange("hllo world"w)) == result(false, "", makeInput(testRange(""w)), Error("\"hello\"")));
-                assert(getResult!(parseString!"hello")(testRange("hllo world"d)) == result(false, "", makeInput(testRange(""d)), Error("\"hello\"")));
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-    }
-
-    /* parseCharRange */ version(all){
-        template parseCharRange(dchar low, dchar high){
-            static assert(low <= high);
-
-            Result!(R, string) parseCharRange(R)(Input!R input, ref memo_t memo){
-                static assert(isSomeString!R || (isForwardRange!R && isSomeChar!(ElementType!R)));
-
-                typeof(return) result;
-                static if(isSomeString!R){
-                    if(input.range.length){
-                        size_t idx;
-                        dchar c = decode(input.range, idx);
-                        if(low <= c && c <= high){
-                            result.match = true;
-                            result.value = c.to!string();
-                            result.rest.range = input.range[idx..$];
-                            result.rest.position = input.position + 1;
-                            result.rest.line = c == '\n' ? input.line + 1 : input.line;
-                            result.rest.callerLine = input.callerLine;
-                            result.rest.callerFile = input.callerFile;
-                            return result;
-                        }
-                    }
-                }else{
-                    if(!input.range.empty){
-                        dchar c = decodeRange(input.range);
-                        if(low <= c && c <= high){
-                            result.match = true;
-                            result.value = c.to!string();
-                            result.rest.range = input.range;
-                            result.rest.position = input.position + 1;
-                            result.rest.line = c == '\n' ? input.line + 1 : input.line;
-                            result.rest.callerLine = input.callerLine;
-                            result.rest.callerFile = input.callerFile;
-                            return result;
-                        }
-                    }
-                }
-                if(low == dchar.min && high == dchar.max){
-                    result.error = Error("any char", input.line);
-                }else{
-                    result.error = Error("c: '" ~ low.to!string() ~ "' <= c <= '" ~ high.to!string() ~ "'", input.line);
-                }
-                return result;
-            }
-        }
-
-        unittest{
-            enum dg = {
-                assert(getResult!(parseCharRange!('a', 'z'))("hoge" ) == result(true, "h", makeInput("oge" , 1), Error.init));
-                assert(getResult!(parseCharRange!('a', 'z'))("hoge"w) == result(true, "h", makeInput("oge"w, 1), Error.init));
-                assert(getResult!(parseCharRange!('a', 'z'))("hoge"d) == result(true, "h", makeInput("oge"d, 1), Error.init));
-                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge" )) == result(true, "h", makeInput(testRange("oge" ), 1), Error.init));
-                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge"w)) == result(true, "h", makeInput(testRange("oge"w), 1), Error.init));
-                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge"d)) == result(true, "h", makeInput(testRange("oge"d), 1), Error.init));
-
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge" ) == result(true, "\U00012345", makeInput("hoge" , 1), Error.init));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge"w) == result(true, "\U00012345", makeInput("hoge"w, 1), Error.init));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge"d) == result(true, "\U00012345", makeInput("hoge"d, 1), Error.init));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge" )) == result(true, "\U00012345", makeInput(testRange("hoge" ), 1), Error.init));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge"w)) == result(true, "\U00012345", makeInput(testRange("hoge"w), 1), Error.init));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge"d)) == result(true, "\U00012345", makeInput(testRange("hoge"d), 1), Error.init));
-
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("hello world" ) == result(false, "", makeInput("" ), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("hello world"w) == result(false, "", makeInput(""w), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("hello world"d) == result(false, "", makeInput(""d), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("hello world" )) == result(false, "", makeInput(testRange("" )), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("hello world"w)) == result(false, "", makeInput(testRange(""w)), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("hello world"d)) == result(false, "", makeInput(testRange(""d)), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-    }
-
-    /* parseEscapeSequence */ version(all){
-        Result!(R, string) parseEscapeSequence(R)(Input!R input, ref memo_t memo){
-            static assert(isSomeString!R || (isForwardRange!R && isSomeChar!(ElementType!R)));
-
-            typeof(return) result;
-            static if(isSomeString!R){
-                if(input.range[0] == '\\'){
-                    switch(input.range[1]){
-                        case 'u':{
-                            result.match = true;
-                            result.value = input.range[0..6].to!string();
-                            result.rest.range = input.range[6..$];
-                            result.rest.position = input.position + 6;
-                            result.rest.line = input.line;
-                            result.rest.callerLine = input.callerLine;
-                            result.rest.callerFile = input.callerFile;
-                            return result;
-                        }
-                        case 'U':{
-                            result.match = true;
-                            result.value = input.range[0..10].to!string();
-                            result.rest.range = input.range[10..$];
-                            result.rest.position = input.position + 10;
-                            result.rest.line = input.line;
-                            result.rest.callerLine = input.callerLine;
-                            result.rest.callerFile = input.callerFile;
-                            return result;
-                        }
-                        case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
-                            result.match = true;
-                            result.value = input.range[0..2].to!string();
-                            result.rest.range = input.range[2..$];
-                            result.rest.position = input.position + 2;
-                            result.rest.line = input.line;
-                            result.rest.callerLine = input.callerLine;
-                            result.rest.callerFile = input.callerFile;
-                            return result;
-                        }
-                        default:{
-                        }
-                    }
-                }
-            }else{
-                auto c1 = input.range.front;
-                if(c1 == '\\'){
-                    input.range.popFront;
-                    auto c2 = input.range.front;
-                    switch(c2){
-                        case 'u':{
-                            result.match = true;
-                            input.range.popFront;
-                            char[6] data;
-                            data[0..2] = "\\u";
-                            foreach(idx; 2..6){
-                                data[idx] = cast(char)input.range.front;
-                                input.range.popFront;
-                            }
-                            result.value = to!string(data);
-                            result.rest.range = input.range;
-                            result.rest.position = input.position + 6;
-                            result.rest.line = input.line;
-                            result.rest.callerLine = input.callerLine;
-                            result.rest.callerFile = input.callerFile;
-                            return result;
-                        }
-                        case 'U':{
-                            result.match = true;
-                            input.range.popFront;
-                            char[10] data;
-                            data[0..2] = "\\U";
-                            foreach(idx; 2..10){
-                                data[idx] = cast(char)input.range.front;
-                                input.range.popFront;
-                            }
-                            result.value = to!string(data);
-                            result.rest.range = input.range;
-                            result.rest.position = input.position + 10;
-                            result.rest.line = input.line;
-                            result.rest.callerLine = input.callerLine;
-                            result.rest.callerFile = input.callerFile;
-                            return result;
-                        }
-                        case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
-                            result.match = true;
-                            input.range.popFront;
-                            result.value = "\\" ~ to!string(c2);
-                            result.rest.position = input.position + 2;
-                            result.rest.range = input.range;
-                            result.rest.line = input.line;
-                            result.rest.callerLine = input.callerLine;
-                            result.rest.callerFile = input.callerFile;
-                            return result;
-                        }
-                        default:{
-                        }
-                    }
-                }
-            }
-            result.error = Error("escape sequence", input.line);
-            return result;
-        }
-
-        unittest{
-            enum dg = {
-                assert(getResult!(parseEscapeSequence)(`\"hoge` ) == result(true, `\"`, makeInput("hoge" , 2), Error.init));
-                assert(getResult!(parseEscapeSequence)(`\"hoge`w) == result(true, `\"`, makeInput("hoge"w, 2), Error.init));
-                assert(getResult!(parseEscapeSequence)(`\"hoge`d) == result(true, `\"`, makeInput("hoge"d, 2), Error.init));
-                assert(getResult!(parseEscapeSequence)(testRange(`\"hoge` )) == result(true, `\"`, makeInput(testRange("hoge" ), 2), Error.init));
-                assert(getResult!(parseEscapeSequence)(testRange(`\"hoge`w)) == result(true, `\"`, makeInput(testRange("hoge"w), 2), Error.init));
-                assert(getResult!(parseEscapeSequence)(testRange(`\"hoge`d)) == result(true, `\"`, makeInput(testRange("hoge"d), 2), Error.init));
-
-                assert(getResult!(parseEscapeSequence)(`\U0010FFFFhoge` ) == result(true, `\U0010FFFF`, makeInput("hoge" , 10), Error.init));
-                assert(getResult!(parseEscapeSequence)(`\U0010FFFFhoge`w) == result(true, `\U0010FFFF`, makeInput("hoge"w, 10), Error.init));
-                assert(getResult!(parseEscapeSequence)(`\U0010FFFFhoge`d) == result(true, `\U0010FFFF`, makeInput("hoge"d, 10), Error.init));
-                assert(getResult!(parseEscapeSequence)(testRange(`\U0010FFFFhoge` )) == result(true, `\U0010FFFF`, makeInput(testRange("hoge" ), 10), Error.init));
-                assert(getResult!(parseEscapeSequence)(testRange(`\U0010FFFFhoge`w)) == result(true, `\U0010FFFF`, makeInput(testRange("hoge"w), 10), Error.init));
-                assert(getResult!(parseEscapeSequence)(testRange(`\U0010FFFFhoge`d)) == result(true, `\U0010FFFF`, makeInput(testRange("hoge"d), 10), Error.init));
-
-                assert(getResult!(parseEscapeSequence)(`\u10FFhoge` ) == result(true, `\u10FF`, makeInput("hoge" , 6), Error.init));
-                assert(getResult!(parseEscapeSequence)(`\u10FFhoge`w) == result(true, `\u10FF`, makeInput("hoge"w, 6), Error.init));
-                assert(getResult!(parseEscapeSequence)(`\u10FFhoge`d) == result(true, `\u10FF`, makeInput("hoge"d, 6), Error.init));
-                assert(getResult!(parseEscapeSequence)(testRange(`\u10FFhoge` )) == result(true, `\u10FF`, makeInput(testRange("hoge" ), 6), Error.init));
-                assert(getResult!(parseEscapeSequence)(testRange(`\u10FFhoge`w)) == result(true, `\u10FF`, makeInput(testRange("hoge"w), 6), Error.init));
-                assert(getResult!(parseEscapeSequence)(testRange(`\u10FFhoge`d)) == result(true, `\u10FF`, makeInput(testRange("hoge"d), 6), Error.init));
-
-                assert(getResult!(parseEscapeSequence)(`\nhoge` ) == result(true, `\n`, makeInput("hoge" , 2), Error.init));
-                assert(getResult!(parseEscapeSequence)(`\nhoge`w) == result(true, `\n`, makeInput("hoge"w, 2), Error.init));
-                assert(getResult!(parseEscapeSequence)(`\nhoge`d) == result(true, `\n`, makeInput("hoge"d, 2), Error.init));
-                assert(getResult!(parseEscapeSequence)(testRange(`\nhoge` )) == result(true, `\n`, makeInput(testRange("hoge" ), 2), Error.init));
-                assert(getResult!(parseEscapeSequence)(testRange(`\nhoge`w)) == result(true, `\n`, makeInput(testRange("hoge"w), 2), Error.init));
-                assert(getResult!(parseEscapeSequence)(testRange(`\nhoge`d)) == result(true, `\n`, makeInput(testRange("hoge"d), 2), Error.init));
-
-                assert(getResult!(parseEscapeSequence)("鬱hoge" ) == result(false, "", makeInput("" ), Error("escape sequence")));
-                assert(getResult!(parseEscapeSequence)("鬱hoge"w) == result(false, "", makeInput(""w), Error("escape sequence")));
-                assert(getResult!(parseEscapeSequence)("鬱hoge"d) == result(false, "", makeInput(""d), Error("escape sequence")));
-                assert(getResult!(parseEscapeSequence)(testRange("鬱hoge" )) == result(false, "", makeInput(testRange("" )), Error("escape sequence")));
-                assert(getResult!(parseEscapeSequence)(testRange("鬱hoge"w)) == result(false, "", makeInput(testRange(""w)), Error("escape sequence")));
-                assert(getResult!(parseEscapeSequence)(testRange("鬱hoge"d)) == result(false, "", makeInput(testRange(""d)), Error("escape sequence")));
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-    }
-
-    /* parseSpace */ version(all){
-        Result!(R, string) parseSpace(R)(Input!R input, ref memo_t memo){
-            static assert(isSomeString!R || (isForwardRange!R && isSomeChar!(ElementType!R)));
-
-            typeof(return) result;
-            static if(isSomeString!R){
-                if(input.range.length > 0 && (input.range[0] == ' ' || input.range[0] == '\n' || input.range[0] == '\t' || input.range[0] == '\r' || input.range[0] == '\f')){
-                    result.match = true;
-                    result.value = input.range[0..1].to!string();
-                    result.rest.range = input.range[1..$];
-                    result.rest.position = input.position + 1;
-                    result.rest.line = (input.range[0] == '\n' ? input.line + 1 : input.line);
-                    result.rest.callerLine = input.callerLine;
-                    result.rest.callerFile = input.callerFile;
-                    return result;
-                }
-            }else{
-                if(!input.range.empty){
-                    Unqual!(ElementType!R) c = input.range.front;
-                    if(c == ' ' || c == '\n' || c == '\t' || c == '\r' || c == '\f'){
-                        result.match = true;
-                        result.value = c.to!string();
-                        input.range.popFront;
-                        result.rest.range = input.range;
-                        result.rest.position = input.position + 1;
-                        result.rest.line = (c == '\n' ? input.line + 1 : input.line);
-                        result.rest.callerLine = input.callerLine;
-                        result.rest.callerFile = input.callerFile;
-                        return result;
-                    }
-                }
-            }
-            result.error = Error("space", input.line);
-            return result;
-        }
-
-        version(all) unittest{
-            enum dg = {
-                assert(getResult!(parseSpace)("\thoge" ) == result(true, "\t", makeInput("hoge" , 1), Error.init));
-                assert(getResult!(parseSpace)("\thoge"w) == result(true, "\t", makeInput("hoge"w, 1), Error.init));
-                assert(getResult!(parseSpace)("\thoge"d) == result(true, "\t", makeInput("hoge"d, 1), Error.init));
-                assert(getResult!(parseSpace)(testRange("\thoge"))  == result(true, "\t", makeInput(testRange("hoge"),  1), Error.init));
-                assert(getResult!(parseSpace)(testRange("\thoge"w)) == result(true, "\t", makeInput(testRange("hoge"w), 1), Error.init));
-                assert(getResult!(parseSpace)(testRange("\thoge"d)) == result(true, "\t", makeInput(testRange("hoge"d), 1), Error.init));
-
-                assert(getResult!(parseSpace)("hoge" ) == result(false, "", makeInput("" ), Error("space")));
-                assert(getResult!(parseSpace)("hoge"w) == result(false, "", makeInput(""w), Error("space")));
-                assert(getResult!(parseSpace)("hoge"d) == result(false, "", makeInput(""d), Error("space")));
-                assert(getResult!(parseSpace)(testRange("hoge" )) == result(false, "", makeInput(testRange("" )), Error("space")));
-                assert(getResult!(parseSpace)(testRange("hoge"w)) == result(false, "", makeInput(testRange(""w)), Error("space")));
-                assert(getResult!(parseSpace)(testRange("hoge"d)) == result(false, "", makeInput(testRange(""d)), Error("space")));
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-    }
-
-    /* parseEOF */ version(all){
-        Result!(R, None) parseEOF(R)(Input!R input, ref memo_t memo){
-            typeof(return) result;
-            if(input.empty){
-                result.match = true;
-                result.rest.callerLine = input.callerLine;
-                result.rest.callerFile = input.callerFile;
-            }else{
-                result.error = Error("EOF", input.line);
-            }
-            return result;
-        }
-
-        unittest{
-            enum dg = {
-                assert(getResult!(parseEOF)("" ) == result(true, None.init, makeInput("" , 0), Error.init));
-                assert(getResult!(parseEOF)(""w) == result(true, None.init, makeInput(""w, 0), Error.init));
-                assert(getResult!(parseEOF)(""d) == result(true, None.init, makeInput(""d, 0), Error.init));
-                assert(getResult!(parseEOF)(testRange("" )) == result(true, None.init, makeInput(testRange("" ), 0), Error.init));
-                assert(getResult!(parseEOF)(testRange(""w)) == result(true, None.init, makeInput(testRange(""w), 0), Error.init));
-                assert(getResult!(parseEOF)(testRange(""d)) == result(true, None.init, makeInput(testRange(""d), 0), Error.init));
-
-                assert(getResult!(parseEOF)("hoge" ) == result(false, None.init, makeInput("" ), Error("EOF")));
-                assert(getResult!(parseEOF)("hoge"w) == result(false, None.init, makeInput(""w), Error("EOF")));
-                assert(getResult!(parseEOF)("hoge"d) == result(false, None.init, makeInput(""d), Error("EOF")));
-                assert(getResult!(parseEOF)(testRange("hoge" )) == result(false, None.init, makeInput(testRange("" )), Error("EOF")));
-                assert(getResult!(parseEOF)(testRange("hoge"w)) == result(false, None.init, makeInput(testRange(""w)), Error("EOF")));
-                assert(getResult!(parseEOF)(testRange("hoge"d)) == result(false, None.init, makeInput(testRange(""d)), Error("EOF")));
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-    }
-
-    /* parseElem */ version(all){
-        template RangeElementType(R){
-            static assert(isSomeString!R || isForwardRange!R);
-
-            static if(isSomeString!R){
-                alias typeof(R.init[0]) RangeElementType;
-            }else static if(isForwardRange!R){
-                alias ElementType!R RangeElementType;
-            }
-        }
-
-        Result!(R, RangeElementType!R) parseElem(R)(Input!R input, ref memo_t memo){
-            static assert(isSomeString!R || isForwardRange!R);
-
-            typeof(return) result;
-            if(!input.empty){
-                result.match = true;
-                static if(isSomeString!R){
-                    result.value = input.range[0];
-                    result.rest.range = input.range[1..$];
-                    result.rest.position = input.position + 1;
-                    if(input[0] == '\n'){
-                        result.rest.line = input.line + 1;
-                    }else{
-                        result.rest.line = input.line;
-                    }
-                }else{
-                    result.value = input.range.front;
-                    input.range.popFront;
-                    result.rest.range = input.range;
-                    result.rest.position = input.position + 1;
-                    static if(isSomeChar!(ElementType!R)){
-                        if(input.range.front == '\n'){
-                            result.rest.line = input.line + 1;
-                        }else{
-                            result.rest.line = input.line;
-                        }
-                    }else{
-                        result.rest.line = input.line;
-                    }
-                }
-                result.rest.callerLine = input.callerLine;
-                result.rest.callerFile = input.callerFile;
-            }else{
-                result.error.line = input.line;
-                result.error.need = "";
-            }
-            return result;
-        }
-    }
-
-    /* parseRegex */ version(all){
-        template parseRegex(string src){
-            Result!(R, string) parseRegex(R)(Input!R input, ref memo_t memo){
-                static assert(isSomeString!R);
-
-                typeof(return) result;
-                auto captures = input.range.match(regex("^" ~ src));
-                if(!captures.empty){
-                    result.match = true;
-                    result.value = captures.hit;
-                    result.rest.range = captures.post;
-                    result.rest.position = input.position + 1;
-                    result.rest.callerLine = input.callerLine;
-                    result.rest.callerFile = input.callerFile;
-                }else{
-                    result.error = Error("", input.line);
-                }
-                return result;
-            }
-        }
-
-        unittest{
-            enum dg = {
-                assert(getResult!(parseRegex!r"\w\w\w")("abcdef") == result(true, "efg", makeInput("", 3), Error.init));
-            };
-            version(none) debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-    }
-}
-
-/* getters */ version(all){
-    /* getLine */ version(all){
-        Result!(R, size_t) getLine(R)(Input!R input, ref memo_t memo){
-            return result(true, input.line, input, Error.init);
-        }
-
-        unittest{
-            enum dg = {
-                assert(getResult!(combinateSequence!(parseSpaces, getLine))("\n\n" ) == result(true, 3u, makeInput("" , 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces, getLine))("\n\n"w) == result(true, 3u, makeInput(""w, 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces, getLine))("\n\n"d) == result(true, 3u, makeInput(""d, 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces, getLine))(testRange("\n\n" )) == result(true, 3u, makeInput(testRange("" ), 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces, getLine))(testRange("\n\n"w)) == result(true, 3u, makeInput(testRange(""w), 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces, getLine))(testRange("\n\n"d)) == result(true, 3u, makeInput(testRange(""d), 2, 3), Error.init));
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-    }
-
-    /* getCallerLine */ version(all){
-        Result!(R, size_t) getCallerLine(R)(Input!R input, ref memo_t memo){
-            return result(true, input.callerLine, input, Error.init);
-        }
-
-        unittest{
-            enum dg = {
-                assert(getResult!(getCallerLine)("" ) == result(true, cast(size_t)__LINE__, makeInput("" , 0), Error.init));
-                assert(getResult!(getCallerLine)(""w) == result(true, cast(size_t)__LINE__, makeInput(""w, 0), Error.init));
-                assert(getResult!(getCallerLine)(""d) == result(true, cast(size_t)__LINE__, makeInput(""d, 0), Error.init));
-                assert(getResult!(getCallerLine)(testRange("" )) == result(true, cast(size_t)__LINE__, makeInput(testRange("" ), 0), Error.init));
-                assert(getResult!(getCallerLine)(testRange(""w)) == result(true, cast(size_t)__LINE__, makeInput(testRange(""w), 0), Error.init));
-                assert(getResult!(getCallerLine)(testRange(""d)) == result(true, cast(size_t)__LINE__, makeInput(testRange(""d), 0), Error.init));
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-    }
-
-    /* getCallerFile */ version(all){
-        Result!(R, string) getCallerFile(R)(Input!R input, ref memo_t memo){
-            return result(true, input.callerFile, input, Error.init);
         }
     }
 }
@@ -1610,21 +1713,18 @@ bool isMatch(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE
 
 /* ctpg */ version(none){
     /* defs */ version(all){
-        template defs(){
-            alias string ResultType;
-            Result!(Range, string) parse(Range)(Input!Range input, ref memo_t memo){
-                return combinateMemoize!(combinateString!(
-                    combinateMemoize!(combinateSequence!(
-                        combinateMemoize!(parseSpaces!()),
-                        combinateMemoize!(combinateMore1!(
-                            combinateMemoize!(def!()),
-                            combinateMemoize!(parseSpaces!())
-                        )),
-                        combinateMemoize!(parseSpaces!()),
-                        combinateMemoize!(parseEOF!())
-                    ))
-                )).parse(input, memo);
-            }
+        Result!(R, string) defs(R)(Input!R input, ref memo_t memo){
+            return combinateMemoize!(combinateString!(
+                combinateMemoize!(combinateSequence!(
+                    combinateMemoize!(parseSpaces),
+                    combinateMemoize!(combinateMore1!(
+                        combinateMemoize!(def),
+                        combinateMemoize!(parseSpaces)
+                    )),
+                    combinateMemoize!(parseSpaces),
+                    combinateMemoize!(parseEOF)
+                ))
+            )).parse(input, memo);
         }
 
         unittest{
@@ -2665,28 +2765,6 @@ bool isMatch(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE
     }
 }
 
-string flat(Arg)(Arg arg){
-    static if(is(Arg == Tuple!(string, string[]))){
-        string result = arg[0];
-        foreach(elem; arg[1]){
-            result ~= elem;
-        }
-        return result;
-    }else{
-        string result;
-        static if(isTuple!Arg || isArray!Arg){
-            if(arg.length){
-                foreach(elem; arg){
-                    result ~= flat(elem);
-                }
-            }
-        }else{
-            result = arg.to!string();
-        }
-        return result;
-    }
-}
-
 unittest{
     enum dg = {
         version(all){{
@@ -2727,34 +2805,7 @@ debug void main(){
 
 private:
 
-version(unittest) template TestParser(T){
-    Result!(R, T) TestParser(R)(Input!R input, ref memo_t memo){
-        return typeof(return).init;
-    }
-}
 
-version(unittest) struct TestRange(T){
-    static assert(isForwardRange!(typeof(this)));
-    immutable(T)[][] source;
-
-    this(immutable(T)[] source){
-        this.source ~= source;
-    }
-
-    pure @safe nothrow const @property T front(){ return source[0][0]; }
-    pure @safe nothrow @property void popFront(){ source[0] = source[0][1..$]; }
-    pure @safe nothrow const @property bool empty(){ return source[0].length == 0; }
-    @property typeof(this) save(){ return typeof(this)(source[0]); }
-
-    pure @safe nothrow
-    bool opEquals(typeof(this) rhs){
-        return source[0] == rhs.source[0];
-    }
-}
-
-version(unittest) TestRange!(T) testRange(T)(immutable(T)[] source){
-    return TestRange!T(source);
-}
 
 template staticConvertString(string str, T){
     static if(is(T == string)){
@@ -2782,9 +2833,9 @@ unittest{
     static assert(staticConvertString!("foobar", string) == "foobar");
     static assert(staticConvertString!("foobar", wstring) == "foobar"w);
     static assert(staticConvertString!("foobar", dstring) == "foobar"d);
-    static assert(staticConvertString!("foobar", TestRange!char) == "foobar");
-    static assert(staticConvertString!("foobar", TestRange!wchar) == "foobar"w);
-    static assert(staticConvertString!("foobar", TestRange!dchar) == "foobar"d);
+    static assert(staticConvertString!("foobar", TestRange!string) == "foobar");
+    static assert(staticConvertString!("foobar", TestRange!string) == "foobar"w);
+    static assert(staticConvertString!("foobar", TestRange!string) == "foobar"d);
 }
 
 Tuple!(size_t, "width", size_t, "line") countBreadth(string str)in{
@@ -2836,9 +2887,6 @@ unittest{
     static assert(is(ParserType!(string, TestParser!int) == int));
     static assert(is(ParserType!(string, TestParser!long) == long));
 }
-
-
-
 
 dchar decodeRange(Range)(ref Range range){
     static assert(isForwardRange!Range);
