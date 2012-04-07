@@ -10,7 +10,7 @@ This module implements a compile time parser generator.
 
 module ctpg;
 
-import std.array: save, empty;
+import std.array: save, empty, join;
 import std.conv: to;
 import std.range: isForwardRange, ElementType;
 import std.traits: CommonType, isCallable, ReturnType, isSomeChar, isSomeString, Unqual, isAssignable, isArray;
@@ -1677,7 +1677,7 @@ bool isMatch(alias fun)(string src){
                             ))
                         ))
                     )),
-                    function(string convExp, string[] convExps) => convExps.length ? "combinateMemoize!(combinateChoice!(" ~ convExp ~ "," ~ convExps.mkString(",") ~ "))" : convExp
+                    function(string convExp, string[] convExps) => convExps.length ? "combinateMemoize!(combinateChoice!(" ~ convExp ~ "," ~ convExps.join(",") ~ "))" : convExp
                 )).parse(input, memo);
             }
         }
@@ -1811,7 +1811,7 @@ bool isMatch(alias fun)(string src){
                         combinateMemoize!(optionExp!()),
                         combinateMemoize!(parseSpaces!())
                     )),
-                    function(string[] optionExps) => optionExps.length > 1 ? "combinateMemoize!(combinateSequence!("~optionExps.mkString(",")~"))" : optionExps[0]
+                    function(string[] optionExps) => optionExps.length > 1 ? "combinateMemoize!(combinateSequence!("~optionExps.join(",")~"))" : optionExps[0]
                 )).parse(input, memo);
             }
         }
@@ -2213,7 +2213,7 @@ bool isMatch(alias fun)(string src){
                             combinateMemoize!(parseString!"]")
                         ))
                     )),
-                    function(string[] strs) => strs.length == 1 ? strs[0] : "combinateMemoize!(combinateChoice!("~strs.mkString(",")~"))"
+                    function(string[] strs) => strs.length == 1 ? strs[0] : "combinateMemoize!(combinateChoice!("~strs.join(",")~"))"
                 )).parse(input, memo);
             }
         }
@@ -2613,15 +2613,6 @@ unittest{
     };
     debug(ctpg_compile_time) static assert(dg());
     dg();
-}
-
-string mkString(string[] strs, string sep = ""){
-    string result;
-    foreach(i, str; strs){
-        if(i){ result ~= sep; }
-        result ~= str;
-    }
-    return result;
 }
 
 debug void main(){
