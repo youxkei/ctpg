@@ -1111,7 +1111,7 @@ struct Error{
             }else static if(isCallable!converter){
                 alias ReturnType!converter CombinateConvertType;
             }else static if(__traits(compiles, converter(T.init))){
-                alias ReturnType!(() => converter(T.init)) CombinateConvertType;
+                alias typeof(converter(T.init)) CombinateConvertType;
             }else{
                 static assert(false);
             }
