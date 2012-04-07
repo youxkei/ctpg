@@ -25,6 +25,11 @@ alias Object[size_t][string] memo_t;
 
 version = memoize;
 
+final class CallerInformation{
+    string file;
+    size_t line;
+}
+
 /+ Option +/
     struct Option(T){
         public{
