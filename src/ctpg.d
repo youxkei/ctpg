@@ -728,24 +728,6 @@ struct Error{
         }
     }
 
-    /* combinateString */ version(all){
-        template combinateString(alias parser){
-            alias string ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo){
-                typeof(return) result;
-                auto r = parser.parse(input, memo);
-                if(r.match){
-                    result.match = true;
-                    result.value = flat(r.value);
-                    result.rest = r.rest;
-                }else{
-                    result.error = r.error;
-                }
-                return result;
-            }
-        }
-    }
-
     /* combinateSequence */ version(all){
         template combinateSequence(parsers...){
             alias combinateUnTuple!(combinateSequenceImpl!(parsers)) combinateSequence;
@@ -928,33 +910,33 @@ struct Error{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))("www w" ) == result(true, "www", makeInput(" w" , 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))("www w"w) == result(true, "www", makeInput(" w"w, 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))("www w"d) == result(true, "www", makeInput(" w"d, 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange("www w" )) == result(true, "www", makeInput(testRange(" w" ), 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange("www w"w)) == result(true, "www", makeInput(testRange(" w"w), 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange("www w"d)) == result(true, "www", makeInput(testRange(" w"d), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))("www w" ) == result(true, "www", makeInput(" w" , 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))("www w"w) == result(true, "www", makeInput(" w"w, 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))("www w"d) == result(true, "www", makeInput(" w"d, 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange("www w" )) == result(true, "www", makeInput(testRange(" w" ), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange("www w"w)) == result(true, "www", makeInput(testRange(" w"w), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange("www w"d)) == result(true, "www", makeInput(testRange(" w"d), 3), Error.init));
 
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(" w" ) == result(true, "", makeInput(" w" , 0), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(" w"w) == result(true, "", makeInput(" w"w, 0), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(" w"d) == result(true, "", makeInput(" w"d, 0), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange(" w" )) == result(true, "", makeInput(testRange(" w" ), 0), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange(" w"w)) == result(true, "", makeInput(testRange(" w"w), 0), Error.init));
-                assert(getResult!(combinateString!(combinateMore0!(parseString!"w")))(testRange(" w"d)) == result(true, "", makeInput(testRange(" w"d), 0), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(" w" ) == result(true, "", makeInput(" w" , 0), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(" w"w) == result(true, "", makeInput(" w"w, 0), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(" w"d) == result(true, "", makeInput(" w"d, 0), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange(" w" )) == result(true, "", makeInput(testRange(" w" ), 0), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange(" w"w)) == result(true, "", makeInput(testRange(" w"w), 0), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange(" w"d)) == result(true, "", makeInput(testRange(" w"d), 0), Error.init));
 
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))("www w" ) == result(true, "www", makeInput(" w" , 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))("www w"w) == result(true, "www", makeInput(" w"w, 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))("www w"d) == result(true, "www", makeInput(" w"d, 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange("www w" )) == result(true, "www", makeInput(testRange(" w" ), 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange("www w"w)) == result(true, "www", makeInput(testRange(" w"w), 3), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange("www w"d)) == result(true, "www", makeInput(testRange(" w"d), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))("www w" ) == result(true, "www", makeInput(" w" , 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))("www w"w) == result(true, "www", makeInput(" w"w, 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))("www w"d) == result(true, "www", makeInput(" w"d, 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange("www w" )) == result(true, "www", makeInput(testRange(" w" ), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange("www w"w)) == result(true, "www", makeInput(testRange(" w"w), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange("www w"d)) == result(true, "www", makeInput(testRange(" w"d), 3), Error.init));
 
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(" w" ) == result(false, "", makeInput("" ), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(" w"w) == result(false, "", makeInput(""w), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(" w"d) == result(false, "", makeInput(""d), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange(" w" )) == result(false, "", makeInput(testRange("" )), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange(" w"w)) == result(false, "", makeInput(testRange(""w)), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(parseString!"w")))(testRange(" w"d)) == result(false, "", makeInput(testRange(""d)), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(" w" ) == result(false, "", makeInput("" ), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(" w"w) == result(false, "", makeInput(""w), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(" w"d) == result(false, "", makeInput(""d), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange(" w" )) == result(false, "", makeInput(testRange("" )), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange(" w"w)) == result(false, "", makeInput(testRange(""w)), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange(" w"d)) == result(false, "", makeInput(testRange(""d)), Error(q{"w"})));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1076,19 +1058,19 @@ struct Error{
                 assert(getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))(testRange("www"w)) == result(true, "w", makeInput(testRange("ww"w), 1), Error.init));
                 assert(getResult!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))(testRange("www"d)) == result(true, "w", makeInput(testRange("ww"d), 1), Error.init));
 
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("www" ) == result(true, "ww", makeInput("w" , 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("www"w) == result(true, "ww", makeInput("w"w, 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("www"d) == result(true, "ww", makeInput("w"d, 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("www" )) == result(true, "ww", makeInput(testRange("w" ), 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("www"w)) == result(true, "ww", makeInput(testRange("w"w), 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("www"d)) == result(true, "ww", makeInput(testRange("w"d), 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))), flat))("www" ) == result(true, "ww", makeInput("w" , 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))), flat))("www"w) == result(true, "ww", makeInput("w"w, 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))), flat))("www"d) == result(true, "ww", makeInput("w"d, 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))), flat))(testRange("www" )) == result(true, "ww", makeInput(testRange("w" ), 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))), flat))(testRange("www"w)) == result(true, "ww", makeInput(testRange("w"w), 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))), flat))(testRange("www"d)) == result(true, "ww", makeInput(testRange("w"d), 2), Error.init));
 
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("w" ) == result(false, "", makeInput("" ), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("w"w) == result(false, "", makeInput(""w), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))("w"d) == result(false, "", makeInput(""d), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("w" )) == result(false, "", makeInput(testRange("" )), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("w"w)) == result(false, "", makeInput(testRange(""w)), Error(q{"w"})));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w")))))(testRange("w"d)) == result(false, "", makeInput(testRange(""d)), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))), flat))("w" ) == result(false, "", makeInput("" ), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))), flat))("w"w) == result(false, "", makeInput(""w), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))), flat))("w"d) == result(false, "", makeInput(""d), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))), flat))(testRange("w" )) == result(false, "", makeInput(testRange("" )), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))), flat))(testRange("w"w)) == result(false, "", makeInput(testRange(""w)), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAnd!(parseString!"w"))), flat))(testRange("w"d)) == result(false, "", makeInput(testRange(""d)), Error(q{"w"})));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1109,12 +1091,12 @@ struct Error{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))("wwws" ) == result(true, "ww", makeInput("ws" , 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))("wwws"w) == result(true, "ww", makeInput("ws"w, 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))("wwws"d) == result(true, "ww", makeInput("ws"d, 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))(testRange("wwws" )) == result(true, "ww", makeInput(testRange("ws" ), 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))(testRange("wwws"w)) == result(true, "ww", makeInput(testRange("ws"w), 2), Error.init));
-                assert(getResult!(combinateString!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s")))))(testRange("wwws"d)) == result(true, "ww", makeInput(testRange("ws"d), 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s"))), flat))("wwws" ) == result(true, "ww", makeInput("ws" , 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s"))), flat))("wwws"w) == result(true, "ww", makeInput("ws"w, 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s"))), flat))("wwws"d) == result(true, "ww", makeInput("ws"d, 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s"))), flat))(testRange("wwws" )) == result(true, "ww", makeInput(testRange("ws" ), 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s"))), flat))(testRange("wwws"w)) == result(true, "ww", makeInput(testRange("ws"w), 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNot!(parseString!"s"))), flat))(testRange("wwws"d)) == result(true, "ww", makeInput(testRange("ws"d), 2), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1149,22 +1131,16 @@ struct Error{
                 auto r = parser.parse(input, memo);
                 if(r.match){
                     result.match = true;
-                    static if(isTuple!(ParserType!parser)){
-                        static if(__traits(compiles, converter(r.value.field))){
-                            result.value = converter(r.value.field);
-                        }else static if(__traits(compiles, new converter(r.value.field))){
-                            result.value = new converter(r.value.field);
-                        }else{
-                            static assert(false, converter.stringof ~ " cannot call with argument type " ~ typeof(r.value.field).stringof);
-                        }
-                    }else{
-                        static if(__traits(compiles, converter(r.value))){
+                    static if(__traits(compiles, converter(r.value.field))){
+                        result.value = converter(r.value.field);
+                    }else static if(__traits(compiles, new converter(r.value.field))){
+                        result.value = new converter(r.value.field);
+                    }else static if(__traits(compiles, converter(r.value))){
                             result.value = converter(r.value);
-                        }else static if(__traits(compiles, new converter(r.value))){
-                            result.value = new converter(r.value);
-                        }else{
+                    }else static if(__traits(compiles, new converter(r.value))){
+                        result.value = new converter(r.value);
+                    }else{
                             static assert(false, converter.mangleof ~ " cannot call with argument type " ~ typeof(r.value).stringof);
-                        }
                     }
                     result.rest = r.rest;
                 }else{
@@ -1217,19 +1193,19 @@ struct Error{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwwww" ) == result(true, "wwwww", makeInput("" , 5), Error.init));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwwww"w) == result(true, "wwwww", makeInput(""w, 5), Error.init));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwwww"d) == result(true, "wwwww", makeInput(""d, 5), Error.init));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwwww" )) == result(true, "wwwww", makeInput(testRange("" ), 5), Error.init));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwwww"w)) == result(true, "wwwww", makeInput(testRange(""w), 5), Error.init));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwwww"d)) == result(true, "wwwww", makeInput(testRange(""d), 5), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwwww" ) == result(true, "wwwww", makeInput("" , 5), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwwww"w) == result(true, "wwwww", makeInput(""w, 5), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwwww"d) == result(true, "wwwww", makeInput(""d, 5), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwwww" )) == result(true, "wwwww", makeInput(testRange("" ), 5), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwwww"w)) == result(true, "wwwww", makeInput(testRange(""w), 5), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwwww"d)) == result(true, "wwwww", makeInput(testRange(""d), 5), Error.init));
 
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwww" ) == result(false, "", makeInput("" ), Error("passing check")));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwww"w) == result(false, "", makeInput(""w), Error("passing check")));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))("wwww"d) == result(false, "", makeInput(""d), Error("passing check")));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwww" )) == result(false, "", makeInput(testRange("" )), Error("passing check")));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwww"w)) == result(false, "", makeInput(testRange(""w)), Error("passing check")));
-                assert(getResult!(combinateString!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; })))(testRange("wwww"d)) == result(false, "", makeInput(testRange(""d)), Error("passing check")));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwww" ) == result(false, "", makeInput("" ), Error("passing check")));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwww"w) == result(false, "", makeInput(""w), Error("passing check")));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwww"d) == result(false, "", makeInput(""d), Error("passing check")));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwww" )) == result(false, "", makeInput(testRange("" )), Error("passing check")));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwww"w)) == result(false, "", makeInput(testRange(""w)), Error("passing check")));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwww"d)) == result(false, "", makeInput(testRange(""d)), Error("passing check")));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1312,7 +1288,7 @@ struct Error{
 
     /* parseIdent */ version(all){
         template parseIdent(){
-            alias combinateMemoize!(combinateString!(
+            alias combinateMemoize!(combinateConvert!(
                 combinateMemoize!(combinateSequence!(
                     combinateMemoize!(combinateChoice!(
                         combinateMemoize!(parseString!"_"),
@@ -1320,7 +1296,8 @@ struct Error{
                         combinateMemoize!(parseCharRange!('A','Z'))
                     )),
                     combinateMemoize!(combinateMore0!(parseIdentChar!()))
-                ))
+                )),
+                flat
             )) parseIdent;
         }
 
@@ -1374,7 +1351,7 @@ struct Error{
     /* parseStringLiteral */ version(all){
         template parseStringLiteral(){
             alias combinateChoice!(
-                combinateString!(
+                combinateConvert!(
                     combinateSequence!(
                         parseString!"\"",
                         combinateMore0!(
@@ -1387,9 +1364,10 @@ struct Error{
                             )
                         ),
                         parseString!"\""
-                    )
+                    ),
+                    flat
                 ),
-                combinateString!(
+                combinateConvert!(
                     combinateSequence!(
                         parseString!"r\"",
                         combinateMore0!(
@@ -1399,9 +1377,10 @@ struct Error{
                             )
                         ),
                         parseString!"\""
-                    )
+                    ),
+                    flat
                 ),
-                combinateString!(
+                combinateConvert!(
                     combinateSequence!(
                         parseString!"`",
                         combinateMore0!(
@@ -1411,7 +1390,8 @@ struct Error{
                             )
                         ),
                         parseString!"`"
-                    )
+                    ),
+                    flat
                 )
             ) parseStringLiteral;
         }
@@ -1533,7 +1513,7 @@ bool isMatch(alias fun)(string src){
         template defs(){
             alias string ResultType;
             Result!(Range, string) parse(Range)(Input!Range input, ref memo_t memo){
-                return combinateMemoize!(combinateString!(
+                return combinateMemoize!(combinateConvert!(
                     combinateMemoize!(combinateSequence!(
                         combinateMemoize!(parseSpaces!()),
                         combinateMemoize!(combinateMore1!(
@@ -1542,7 +1522,8 @@ bool isMatch(alias fun)(string src){
                         )),
                         combinateMemoize!(parseSpaces!()),
                         combinateMemoize!(parseEOF!())
-                    ))
+                    )),
+                    flat
                 )).parse(input, memo);
             }
         }
@@ -2336,7 +2317,7 @@ bool isMatch(alias fun)(string src){
         template id(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo){
-                return combinateMemoize!(combinateString!(
+                return combinateMemoize!(combinateConvert!(
                     combinateMemoize!(combinateSequence!(
                         combinateMemoize!(combinateChoice!(
                             combinateMemoize!(parseCharRange!('A','Z')),
@@ -2351,7 +2332,8 @@ bool isMatch(alias fun)(string src){
                                 combinateMemoize!(parseString!"_")
                             ))
                         ))
-                    ))
+                    )),
+                    flat
                 )).parse(input, memo);
             }
         }
@@ -2428,7 +2410,7 @@ bool isMatch(alias fun)(string src){
         template typeName(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo){
-                return combinateMemoize!(combinateString!(
+                return combinateMemoize!(combinateConvert!(
                     combinateMemoize!(combinateSequence!(
                         combinateMemoize!(combinateChoice!(
                             combinateMemoize!(parseCharRange!('A','Z')),
@@ -2448,7 +2430,8 @@ bool isMatch(alias fun)(string src){
                                 combinateMemoize!(arch!("[", "]"))
                             ))
                         ))
-                    ))
+                    )),
+                    flat
                 )).parse(input, memo);
             }
         }
