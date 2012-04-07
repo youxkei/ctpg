@@ -57,12 +57,10 @@ final class CallerInformation{
             Range range;
             size_t position;
             size_t line = 1;
-            size_t callerLine = 1;
-            string callerFile;
 
             //cannot apply some qualifiers due to unclearness of Range
             Input save(){
-                return Input(range.save, position, line, callerLine, callerFile);
+                return Input(range.save, position, line);
             }
 
             bool isEnd(){
@@ -71,7 +69,7 @@ final class CallerInformation{
 
             pure @safe nothrow
             bool opEquals(Input lhs){
-                return range == lhs.range && position == lhs.position && line == lhs.line && callerLine == lhs.callerLine && callerFile == lhs.callerFile;
+                return range == lhs.range && position == lhs.position && line == lhs.line;
             }
         }
     }
@@ -80,8 +78,8 @@ final class CallerInformation{
         return Input!Range(range);
     }
 
-    Input!Range makeInput(Range)(Range range, size_t position, size_t line = 1, size_t callerLine = __LINE__, string callerFile = __FILE__){
-        return Input!Range(range, position, line, callerLine, callerFile);
+    Input!Range makeInput(Range)(Range range, size_t position, size_t line = 1){
+        return Input!Range(range, position, line);
     }
 
 /+ Result +/
