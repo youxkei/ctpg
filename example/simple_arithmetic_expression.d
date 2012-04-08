@@ -5,6 +5,7 @@
  */
 
 import ctpg;
+import std.array: join;
 import std.conv: to;
 
 mixin(generateParsers(q{
@@ -20,7 +21,7 @@ mixin(generateParsers(q{
         / primary !"/" mulExp >> (int lhs, int rhs){ return lhs / rhs; }
         / primary;
 
-    int primary = !"(" addExp !")" / s( [0-9]+ ) >> to!int;
+    int primary = !"(" addExp !")" / [0-9]+ >> join >> to!int;
 }));
 
 void main(){
