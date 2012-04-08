@@ -2026,20 +2026,6 @@ bool isMatch(alias fun)(string src){
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
                 return combinateMemoize!(combinateChoice!(
                     combinateMemoize!(literal!()),
-                    combinateMemoize!(combinateConvert!(
-                        combinateMemoize!(combinateSequence!(
-                            combinateMemoize!(combinateNone!(
-                                combinateMemoize!(parseString!"s(")
-                            )),
-                            combinateMemoize!(parseSpaces!()),
-                            combinateMemoize!(choiceExp!()),
-                            combinateMemoize!(parseSpaces!()),
-                            combinateMemoize!(combinateNone!(
-                                combinateMemoize!(parseString!")")
-                            ))
-                        )),
-                        function(string choiceExp) => "combinateMemoize!(combinateString!(" ~ choiceExp ~ "))"
-                    )),
                     combinateMemoize!(nonterminal!()),
                     combinateMemoize!(combinateSequence!(
                         combinateMemoize!(combinateNone!(
