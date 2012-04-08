@@ -62,19 +62,19 @@ final class CallerInformation{
     }
 
 /+ Input +/
-    struct Input(Range){
-        static assert(isSomeString!Range || isForwardRange!Range);
+    struct Input(R){
+        static assert(isSomeString!R || isForwardRange!R);
 
         invariant(){
             assert(line >= 1);
         }
 
         public{
-            Range range;
+            R range;
             size_t position;
             size_t line = 1;
 
-            //cannot apply some qualifiers due to unclearness of Range
+            //cannot apply some qualifiers due to unclearness of R
             Input save(){
                 return Input(range.save, position, line);
             }
@@ -90,24 +90,24 @@ final class CallerInformation{
         }
     }
 
-    Input!Range makeInput(Range)(Range range){
-        return Input!Range(range);
+    Input!R makeInput(R)(R range){
+        return Input!R(range);
     }
 
-    Input!Range makeInput(Range)(Range range, size_t position, size_t line = 1){
-        return Input!Range(range, position, line);
+    Input!R makeInput(R)(R range, size_t position, size_t line = 1){
+        return Input!R(range, position, line);
     }
 
 /+ Result +/
-    struct Result(Range, T){
+    struct Result(R, T){
         public{
             bool match;
             T value;
-            Input!Range rest;
+            Input!R rest;
             Error error;
 
             pure @safe nothrow
-            void opAssign(U)(Result!(Range, U) rhs)if(isAssignable!(T, U)){
+            void opAssign(U)(Result!(R, U) rhs)if(isAssignable!(T, U)){
                 match = rhs.match;
                 value = rhs.value;
                 rest = rhs.rest;
@@ -121,8 +121,8 @@ final class CallerInformation{
         }
     }
 
-    Result!(Range, T) result(Range, T)(bool match, T value, Input!Range rest, Error error){
-        return Result!(Range, T)(match, value, rest, error);
+    Result!(R, T) result(R, T)(bool match, T value, Input!R rest, Error error){
+        return Result!(R, T)(match, value, rest, error);
     }
 
 struct Error{
@@ -163,12 +163,12 @@ struct Error{
     /* parseString */ version(all){
         template parseString(string str) if(str.length > 0){
             alias string ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range ainput, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R ainput, ref memo_t memo, in CallerInformation info){
                 auto input = ainput;
                 enum breadth = countBreadth(str);
-                enum convertedString = staticConvertString!(str, Range);
+                enum convertedString = staticConvertString!(str, R);
                 typeof(return) result;
-                static if(isSomeString!Range){
+                static if(isSomeString!R){
                     if(input.range.length >= convertedString.length && convertedString == input.range[0..convertedString.length]){
                         result.match = true;
                         result.value = str;
@@ -238,10 +238,10 @@ struct Error{
         template parseCharRange(dchar low, dchar high){
             static assert(low <= high);
             alias string ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range _input, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R _input, ref memo_t memo, in CallerInformation info){
                 auto input = _input;
                 typeof(return) result;
-                static if(isSomeString!Range){
+                static if(isSomeString!R){
                     if(input.range.length){
                         size_t idx;
                         dchar c = decode(input.range, idx);
@@ -308,9 +308,9 @@ struct Error{
     /* parseEscapeSequence */ version(all){
         template parseEscapeSequence(){
             alias string ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 typeof(return) result;
-                static if(isSomeString!Range){
+                static if(isSomeString!R){
                     if(input.range[0] == '\\'){
                         switch(input.range[1]){
                             case 'u':{
@@ -442,9 +442,9 @@ struct Error{
     /* parseSpace */ version(all){
         template parseSpace(){
             alias string ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 typeof(return) result;
-                static if(isSomeString!Range){
+                static if(isSomeString!R){
                     if(input.range.length > 0 && (input.range[0] == ' ' || input.range[0] == '\n' || input.range[0] == '\t' || input.range[0] == '\r' || input.range[0] == '\f')){
                         result.match = true;
                         result.value = input.range[0..1].to!string();
@@ -455,7 +455,7 @@ struct Error{
                     }
                 }else{
                     if(!input.range.empty){
-                        Unqual!(ElementType!Range) c = input.range.front;
+                        Unqual!(ElementType!R) c = input.range.front;
                         if(c == ' ' || c == '\n' || c == '\t' || c == '\r' || c == '\f'){
                             result.match = true;
                             result.value = c.to!string();
@@ -497,7 +497,7 @@ struct Error{
     /* parseEOF */ version(all){
         template parseEOF(){
             alias None ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 typeof(return) result;
                 if(input.range.empty){
                     result.match = true;
@@ -535,7 +535,7 @@ struct Error{
     /* getLine */ version(all){
         template getLine(){
             alias size_t ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 return result(true, input.line, input, Error.init);
             }
         }
@@ -558,7 +558,7 @@ struct Error{
     /* getCallerLine */ version(all){
         template getCallerLine(){
             alias size_t ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 return result(true, info.line, input, Error.init);
             }
         }
@@ -581,7 +581,7 @@ struct Error{
     /* getCallerFile */ version(all){
         template getCallerFile(){
             alias string ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 return result(true, info.file, input, Error.init);
             }
         }
@@ -604,13 +604,13 @@ struct Error{
 
             template combinateMemoize(alias parser){
                 alias ParserType!parser ResultType;
-                Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+                Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                     auto memo0 = parser.mangleof in memo;
                     if(memo0){
                         auto memo1 = input.position in *memo0;
                         if(memo1){
                             Object p = *memo1;
-                            return (cast(Wrapper!(Result!(Range, ParserType!parser)))p).value;
+                            return (cast(Wrapper!(Result!(R, ParserType!parser)))p).value;
                         }
                     }
                     auto result = parser.parse(input, memo, info);
@@ -629,7 +629,7 @@ struct Error{
         template combinateUnTuple(alias parser){
             static if(isTuple!(ParserType!parser) && ParserType!parser.Types.length == 1){
                 alias ParserType!parser.Types[0] ResultType;
-                Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+                Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                     typeof(return) result;
                     auto r = parser.parse(input, memo, info);
                     result.match = r.match;
@@ -728,7 +728,7 @@ struct Error{
 
         template combinateSequenceImpl(parsers...){
             alias CombinateSequenceImplType!(parsers) ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 typeof(return) result;
                 static if(parsers.length == 1){
                     auto r = parsers[0].parse(input, memo, info);
@@ -805,7 +805,7 @@ struct Error{
     /* combinateChoice */ version(all){
         template combinateChoice(parsers...){
             alias CommonParserType!(parsers) ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 static assert(parsers.length > 0);
                 static if(parsers.length == 1){
                     return parsers[0].parse(input, memo, info);
@@ -862,9 +862,9 @@ struct Error{
     /* combinateMore */ version(all){
         template combinateMore(int n, alias parser, alias sep){
             alias ParserType!(parser)[] ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 typeof(return) result;
-                Input!Range rest = input;
+                Input!R rest = input;
                 while(true){
                     auto input1 = rest.save;
                     auto r1 = parser.parse(input1, memo, info);
@@ -940,7 +940,7 @@ struct Error{
     /* combinateOption */ version(all){
         template combinateOption(alias parser){
             alias Option!(ParserType!parser) ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 typeof(return) result;
                 result.match = true;
                 auto r = parser.parse(input.save, memo, info);
@@ -980,7 +980,7 @@ struct Error{
     /* combinateNone */ version(all){
         template combinateNone(alias parser){
             alias None ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 typeof(return) result;
                 auto r = parser.parse(input, memo, info);
                 if(r.match){
@@ -1025,7 +1025,7 @@ struct Error{
     /* combinateAndPred */ version(all){
         template combinateAndPred(alias parser){
             alias None ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 typeof(return) result;
                 result.rest = input;
                 auto r = parser.parse(input, memo, info);
@@ -1074,7 +1074,7 @@ struct Error{
     /* combinateNotPred */ version(all){
         template combinateNotPred(alias parser){
             alias None ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 typeof(return) result;
                 result.rest = input;
                 result.match = !parser.parse(input.save, memo, info).match;
@@ -1119,7 +1119,7 @@ struct Error{
 
         template combinateConvert(alias parser, alias converter){
             alias CombinateConvertType!(converter, ParserType!parser) ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 typeof(return) result;
                 auto r = parser.parse(input, memo, info);
                 if(r.match){
@@ -1168,7 +1168,7 @@ struct Error{
     /* combinateCheck */ version(all){
         template combinateCheck(alias parser, alias checker){
             alias ParserType!parser ResultType;
-            Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 typeof(return) result;
                 auto r = parser.parse(input, memo, info);
                 if(r.match){
@@ -1483,9 +1483,9 @@ string getSource(size_t callerLine = __LINE__, string callerFile = __FILE__)(str
     return getResult!(defs!(), callerLine, callerFile)(src).value;
 }
 
-auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range input){
+auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, R)(R input){
     memo_t memo;
-    return fun.parse(Input!Range(input, 0, 1), memo, new CallerInformation(callerLine, callerFile));
+    return fun.parse(Input!R(input, 0, 1), memo, new CallerInformation(callerLine, callerFile));
 }
 
 auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
@@ -1505,7 +1505,7 @@ bool isMatch(alias fun)(string src){
     /* defs */ version(all){
         template defs(){
             alias string ResultType;
-            Result!(Range, string) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, string) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 return combinateMemoize!(combinateConvert!(
                     combinateMemoize!(combinateSequence!(
                         combinateMemoize!(parseSpaces!()),
@@ -1534,7 +1534,7 @@ bool isMatch(alias fun)(string src){
                     result.value ==
                     "template hoge(){"
                         "alias bool ResultType;"
-                        "Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){"
+                        "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
                             "return combinateMemoize!(combinateConvert!("
                                 "combinateMemoize!(combinateSequence!("
                                     "combinateMemoize!(combinateNone!("
@@ -1550,7 +1550,7 @@ bool isMatch(alias fun)(string src){
                     "}"
                     "template hoge2(){"
                         "alias Tuple!piyo ResultType;"
-                        "Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){"
+                        "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
                             "return combinateMemoize!(combinateConvert!("
                                 "combinateMemoize!(combinateMore0!("
                                     "combinateMemoize!(checkNonterminal!(__traits(compiles,hoge),`hoge`,`" ~ (__LINE__ - 27).to!string() ~ "`,`src\\ctpg.d`,hoge!()))"
@@ -1593,7 +1593,7 @@ bool isMatch(alias fun)(string src){
                     =>
                         "template " ~ name ~ "(){"
                             "alias " ~ type ~ " ResultType;"
-                            "Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){"
+                            "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
                                 "return "~choiceExp~".parse(input, memo, info);"
                             "}"
                         "}"
@@ -1612,7 +1612,7 @@ bool isMatch(alias fun)(string src){
                         result.value ==
                         "template hoge(){"
                             "alias bool ResultType;"
-                            "Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){"
+                            "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
                                 "return combinateMemoize!(combinateConvert!("
                                     "combinateMemoize!(combinateSequence!("
                                         "combinateMemoize!(combinateNone!("
@@ -1636,7 +1636,7 @@ bool isMatch(alias fun)(string src){
                         result.value ==
                         "template recursive(){"
                             "alias None ResultType;"
-                            "Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){"
+                            "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
                                 "return combinateMemoize!(combinateSequence!("
                                     "combinateMemoize!(checkNonterminal!(__traits(compiles,A),`A`,`" ~ (__LINE__ - 9).to!string() ~ "`,`src\\ctpg.d`,A!())),"
                                     "combinateMemoize!(parseEOF!())"
@@ -2084,7 +2084,6 @@ bool isMatch(alias fun)(string src){
                     combinateMemoize!(rangeLit!()),
                     combinateMemoize!(stringLit!()),
                     combinateMemoize!(eofLit!()),
-                    //combinateMemoize!(usefulLit!()),
                 )).parse(input, memo, info);
             }
         }
@@ -2445,7 +2444,7 @@ bool isMatch(alias fun)(string src){
     /* func */ version(all){
         template func(){
             alias string ResultType;
-            Result!(Range, string) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+            Result!(R, string) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 return combinateMemoize!(combinateConvert!(
                     combinateMemoize!(combinateSequence!(
                         combinateMemoize!(combinateOption!(
@@ -2602,7 +2601,7 @@ private:
 
 version(unittest) template TestParser(T){
     alias T ResultType;
-    Result!(Range, ResultType) parse(Range)(Input!Range input, ref memo_t memo, in CallerInformation info){
+    Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
         typeof(return) result;
         return result;
     }
@@ -2735,11 +2734,11 @@ unittest{
     static assert(is(CommonParserType!(TestParser!string, TestParser!int) == void));
 }
 
-dchar decodeRange(Range)(ref Range range){
-    static assert(isForwardRange!Range);
-    static assert(isSomeChar!(Unqual!(ElementType!Range)));
+dchar decodeRange(R)(ref R range){
+    static assert(isForwardRange!R);
+    static assert(isSomeChar!(Unqual!(ElementType!R)));
     dchar result;
-    static if(is(Unqual!(ElementType!Range) == char)){
+    static if(is(Unqual!(ElementType!R) == char)){
         if(!(range.front & 0b_1000_0000)){
             result = range.front;
             range.popFront;
@@ -2775,7 +2774,7 @@ dchar decodeRange(Range)(ref Range range){
             range.popFront;
             return result;
         }
-    }else static if(is(Unqual!(ElementType!Range) == wchar)){
+    }else static if(is(Unqual!(ElementType!R) == wchar)){
         if(range.front <= 0xD7FF || (0xE000 <= range.front && range.front < 0xFFFF)){
             result = range.front;
             range.popFront;
@@ -2787,7 +2786,7 @@ dchar decodeRange(Range)(ref Range range){
             range.popFront;
             return result;
         }
-    }else static if(is(Unqual!(ElementType!Range) == dchar)){
+    }else static if(is(Unqual!(ElementType!R) == dchar)){
         result = range.front;
         range.popFront;
         return result;
