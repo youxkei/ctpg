@@ -47,7 +47,7 @@ final class CallerInformation{
     }
 }
 
-/+ Option +/
+// Option
     struct Option(T){
         public{
             bool some;
@@ -61,7 +61,7 @@ final class CallerInformation{
         return Option!T(some, value);
     }
 
-/+ Input +/
+// Input
     struct Input(R){
         static assert(isSomeString!R || isForwardRange!R);
 
@@ -98,7 +98,7 @@ final class CallerInformation{
         return Input!R(range, position, line);
     }
 
-/+ Result +/
+// Result
     struct Result(R, T){
         public{
             bool match;
@@ -467,7 +467,7 @@ struct Error{
             }
         }
 
-        version(all) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(parseSpace!())("\thoge" ) == result(true, "\t", makeInput("hoge" , 1), Error.init));
                 assert(getResult!(parseSpace!())("\thoge"w) == result(true, "\t", makeInput("hoge"w, 1), Error.init));
