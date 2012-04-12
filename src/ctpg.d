@@ -47,7 +47,7 @@ final class CallerInformation{
     }
 }
 
-/+ Option +/
+// Option
     struct Option(T){
         public{
             bool some;
@@ -61,7 +61,7 @@ final class CallerInformation{
         return Option!T(some, value);
     }
 
-/+ Input +/
+// Input
     struct Input(R){
         static assert(isSomeString!R || isForwardRange!R);
 
@@ -98,7 +98,7 @@ final class CallerInformation{
         return Input!R(range, position, line);
     }
 
-/+ Result +/
+// Result
     struct Result(R, T){
         public{
             bool match;
@@ -141,8 +141,8 @@ struct Error{
     }
 }
 
-/* parsers */ version(all){
-    /* success */ version(all){
+// parsers
+    // success
         template success(){
             struct impl{
                 alias None ResultType;
@@ -152,9 +152,8 @@ struct Error{
             }
             alias combinateMemoize!impl success;
         }
-    }
 
-    /* failure */ version(all){
+    // failure
         template failure(){
             struct impl{
                 alias None ResultType;
@@ -164,9 +163,8 @@ struct Error{
             }
             alias combinateMemoize!impl failure;
         }
-    }
 
-    /* parseString */ version(all){
+    // parseString
         template parseString(string str) if(str.length > 0){
             struct impl{
                 alias string ResultType;
@@ -241,9 +239,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* parseCharRange */ version(all){
+    // parseCharRange
         template parseCharRange(dchar low, dchar high){
             static assert(low <= high);
 
@@ -316,9 +313,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* parseEscapeSequence */ version(all){
+    // parseEscapeSequence
         template parseEscapeSequence(){
             struct impl{
                 alias string ResultType;
@@ -453,9 +449,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* parseSpace */ version(all){
+    // parseSpace
         template parseSpace(){
             struct impl{
                 alias string ResultType;
@@ -491,7 +486,7 @@ struct Error{
             alias combinateMemoize!impl parseSpace;
         }
 
-        version(all) unittest{
+        unittest{
             enum dg = {
                 assert(getResult!(parseSpace!())("\thoge" ) == result(true, "\t", makeInput("hoge" , 1), Error.init));
                 assert(getResult!(parseSpace!())("\thoge"w) == result(true, "\t", makeInput("hoge"w, 1), Error.init));
@@ -511,9 +506,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* parseEOF */ version(all){
+    // parseEOF
         template parseEOF(){
             struct impl{
                 alias None ResultType;
@@ -550,11 +544,9 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
-}
 
-/* getters */ version(all){
-    /* getLine */ version(all){
+// getters
+    // getLine
         template getLine(){
             alias size_t ResultType;
             Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
@@ -575,9 +567,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* getCallerLine */ version(all){
+    // getCallerLine
         template getCallerLine(){
             alias size_t ResultType;
             Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
@@ -598,20 +589,17 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* getCallerFile */ version(all){
+    // getCallerFile
         template getCallerFile(){
             alias string ResultType;
             Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 return result(true, info.file, input, Error.init);
             }
         }
-    }
-}
 
-/* combinators */ version(all){
-    /* combinateMemoize */ version(all){
+// combinators
+    // combinateMemoize
         version(memoize){
             final class Wrapper(T){
                 this(T value){
@@ -645,9 +633,8 @@ struct Error{
                 alias parser combinateMemoize;
             }
         }
-    }
 
-    /* combinateUnTuple */ version(all){
+    // combinateUnTuple
         template combinateUnTuple(alias parser){
             static if(isTuple!(ParserType!parser) && ParserType!parser.Types.length == 1){
                 alias ParserType!parser.Types[0] ResultType;
@@ -741,9 +728,20 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* combinateSequence */ version(all){
+    // combinateSequence
+        template CombinateSequenceImplType(parsers...){
+            alias Tuple!(staticMap!(flatTuple, staticMap!(ParserType, parsers))) CombinateSequenceImplType;
+        }
+
+        unittest{
+            static assert(is(CombinateSequenceImplType!(TestParser!string, TestParser!string) == Tuple!(string, string)));
+            static assert(is(CombinateSequenceImplType!(TestParser!int, TestParser!long) == Tuple!(int, long)));
+            static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(int, long)), TestParser!uint) == Tuple!(int, long, uint)));
+            static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(int, long)), TestParser!(Tuple!(uint, ulong))) == Tuple!(int, long, uint, ulong)));
+            static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(Tuple!(byte, short), long)), TestParser!(Tuple!(uint, ulong))) == Tuple!(Tuple!(byte, short), long, uint, ulong)));
+        }
+
         template combinateSequence(parsers...){
             alias combinateUnTuple!(combinateSequenceImpl!(parsers)) combinateSequence;
         }
@@ -822,9 +820,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* combinateChoice */ version(all){
+    // combinateChoice
         template combinateChoice(parsers...){
             alias CommonParserType!(parsers) ResultType;
             Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
@@ -879,9 +876,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* combinateMore */ version(all){
+    // combinateMore
         template combinateMore(int n, alias parser, alias sep){
             alias ParserType!(parser)[] ResultType;
             Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
@@ -957,9 +953,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* combinateOption */ version(all){
+    // combinateOption
         template combinateOption(alias parser){
             alias Option!(ParserType!parser) ResultType;
             Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
@@ -997,9 +992,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* combinateNone */ version(all){
+    // combinateNone
         template combinateNone(alias parser){
             alias None ResultType;
             Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
@@ -1042,9 +1036,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* combinateAndPred */ version(all){
+    // combinateAndPred
         template combinateAndPred(alias parser){
             alias None ResultType;
             Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
@@ -1091,9 +1084,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* combinateNotPred */ version(all){
+    // combinateNotPred
         template combinateNotPred(alias parser){
             alias None ResultType;
             Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
@@ -1117,9 +1109,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* combinateConvert */ version(all){
+    // combinateConvert
         template CombinateConvertType(alias converter, T){
             static if(is(converter == struct) || is(converter == class)){
                 alias converter CombinateConvertType;
@@ -1185,9 +1176,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* combinateCheck */ version(all){
+    // combinateCheck
         template combinateCheck(alias parser, alias checker){
             alias ParserType!parser ResultType;
             Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
@@ -1226,11 +1216,9 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
-}
 
-/* useful parser */ version(all){
-    /* parseAnyChar */ version(all){
+// useful parser
+    // parseAnyChar
         template parseAnyChar(){
             alias parseCharRange!(dchar.min, dchar.max) parseAnyChar;
         }
@@ -1271,9 +1259,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* parseSpaces */ version(all){
+    // parseSpaces
         template parseSpaces(){
             alias combinateNone!(combinateMore0!(parseSpace!())) parseSpaces;
         }
@@ -1299,9 +1286,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* parseIdent */ version(all){
+    // parseIdent
         template parseIdent(){
             alias combinateMemoize!(combinateConvert!(
                 combinateMemoize!(combinateSequence!(
@@ -1361,9 +1347,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* parseStringLiteral */ version(all){
+    // parseStringLiteral
         template parseStringLiteral(){
             alias combinateChoice!(
                 combinateConvert!(
@@ -1440,9 +1425,8 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* parseIntLiteral */ version(all){
+    // parseIntLiteral
         template parseIntLiteral(){
             alias combinateChoice!(
                 combinateConvert!(
@@ -1494,8 +1478,6 @@ struct Error{
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
-}
 
 string generateParsers(size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
     return parse!(defs, callerLine, callerFile)(src);
@@ -1523,8 +1505,8 @@ bool isMatch(alias fun)(string src){
     return getResult!(fun!())(src).match;
 }
 
-/* parsers of DSL */ version(all){
-    /* defs */ version(all){
+// parsers of DSL
+    // defs
         template defs(){
             alias string ResultType;
             Result!(R, string) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
@@ -1589,9 +1571,8 @@ bool isMatch(alias fun)(string src){
             debug(ctpg_compile_time) static assert(dg());
             dg();
         };
-    }
 
-    /* def */ version(all){
+    // def
         template def(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
@@ -1626,7 +1607,7 @@ bool isMatch(alias fun)(string src){
         unittest{
             enum dg = {
                 cast(void)__LINE__;
-                version(all){{
+                {
                     auto result = getResult!(def!())(`bool hoge = !"hello" $ >> {return false;};`);
                     assert(result.match);
                     assert(result.rest.range == "");
@@ -1649,8 +1630,8 @@ bool isMatch(alias fun)(string src){
                             "}"
                         "}"
                     );
-                }}
-                version(all){{
+                }
+                {
                     auto result = getResult!(def!())(`None recursive = A $;`);
                     assert(result.match);
                     assert(result.rest.range == "");
@@ -1666,15 +1647,14 @@ bool isMatch(alias fun)(string src){
                             "}"
                         "}"
                     );
-                }}
+                }
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
             dg();
         };
-    }
 
-    /* choiceExp */ version(all){
+    // choiceExp
         template choiceExp(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
@@ -1699,7 +1679,7 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                version(all){{
+                {
                     auto result = getResult!(choiceExp!())(`!$* / (&(^"a"))?`);
                     assert(result.match);
                     assert(result.rest.range == "");
@@ -1720,8 +1700,8 @@ bool isMatch(alias fun)(string src){
                             "))"
                         "))"
                     );
-                }}
-                version(all){{
+                }
+                {
                     auto result = getResult!(choiceExp!())(`!"hello" $`);
                     assert(result.match);
                     assert(result.rest.range == "");
@@ -1734,15 +1714,14 @@ bool isMatch(alias fun)(string src){
                             "combinateMemoize!(parseEOF!())"
                         "))"
                     );
-                }}
+                }
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* convExp */ version(all){
+    // convExp
         template convExp(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
@@ -1776,7 +1755,7 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                version(all){{
+                {
                     auto result = getResult!(convExp!())(q{!"hello" $ >> {return false;}});
                     assert(result.match);
                     assert(result.rest.range == "");
@@ -1794,8 +1773,8 @@ bool isMatch(alias fun)(string src){
                             "}"
                         "))"
                     );
-                }}
-                version(all){{
+                }
+                {
                     auto result = getResult!(convExp!())(q{"hello" >> flat >> to!int});
                     assert(result.match);
                     assert(result.rest.range == "");
@@ -1809,15 +1788,14 @@ bool isMatch(alias fun)(string src){
                             "to!int"
                         "))"
                     );
-                }}
+                }
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* seqExp */ version(all){
+    // seqExp
         template seqExp(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
@@ -1833,7 +1811,7 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                version(all){{
+                {
                     auto result = getResult!(seqExp!())("!$* (&(^$))?");
                     assert(result.match);
                     assert(result.rest.range == "");
@@ -1854,8 +1832,8 @@ bool isMatch(alias fun)(string src){
                             "))"
                         "))"
                     );
-                }}
-                version(all){{
+                }
+                {
                     auto result = getResult!(seqExp!())("!\"hello\" $");
                     assert(result.match);
                     assert(result.rest.range == "");
@@ -1868,15 +1846,14 @@ bool isMatch(alias fun)(string src){
                             "combinateMemoize!(parseEOF!())"
                         "))"
                     );
-                }}
+                }
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* optionExp */ version(all){
+    // optionExp
         template optionExp(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
@@ -1915,9 +1892,8 @@ bool isMatch(alias fun)(string src){
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* postExp */ version(all){
+    // postExp
         template postExp(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
@@ -1987,9 +1963,8 @@ bool isMatch(alias fun)(string src){
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* preExp */ version(all){
+    // preExp
         template preExp(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
@@ -2040,9 +2015,8 @@ bool isMatch(alias fun)(string src){
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* primaryExp */ version(all){
+    // primaryExp
         template primaryExp(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
@@ -2066,7 +2040,7 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                version(all){{
+                {
                     auto result = getResult!(primaryExp!())("(&(^$)?)");
                     assert(result.match);
                     assert(result.rest.range == "");
@@ -2080,25 +2054,24 @@ bool isMatch(alias fun)(string src){
                             "))"
                         "))"
                     );
-                }}
-                version(all){{
+                }
+                {
                     auto result = getResult!(primaryExp!())("int");
                     assert(result.match);
                     assert(result.rest.range == "");
                     assert(result.value == "combinateMemoize!(checkNonterminal!(__traits(compiles,int),`int`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,int!()))");
-                }}
-                version(all){{
+                }
+                {
                     auto result = getResult!(primaryExp!())("###このコメントは表示されません###");
                     assert(!result.match);
-                }}
+                }
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* literal */ version(all){
+    // literal
         template literal(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
@@ -2112,36 +2085,35 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                version(all){{
+                {
                     auto result = getResult!(literal!())("\"hello\nworld\"");
                     assert(result.match);
                     assert(result.rest.range == "");
                     assert(result.value == "combinateMemoize!(parseString!\"hello\nworld\")");
-                }}
-                version(all){{
+                }
+                {
                     auto result = getResult!(literal!())("[a-z]");
                     assert(result.match);
                     assert(result.rest.range == "");
                     assert(result.value == "combinateMemoize!(parseCharRange!('a','z'))");
-                }}
-                version(all){{
+                }
+                {
                     auto result = getResult!(literal!())("$");
                     assert(result.match);
                     assert(result.rest.range == "");
                     assert(result.value == "combinateMemoize!(parseEOF!())");
-                }}
-                version(all){{
+                }
+                {
                     auto result = getResult!(literal!())("表が怖い噂のソフト");
                     assert(!result.match);
-                }}
+                }
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* stringLit */ version(all){
+    // stringLit
         template stringLit(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
@@ -2172,24 +2144,23 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                version(all){{
+                {
                     auto result = getResult!(stringLit!())("\"hello\nworld\" ");
                     assert(result.match);
                     assert(result.rest.range == " ");
                     assert(result.value == "combinateMemoize!(parseString!\"hello\nworld\")");
-                }}
-                version(all){{
+                }
+                {
                     auto result = getResult!(stringLit!())("aa\"");
                     assert(!result.match);
-                }}
+                }
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* rangeLit */ version(all){
+    // rangeLit
         template rangeLit(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
@@ -2255,13 +2226,13 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                version(all){{
+                {
                     auto result = getResult!(rangeLit!())("[a-z]");
                     assert(result.match);
                     assert(result.rest.range == "");
                     assert(result.value == "combinateMemoize!(parseCharRange!('a','z'))");
-                }}
-                version(all){{
+                }
+                {
                     auto result = getResult!(rangeLit!())("[a-zA-Z_]");
                     assert(result.match);
                     assert(result.rest.range == "");
@@ -2273,15 +2244,14 @@ bool isMatch(alias fun)(string src){
                             "combinateMemoize!(parseString!\"_\")"
                         "))"
                     );
-                }}
+                }
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* eofLit */ version(all){
+    // eofLit
         template eofLit(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
@@ -2296,24 +2266,23 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                version(all){{
+                {
                     auto result = getResult!(eofLit!())("$");
                     assert(result.match);
                     assert(result.rest.range == "");
                     assert(result.value == "combinateMemoize!(parseEOF!())");
-                }}
-                version(all){{
+                }
+                {
                     auto result = getResult!(eofLit!())("#");
                     assert(!result.match);
-                }}
+                }
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* id */ version(all){
+    // id
         template id(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
@@ -2340,26 +2309,25 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                version(all){{
+                {
                     auto result = getResult!(id!())("A");
                     assert(result.match);
                     assert(result.rest.range == "");
                     assert(result.value == "A");
-                }}
-                version(all){{
+                }
+                {
                     auto result = getResult!(id!())("int");
                     assert(result.match);
                     assert(result.rest.range == "");
                     assert(result.value == "int");
-                }}
+                }
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* nonterminal */ version(all){
+    // nonterminal
         template checkNonterminal(bool defined, string name, string line, string file, alias nonterminal){
             static if(defined){
                 alias nonterminal checkNonterminal;
@@ -2387,26 +2355,25 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                version(all){{
+                {
                     auto result = getResult!(nonterminal!())("A");
                     assert(result.match);
                     assert(result.rest.range == "");
                     assert(result.value == "combinateMemoize!(checkNonterminal!(__traits(compiles,A),`A`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,A!()))");
-                }}
-                version(all){{
+                }
+                {
                     auto result = getResult!(nonterminal!())("int");
                     assert(result.match);
                     assert(result.rest.range == "");
                     assert(result.value == "combinateMemoize!(checkNonterminal!(__traits(compiles,int),`int`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,int!()))");
-                }}
+                }
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* typeName */ version(all){
+    // typeName
         template typeName(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
@@ -2438,32 +2405,31 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                version(all){{
+                {
                     auto result = getResult!(typeName!())("int");
                     assert(result.match);
                     assert(result.rest.range == "");
                     assert(result.value == "int");
-                }}
-                version(all){{
+                }
+                {
                     auto result = getResult!(typeName!())("Tuple!(string, int)");
                     assert(result.match);
                     assert(result.rest.range == "");
                     assert(result.value == "Tuple!(string, int)");
-                }}
-                version(all){{
+                }
+                {
                     auto result = getResult!(typeName!())("int[]");
                     assert(result.match);
                     assert(result.rest.range == "");
                     assert(result.value == "int[]");
-                }}
+                }
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* func */ version(all){
+    // func
         template func(){
             alias string ResultType;
             Result!(R, string) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
@@ -2521,9 +2487,8 @@ bool isMatch(alias fun)(string src){
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
 
-    /* arch */ version(all){
+    // arch
         template arch(string open, string close){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
@@ -2565,8 +2530,6 @@ bool isMatch(alias fun)(string src){
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
-    }
-}
 
 string flat(Arg)(Arg arg){
     static if(is(Arg == Tuple!(string, string[]))){
@@ -2592,23 +2555,23 @@ string flat(Arg)(Arg arg){
 
 unittest{
     enum dg = {
-        version(all){{
+        {
             auto result = flat(tuple(1, "hello", tuple(2, "world")));
             assert(result == "1hello2world");
-        }}
-        version(all){{
+        }
+        {
             auto result = flat(tuple([0, 1, 2], "hello", tuple([3, 4, 5], ["wor", "ld!!"]), ["!", "!"]));
             assert(result == "012hello345world!!!!");
-        }}
-        version(all){{
+        }
+        {
             auto result = flat(tuple('表', 'が', '怖', 'い', '噂', 'の', 'ソ', 'フ', 'ト'));
             assert(result == "表が怖い噂のソフト");
-        }}
-        version(all){{
+        }
+        {
             string[] ary;
             auto result = flat(tuple("A", ary));
             assert(result == "A");
-        }}
+        }
         return true;
     };
     debug(ctpg_compile_time) static assert(dg());
@@ -2697,9 +2660,9 @@ unittest{
     static assert({
         assert(countBreadth("これ\nとこれ") == Tuple!(size_t, "width", size_t, "line")(6, 1));
         assert(countBreadth("これ\nとこれ\nとさらにこれ") == Tuple!(size_t, "width", size_t, "line")(13, 2));
-        version(all){{
+        {
             auto result = countBreadth("helloワールド");
-        }}
+        }
         return true;
     }());
 }
@@ -2731,18 +2694,6 @@ unittest{
     static assert(is(flatTuple!(string) == string));
     static assert(is(flatTuple!(Tuple!(string)) == TypeTuple!string));
     static assert(is(flatTuple!(Tuple!(Tuple!(string))) == TypeTuple!(Tuple!string)));
-}
-
-template CombinateSequenceImplType(parsers...){
-    alias Tuple!(staticMap!(flatTuple, staticMap!(ParserType, parsers))) CombinateSequenceImplType;
-}
-
-unittest{
-    static assert(is(CombinateSequenceImplType!(TestParser!string, TestParser!string) == Tuple!(string, string)));
-    static assert(is(CombinateSequenceImplType!(TestParser!int, TestParser!long) == Tuple!(int, long)));
-    static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(int, long)), TestParser!uint) == Tuple!(int, long, uint)));
-    static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(int, long)), TestParser!(Tuple!(uint, ulong))) == Tuple!(int, long, uint, ulong)));
-    static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(Tuple!(byte, short), long)), TestParser!(Tuple!(uint, ulong))) == Tuple!(Tuple!(byte, short), long, uint, ulong)));
 }
 
 template CommonParserType(tparsers...){
