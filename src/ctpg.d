@@ -144,58 +144,67 @@ struct Error{
 /* parsers */ version(all){
     /* success */ version(all){
         template success(){
-            alias None ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                return result(true, None.init, input, Error.init);
+            struct impl{
+                alias None ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    return result(true, None.init, input, Error.init);
+                }
             }
+            alias combinateMemoize!impl success;
         }
     }
 
     /* failure */ version(all){
         template failure(){
-            alias None ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                return result(false, None.init, Input!R.init, Error.init);
+            struct impl{
+                alias None ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    return result(false, None.init, Input!R.init, Error.init);
+                }
             }
+            alias combinateMemoize!impl failure;
         }
     }
 
     /* parseString */ version(all){
         template parseString(string str) if(str.length > 0){
-            alias string ResultType;
-            Result!(R, ResultType) parse(R)(Input!R ainput, ref memo_t memo, in CallerInformation info){
-                auto input = ainput;
-                enum breadth = countBreadth(str);
-                enum convertedString = staticConvertString!(str, R);
-                typeof(return) result;
-                static if(isSomeString!R){
-                    if(input.range.length >= convertedString.length && convertedString == input.range[0..convertedString.length]){
+            struct impl{
+                alias string ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R ainput, ref memo_t memo, in CallerInformation info){
+                    auto input = ainput;
+                    enum breadth = countBreadth(str);
+                    enum convertedString = staticConvertString!(str, R);
+                    typeof(return) result;
+                    static if(isSomeString!R){
+                        if(input.range.length >= convertedString.length && convertedString == input.range[0..convertedString.length]){
+                            result.match = true;
+                            result.value = str;
+                            result.rest.range = input.range[convertedString.length..$];
+                            result.rest.position = input.position + breadth.width;
+                            result.rest.line = input.line + breadth.line;
+                            return result;
+                        }
+                    }else{
+                        foreach(c; convertedString){
+                            if(input.range.empty || c != input.range.front){
+                                goto Lerror;
+                            }else{
+                                input.range.popFront;
+                            }
+                        }
                         result.match = true;
                         result.value = str;
-                        result.rest.range = input.range[convertedString.length..$];
+                        result.rest.range = input.range;
                         result.rest.position = input.position + breadth.width;
                         result.rest.line = input.line + breadth.line;
                         return result;
                     }
-                }else{
-                    foreach(c; convertedString){
-                        if(input.range.empty || c != input.range.front){
-                            goto Lerror;
-                        }else{
-                            input.range.popFront;
-                        }
-                    }
-                    result.match = true;
-                    result.value = str;
-                    result.rest.range = input.range;
-                    result.rest.position = input.position + breadth.width;
-                    result.rest.line = input.line + breadth.line;
+                Lerror:
+                    result.error = Error('"' ~ str ~ '"', input.line);
                     return result;
                 }
-            Lerror:
-                result.error = Error('"' ~ str ~ '"', input.line);
-                return result;
             }
+            alias combinateMemoize!impl parseString;
         }
 
         unittest{
@@ -237,43 +246,47 @@ struct Error{
     /* parseCharRange */ version(all){
         template parseCharRange(dchar low, dchar high){
             static assert(low <= high);
-            alias string ResultType;
-            Result!(R, ResultType) parse(R)(Input!R _input, ref memo_t memo, in CallerInformation info){
-                auto input = _input;
-                typeof(return) result;
-                static if(isSomeString!R){
-                    if(input.range.length){
-                        size_t idx;
-                        dchar c = decode(input.range, idx);
-                        if(low <= c && c <= high){
-                            result.match = true;
-                            result.value = c.to!string();
-                            result.rest.range = input.range[idx..$];
-                            result.rest.position = input.position + 1;
-                            result.rest.line = c == '\n' ? input.line + 1 : input.line;
-                            return result;
+
+            struct impl{
+                alias string ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R _input, ref memo_t memo, in CallerInformation info){
+                    auto input = _input;
+                    typeof(return) result;
+                    static if(isSomeString!R){
+                        if(input.range.length){
+                            size_t idx;
+                            dchar c = decode(input.range, idx);
+                            if(low <= c && c <= high){
+                                result.match = true;
+                                result.value = c.to!string();
+                                result.rest.range = input.range[idx..$];
+                                result.rest.position = input.position + 1;
+                                result.rest.line = c == '\n' ? input.line + 1 : input.line;
+                                return result;
+                            }
+                        }
+                    }else{
+                        if(!input.range.empty){
+                            dchar c = decodeRange(input.range);
+                            if(low <= c && c <= high){
+                                result.match = true;
+                                result.value = c.to!string();
+                                result.rest.range = input.range;
+                                result.rest.position = input.position + 1;
+                                result.rest.line = c == '\n' ? input.line + 1 : input.line;
+                                return result;
+                            }
                         }
                     }
-                }else{
-                    if(!input.range.empty){
-                        dchar c = decodeRange(input.range);
-                        if(low <= c && c <= high){
-                            result.match = true;
-                            result.value = c.to!string();
-                            result.rest.range = input.range;
-                            result.rest.position = input.position + 1;
-                            result.rest.line = c == '\n' ? input.line + 1 : input.line;
-                            return result;
-                        }
+                    if(low == dchar.min && high == dchar.max){
+                        result.error = Error("any char", input.line);
+                    }else{
+                        result.error = Error("c: '" ~ low.to!string() ~ "' <= c <= '" ~ high.to!string() ~ "'", input.line);
                     }
+                    return result;
                 }
-                if(low == dchar.min && high == dchar.max){
-                    result.error = Error("any char", input.line);
-                }else{
-                    result.error = Error("c: '" ~ low.to!string() ~ "' <= c <= '" ~ high.to!string() ~ "'", input.line);
-                }
-                return result;
             }
+            alias combinateMemoize!impl parseCharRange;
         }
 
         unittest{
@@ -307,93 +320,96 @@ struct Error{
 
     /* parseEscapeSequence */ version(all){
         template parseEscapeSequence(){
-            alias string ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                typeof(return) result;
-                static if(isSomeString!R){
-                    if(input.range[0] == '\\'){
-                        switch(input.range[1]){
-                            case 'u':{
-                                result.match = true;
-                                result.value = input.range[0..6].to!string();
-                                result.rest.range = input.range[6..$];
-                                result.rest.position = input.position + 6;
-                                result.rest.line = input.line;
-                                return result;
+            struct impl{
+                alias string ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    typeof(return) result;
+                    static if(isSomeString!R){
+                        if(input.range[0] == '\\'){
+                            switch(input.range[1]){
+                                case 'u':{
+                                    result.match = true;
+                                    result.value = input.range[0..6].to!string();
+                                    result.rest.range = input.range[6..$];
+                                    result.rest.position = input.position + 6;
+                                    result.rest.line = input.line;
+                                    return result;
+                                }
+                                case 'U':{
+                                    result.match = true;
+                                    result.value = input.range[0..10].to!string();
+                                    result.rest.range = input.range[10..$];
+                                    result.rest.position = input.position + 10;
+                                    result.rest.line = input.line;
+                                    return result;
+                                }
+                                case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
+                                    result.match = true;
+                                    result.value = input.range[0..2].to!string();
+                                    result.rest.range = input.range[2..$];
+                                    result.rest.position = input.position + 2;
+                                    result.rest.line = input.line;
+                                    return result;
+                                }
+                                default:{
+                                }
                             }
-                            case 'U':{
-                                result.match = true;
-                                result.value = input.range[0..10].to!string();
-                                result.rest.range = input.range[10..$];
-                                result.rest.position = input.position + 10;
-                                result.rest.line = input.line;
-                                return result;
-                            }
-                            case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
-                                result.match = true;
-                                result.value = input.range[0..2].to!string();
-                                result.rest.range = input.range[2..$];
-                                result.rest.position = input.position + 2;
-                                result.rest.line = input.line;
-                                return result;
-                            }
-                            default:{
+                        }
+                    }else{
+                        auto c1 = input.range.front;
+                        if(c1 == '\\'){
+                            input.range.popFront;
+                            auto c2 = input.range.front;
+                            switch(c2){
+                                case 'u':{
+                                    result.match = true;
+                                    input.range.popFront;
+                                    char[6] data;
+                                    data[0..2] = "\\u";
+                                    foreach(idx; 2..6){
+                                        data[idx] = cast(char)input.range.front;
+                                        input.range.popFront;
+                                    }
+                                    result.value = to!string(data);
+                                    result.rest.range = input.range;
+                                    result.rest.position = input.position + 6;
+                                    result.rest.line = input.line;
+                                    return result;
+                                }
+                                case 'U':{
+                                    result.match = true;
+                                    input.range.popFront;
+                                    char[10] data;
+                                    data[0..2] = "\\U";
+                                    foreach(idx; 2..10){
+                                        data[idx] = cast(char)input.range.front;
+                                        input.range.popFront;
+                                    }
+                                    result.value = to!string(data);
+                                    result.rest.range = input.range;
+                                    result.rest.position = input.position + 10;
+                                    result.rest.line = input.line;
+                                    return result;
+                                }
+                                case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
+                                    result.match = true;
+                                    input.range.popFront;
+                                    result.value = "\\" ~ to!string(c2);
+                                    result.rest.position = input.position + 2;
+                                    result.rest.range = input.range;
+                                    result.rest.line = input.line;
+                                    return result;
+                                }
+                                default:{
+                                }
                             }
                         }
                     }
-                }else{
-                    auto c1 = input.range.front;
-                    if(c1 == '\\'){
-                        input.range.popFront;
-                        auto c2 = input.range.front;
-                        switch(c2){
-                            case 'u':{
-                                result.match = true;
-                                input.range.popFront;
-                                char[6] data;
-                                data[0..2] = "\\u";
-                                foreach(idx; 2..6){
-                                    data[idx] = cast(char)input.range.front;
-                                    input.range.popFront;
-                                }
-                                result.value = to!string(data);
-                                result.rest.range = input.range;
-                                result.rest.position = input.position + 6;
-                                result.rest.line = input.line;
-                                return result;
-                            }
-                            case 'U':{
-                                result.match = true;
-                                input.range.popFront;
-                                char[10] data;
-                                data[0..2] = "\\U";
-                                foreach(idx; 2..10){
-                                    data[idx] = cast(char)input.range.front;
-                                    input.range.popFront;
-                                }
-                                result.value = to!string(data);
-                                result.rest.range = input.range;
-                                result.rest.position = input.position + 10;
-                                result.rest.line = input.line;
-                                return result;
-                            }
-                            case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
-                                result.match = true;
-                                input.range.popFront;
-                                result.value = "\\" ~ to!string(c2);
-                                result.rest.position = input.position + 2;
-                                result.rest.range = input.range;
-                                result.rest.line = input.line;
-                                return result;
-                            }
-                            default:{
-                            }
-                        }
-                    }
+                    result.error = Error("escape sequence", input.line);
+                    return result;
                 }
-                result.error = Error("escape sequence", input.line);
-                return result;
             }
+            alias combinateMemoize!impl parseEscapeSequence;
         }
 
         unittest{
@@ -441,35 +457,38 @@ struct Error{
 
     /* parseSpace */ version(all){
         template parseSpace(){
-            alias string ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                typeof(return) result;
-                static if(isSomeString!R){
-                    if(input.range.length > 0 && (input.range[0] == ' ' || input.range[0] == '\n' || input.range[0] == '\t' || input.range[0] == '\r' || input.range[0] == '\f')){
-                        result.match = true;
-                        result.value = input.range[0..1].to!string();
-                        result.rest.range = input.range[1..$];
-                        result.rest.position = input.position + 1;
-                        result.rest.line = (input.range[0] == '\n' ? input.line + 1 : input.line);
-                        return result;
-                    }
-                }else{
-                    if(!input.range.empty){
-                        Unqual!(ElementType!R) c = input.range.front;
-                        if(c == ' ' || c == '\n' || c == '\t' || c == '\r' || c == '\f'){
+            struct impl{
+                alias string ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    typeof(return) result;
+                    static if(isSomeString!R){
+                        if(input.range.length > 0 && (input.range[0] == ' ' || input.range[0] == '\n' || input.range[0] == '\t' || input.range[0] == '\r' || input.range[0] == '\f')){
                             result.match = true;
-                            result.value = c.to!string();
-                            input.range.popFront;
-                            result.rest.range = input.range;
+                            result.value = input.range[0..1].to!string();
+                            result.rest.range = input.range[1..$];
                             result.rest.position = input.position + 1;
-                            result.rest.line = (c == '\n' ? input.line + 1 : input.line);
+                            result.rest.line = (input.range[0] == '\n' ? input.line + 1 : input.line);
                             return result;
                         }
+                    }else{
+                        if(!input.range.empty){
+                            Unqual!(ElementType!R) c = input.range.front;
+                            if(c == ' ' || c == '\n' || c == '\t' || c == '\r' || c == '\f'){
+                                result.match = true;
+                                result.value = c.to!string();
+                                input.range.popFront;
+                                result.rest.range = input.range;
+                                result.rest.position = input.position + 1;
+                                result.rest.line = (c == '\n' ? input.line + 1 : input.line);
+                                return result;
+                            }
+                        }
                     }
+                    result.error = Error("space", input.line);
+                    return result;
                 }
-                result.error = Error("space", input.line);
-                return result;
             }
+            alias combinateMemoize!impl parseSpace;
         }
 
         version(all) unittest{
@@ -496,16 +515,19 @@ struct Error{
 
     /* parseEOF */ version(all){
         template parseEOF(){
-            alias None ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                typeof(return) result;
-                if(input.range.empty){
-                    result.match = true;
-                }else{
-                    result.error = Error("EOF", input.line);
+            struct impl{
+                alias None ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    typeof(return) result;
+                    if(input.range.empty){
+                        result.match = true;
+                    }else{
+                        result.error = Error("EOF", input.line);
+                    }
+                    return result;
                 }
-                return result;
             }
+            alias combinateMemoize!impl parseEOF;
         }
 
         unittest{
