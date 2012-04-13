@@ -1340,17 +1340,17 @@ struct Error{
 
     // parseIdent
         template parseIdent(){
-            alias combinateMemoize!(combinateConvert!(
-                combinateMemoize!(combinateSequence!(
-                    combinateMemoize!(combinateChoice!(
-                        combinateMemoize!(parseString!"_"),
-                        combinateMemoize!(parseCharRange!('a','z')),
-                        combinateMemoize!(parseCharRange!('A','Z'))
-                    )),
-                    combinateMemoize!(combinateMore0!(parseIdentChar!()))
-                )),
+            alias combinateConvert!(
+                combinateSequence!(
+                    combinateChoice!(
+                        parseString!"_",
+                        parseCharRange!('a','z'),
+                        parseCharRange!('A','Z')
+                    ),
+                    combinateMore0!(parseIdentChar!())
+                ),
                 flat
-            )) parseIdent;
+            ) parseIdent;
         }
 
         alias parseIdent ident_p;
@@ -1590,30 +1590,30 @@ bool isMatch(alias fun)(string src){
                     "template hoge(){"
                         "alias bool ResultType;"
                         "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
-                            "return combinateMemoize!(combinateConvert!("
-                                "combinateMemoize!(combinateSequence!("
-                                    "combinateMemoize!(combinateNone!("
-                                        "combinateMemoize!(parseString!\"hello\")"
-                                    ")),"
-                                    "combinateMemoize!(parseEOF!())"
-                                ")),"
+                            "return combinateConvert!("
+                                "combinateSequence!("
+                                    "combinateNone!("
+                                        "parseString!\"hello\""
+                                    "),"
+                                    "parseEOF!()"
+                                "),"
                                 "function(){"
                                     "return false;"
                                 "}"
-                            ")).parse(input, memo, info);"
+                            ").parse(input, memo, info);"
                         "}"
                     "}"
                     "template hoge2(){"
                         "alias Tuple!piyo ResultType;"
                         "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
-                            "return combinateMemoize!(combinateConvert!("
-                                "combinateMemoize!(combinateMore0!("
-                                    "combinateMemoize!(checkNonterminal!(__traits(compiles,hoge),`hoge`,`" ~ (__LINE__ - 27).to!string() ~ "`,`src\\ctpg.d`,hoge!()))"
-                                ")),"
+                            "return combinateConvert!("
+                                "combinateMore0!("
+                                    "checkNonterminal!(__traits(compiles,hoge),`hoge`,`" ~ (__LINE__ - 27).to!string() ~ "`,`src\\ctpg.d`,hoge!())"
+                                "),"
                                 "function(){"
                                     "return tuple(\"foo\");"
                                 "}"
-                            ")).parse(input, memo, info);"
+                            ").parse(input, memo, info);"
                         "}"
                     "}"
                 );
@@ -1667,17 +1667,17 @@ bool isMatch(alias fun)(string src){
                         "template hoge(){"
                             "alias bool ResultType;"
                             "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
-                                "return combinateMemoize!(combinateConvert!("
-                                    "combinateMemoize!(combinateSequence!("
-                                        "combinateMemoize!(combinateNone!("
-                                            "combinateMemoize!(parseString!\"hello\")"
-                                        ")),"
-                                        "combinateMemoize!(parseEOF!())"
-                                    ")),"
+                                "return combinateConvert!("
+                                    "combinateSequence!("
+                                        "combinateNone!("
+                                            "parseString!\"hello\""
+                                        "),"
+                                        "parseEOF!()"
+                                    "),"
                                     "function(){"
                                         "return false;"
                                     "}"
-                                ")).parse(input, memo, info);"
+                                ").parse(input, memo, info);"
                             "}"
                         "}"
                     );
@@ -1691,10 +1691,10 @@ bool isMatch(alias fun)(string src){
                         "template recursive(){"
                             "alias None ResultType;"
                             "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
-                                "return combinateMemoize!(combinateSequence!("
-                                    "combinateMemoize!(checkNonterminal!(__traits(compiles,A),`A`,`" ~ (__LINE__ - 9).to!string() ~ "`,`src\\ctpg.d`,A!())),"
-                                    "combinateMemoize!(parseEOF!())"
-                                ")).parse(input, memo, info);"
+                                "return combinateSequence!("
+                                    "checkNonterminal!(__traits(compiles,A),`A`,`" ~ (__LINE__ - 9).to!string() ~ "`,`src\\ctpg.d`,A!()),"
+                                    "parseEOF!()"
+                                ").parse(input, memo, info);"
                             "}"
                         "}"
                     );
@@ -1723,7 +1723,7 @@ bool isMatch(alias fun)(string src){
                             )
                         )
                     ),
-                    function(string convExp, string[] convExps) => convExps.length ? "combinateMemoize!(combinateChoice!(" ~ convExp ~ "," ~ convExps.join(",") ~ "))" : convExp
+                    function(string convExp, string[] convExps) => convExps.length ? "combinateChoice!(" ~ convExp ~ "," ~ convExps.join(",") ~ ")" : convExp
                 ).parse(input, memo, info);
             }
         }
@@ -1736,20 +1736,20 @@ bool isMatch(alias fun)(string src){
                     assert(result.rest.empty);
                     assert(
                         result.value ==
-                        "combinateMemoize!(combinateChoice!("
-                            "combinateMemoize!(combinateMore0!("
-                                "combinateMemoize!(combinateNone!("
-                                    "combinateMemoize!(parseEOF!())"
-                                "))"
-                            ")),"
-                            "combinateMemoize!(combinateOption!("
-                                "combinateMemoize!(combinateAndPred!("
-                                    "combinateMemoize!(combinateNotPred!("
-                                        "combinateMemoize!(parseString!\"a\")"
-                                    "))"
-                                "))"
-                            "))"
-                        "))"
+                        "combinateChoice!("
+                            "combinateMore0!("
+                                "combinateNone!("
+                                    "parseEOF!()"
+                                ")"
+                            "),"
+                            "combinateOption!("
+                                "combinateAndPred!("
+                                    "combinateNotPred!("
+                                        "parseString!\"a\""
+                                    ")"
+                                ")"
+                            ")"
+                        ")"
                     );
                 }
                 {
@@ -1758,12 +1758,12 @@ bool isMatch(alias fun)(string src){
                     assert(result.rest.empty);
                     assert(
                         result.value ==
-                        "combinateMemoize!(combinateSequence!("
-                            "combinateMemoize!(combinateNone!("
-                                "combinateMemoize!(parseString!\"hello\")"
-                            ")),"
-                            "combinateMemoize!(parseEOF!())"
-                        "))"
+                        "combinateSequence!("
+                            "combinateNone!("
+                                "parseString!\"hello\""
+                            "),"
+                            "parseEOF!()"
+                        ")"
                     );
                 }
                 return true;
@@ -1796,7 +1796,7 @@ bool isMatch(alias fun)(string src){
                     function(string seqExp, string[] funcs){
                         string result = seqExp;
                         foreach(func; funcs){
-                            result = "combinateMemoize!(combinateConvert!(" ~ result ~ "," ~ func ~ "))";
+                            result = "combinateConvert!(" ~ result ~ "," ~ func ~ ")";
                         }
                         return result;
                     }
@@ -1812,17 +1812,17 @@ bool isMatch(alias fun)(string src){
                     assert(result.rest.empty);
                     assert(
                         result.value ==
-                        "combinateMemoize!(combinateConvert!("
-                            "combinateMemoize!(combinateSequence!("
-                                "combinateMemoize!(combinateNone!("
-                                    "combinateMemoize!(parseString!\"hello\")"
-                                ")),"
-                                "combinateMemoize!(parseEOF!())"
-                            ")),"
+                        "combinateConvert!("
+                            "combinateSequence!("
+                                "combinateNone!("
+                                    "parseString!\"hello\""
+                                "),"
+                                "parseEOF!()"
+                            "),"
                             "function(){"
                                 "return false;"
                             "}"
-                        "))"
+                        ")"
                     );
                 }
                 {
@@ -1831,13 +1831,13 @@ bool isMatch(alias fun)(string src){
                     assert(result.rest.empty);
                     assert(
                         result.value ==
-                        "combinateMemoize!(combinateConvert!("
-                            "combinateMemoize!(combinateConvert!("
-                                "combinateMemoize!(parseString!\"hello\"),"
+                        "combinateConvert!("
+                            "combinateConvert!("
+                                "parseString!\"hello\","
                                 "flat"
-                            ")),"
+                            "),"
                             "to!int"
-                        "))"
+                        ")"
                     );
                 }
                 return true;
@@ -1855,7 +1855,7 @@ bool isMatch(alias fun)(string src){
                         optionExp!(),
                         parseSpaces!()
                     ),
-                    function(string[] optionExps) => optionExps.length > 1 ? "combinateMemoize!(combinateSequence!("~optionExps.join(",")~"))" : optionExps[0]
+                    function(string[] optionExps) => optionExps.length > 1 ? "combinateSequence!("~optionExps.join(",")~")" : optionExps[0]
                 ).parse(input, memo, info);
             }
         }
@@ -1868,20 +1868,20 @@ bool isMatch(alias fun)(string src){
                     assert(result.rest.empty);
                     assert(
                         result.value ==
-                        "combinateMemoize!(combinateSequence!("
-                            "combinateMemoize!(combinateMore0!("
-                                "combinateMemoize!(combinateNone!("
-                                    "combinateMemoize!(parseEOF!())"
-                                "))"
-                            ")),"
-                            "combinateMemoize!(combinateOption!("
-                                "combinateMemoize!(combinateAndPred!("
-                                    "combinateMemoize!(combinateNotPred!("
-                                        "combinateMemoize!(parseEOF!())"
-                                    "))"
-                                "))"
-                            "))"
-                        "))"
+                        "combinateSequence!("
+                            "combinateMore0!("
+                                "combinateNone!("
+                                    "parseEOF!()"
+                                ")"
+                            "),"
+                            "combinateOption!("
+                                "combinateAndPred!("
+                                    "combinateNotPred!("
+                                        "parseEOF!()"
+                                    ")"
+                                ")"
+                            ")"
+                        ")"
                     );
                 }
                 {
@@ -1890,12 +1890,12 @@ bool isMatch(alias fun)(string src){
                     assert(result.rest.empty);
                     assert(
                         result.value ==
-                        "combinateMemoize!(combinateSequence!("
-                            "combinateMemoize!(combinateNone!("
-                                "combinateMemoize!(parseString!\"hello\")"
-                            ")),"
-                            "combinateMemoize!(parseEOF!())"
-                        "))"
+                        "combinateSequence!("
+                            "combinateNone!("
+                                "parseString!\"hello\""
+                            "),"
+                            "parseEOF!()"
+                        ")"
                     );
                 }
                 return true;
@@ -1918,7 +1918,7 @@ bool isMatch(alias fun)(string src){
                             )
                         )
                     ),
-                    function(string convExp, Option!None op) => op.some ? "combinateMemoize!(combinateOption!("~convExp~"))" : convExp
+                    function(string convExp, Option!None op) => op.some ? "combinateOption!("~convExp~")" : convExp
                 ).parse(input, memo, info);
             }
         }
@@ -1930,13 +1930,13 @@ bool isMatch(alias fun)(string src){
                 assert(result.rest.empty);
                 assert(
                     result.value ==
-                    "combinateMemoize!(combinateOption!("
-                        "combinateMemoize!(combinateAndPred!("
-                            "combinateMemoize!(combinateNotPred!("
-                                "combinateMemoize!(parseString!\"hello\")"
-                            "))"
-                        "))"
-                    "))"
+                    "combinateOption!("
+                        "combinateAndPred!("
+                            "combinateNotPred!("
+                                "parseString!\"hello\""
+                            ")"
+                        ")"
+                    ")"
                 );
                 return true;
             };
@@ -1975,16 +1975,16 @@ bool isMatch(alias fun)(string src){
                         final switch(op.value[0]){
                             case "+":{
                                 if(op.value[1].some){
-                                    return "combinateMemoize!(combinateMore1!(" ~ preExp ~ "," ~ op.value[1].value ~ "))";
+                                    return "combinateMore1!(" ~ preExp ~ "," ~ op.value[1].value ~ ")";
                                 }else{
-                                    return "combinateMemoize!(combinateMore1!(" ~ preExp ~ "))";
+                                    return "combinateMore1!(" ~ preExp ~ ")";
                                 }
                             }
                             case "*":{
                                 if(op.value[1].some){
-                                    return "combinateMemoize!(combinateMore0!(" ~ preExp ~ "," ~ op.value[1].value ~ "))";
+                                    return "combinateMore0!(" ~ preExp ~ "," ~ op.value[1].value ~ ")";
                                 }else{
-                                    return "combinateMemoize!(combinateMore0!(" ~ preExp ~ "))";
+                                    return "combinateMore0!(" ~ preExp ~ ")";
                                 }
                             }
                             case "":{
@@ -2003,11 +2003,11 @@ bool isMatch(alias fun)(string src){
                 assert(result.rest.empty);
                 assert(
                     result.value ==
-                    "combinateMemoize!(combinateMore0!("
-                        "combinateMemoize!(combinateNone!("
-                            "combinateMemoize!(parseEOF!())"
-                        "))"
-                    "))"
+                    "combinateMore0!("
+                        "combinateNone!("
+                            "parseEOF!()"
+                        ")"
+                    ")"
                 );
                 return true;
             };
@@ -2033,13 +2033,13 @@ bool isMatch(alias fun)(string src){
                     function(Option!string op, string primaryExp){
                         final switch(op.value){
                             case "&":{
-                                return "combinateMemoize!(combinateAndPred!(" ~ primaryExp ~ "))";
+                                return "combinateAndPred!(" ~ primaryExp ~ ")";
                             }
                             case "!":{
-                                return "combinateMemoize!(combinateNone!(" ~ primaryExp ~ "))";
+                                return "combinateNone!(" ~ primaryExp ~ ")";
                             }
                             case "^":{
-                                return "combinateMemoize!(combinateNotPred!(" ~ primaryExp ~ "))";
+                                return "combinateNotPred!(" ~ primaryExp ~ ")";
                             }
                             case "":{
                                 return primaryExp;
@@ -2057,9 +2057,9 @@ bool isMatch(alias fun)(string src){
                 assert(result.rest.empty);
                 assert(
                     result.value ==
-                    "combinateMemoize!(combinateNone!("
-                        "combinateMemoize!(parseEOF!())"
-                    "))"
+                    "combinateNone!("
+                        "parseEOF!()"
+                    ")"
                 );
                 return true;
             };
@@ -2097,20 +2097,20 @@ bool isMatch(alias fun)(string src){
                     assert(result.rest.empty);
                     assert(
                         result.value ==
-                        "combinateMemoize!(combinateOption!("
-                            "combinateMemoize!(combinateAndPred!("
-                                "combinateMemoize!(combinateNotPred!("
-                                    "combinateMemoize!(parseEOF!())"
-                                "))"
-                            "))"
-                        "))"
+                        "combinateOption!("
+                            "combinateAndPred!("
+                                "combinateNotPred!("
+                                    "parseEOF!()"
+                                ")"
+                            ")"
+                        ")"
                     );
                 }
                 {
                     auto result = getResult!(primaryExp!())("int");
                     assert(result.match);
                     assert(result.rest.empty);
-                    assert(result.value == "combinateMemoize!(checkNonterminal!(__traits(compiles,int),`int`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,int!()))");
+                    assert(result.value == "checkNonterminal!(__traits(compiles,int),`int`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,int!())");
                 }
                 {
                     auto result = getResult!(primaryExp!())("###このコメントは表示されません###");
@@ -2140,19 +2140,19 @@ bool isMatch(alias fun)(string src){
                     auto result = getResult!(literal!())("\"hello\nworld\"");
                     assert(result.match);
                     assert(result.rest.empty);
-                    assert(result.value == "combinateMemoize!(parseString!\"hello\nworld\")");
+                    assert(result.value == "parseString!\"hello\nworld\"");
                 }
                 {
                     auto result = getResult!(literal!())("[a-z]");
                     assert(result.match);
                     assert(result.rest.empty);
-                    assert(result.value == "combinateMemoize!(parseCharRange!('a','z'))");
+                    assert(result.value == "parseCharRange!('a','z')");
                 }
                 {
                     auto result = getResult!(literal!())("$");
                     assert(result.match);
                     assert(result.rest.empty);
-                    assert(result.value == "combinateMemoize!(parseEOF!())");
+                    assert(result.value == "parseEOF!()");
                 }
                 {
                     auto result = getResult!(literal!())("表が怖い噂のソフト");
@@ -2188,7 +2188,7 @@ bool isMatch(alias fun)(string src){
                             parseString!"\""
                         )
                     ),
-                    function(string[] strs) => "combinateMemoize!(parseString!\"" ~ strs.flat ~ "\")"
+                    function(string[] strs) => "parseString!\"" ~ strs.flat ~ "\""
                 ).parse(input, memo, info);
             }
         }
@@ -2199,7 +2199,7 @@ bool isMatch(alias fun)(string src){
                     auto result = getResult!(stringLit!())("\"hello\nworld\" ");
                     assert(result.match);
                     assert(result.rest.range == " ");
-                    assert(result.value == "combinateMemoize!(parseString!\"hello\nworld\")");
+                    assert(result.value == "parseString!\"hello\nworld\"");
                 }
                 {
                     auto result = getResult!(stringLit!())("aa\"");
@@ -2235,7 +2235,7 @@ bool isMatch(alias fun)(string src){
                             parseString!"]"
                         )
                     ),
-                    function(string[] strs) => strs.length == 1 ? strs[0] : "combinateMemoize!(combinateChoice!("~strs.join(",")~"))"
+                    function(string[] strs) => strs.length == 1 ? strs[0] : "combinateChoice!("~strs.join(",")~")"
                 ).parse(input, memo, info);
             }
         }
@@ -2243,35 +2243,35 @@ bool isMatch(alias fun)(string src){
         template charRange(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateSequence!(
-                        combinateMemoize!(combinateChoice!(
-                            combinateMemoize!(parseEscapeSequence!()),
-                            combinateMemoize!(parseAnyChar!())
-                        )),
-                        combinateMemoize!(combinateNone!(
-                            combinateMemoize!(parseString!"-")
-                        )),
-                        combinateMemoize!(combinateChoice!(
-                            combinateMemoize!(parseEscapeSequence!()),
-                            combinateMemoize!(parseAnyChar!())
-                        )),
-                    )),
-                    function(string low, string high) => "combinateMemoize!(parseCharRange!('" ~ low ~ "','" ~ high ~ "'))"
-                )).parse(input, memo, info);
+                return combinateConvert!(
+                    combinateSequence!(
+                        combinateChoice!(
+                            parseEscapeSequence!(),
+                            parseAnyChar!()
+                        ),
+                        combinateNone!(
+                            parseString!"-"
+                        ),
+                        combinateChoice!(
+                            parseEscapeSequence!(),
+                            parseAnyChar!()
+                        ),
+                    ),
+                    function(string low, string high) => "parseCharRange!('" ~ low ~ "','" ~ high ~ "')"
+                ).parse(input, memo, info);
             }
         }
 
         template oneChar(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateChoice!(
-                        combinateMemoize!(parseEscapeSequence!()),
-                        combinateMemoize!(parseAnyChar!())
-                    )),
-                    function(string c) => "combinateMemoize!(parseString!\"" ~ c ~ "\")"
-                )).parse(input, memo, info);
+                return combinateConvert!(
+                    combinateChoice!(
+                        parseEscapeSequence!(),
+                        parseAnyChar!()
+                    ),
+                    function(string c) => "parseString!\"" ~ c ~ "\""
+                ).parse(input, memo, info);
             }
         }
 
@@ -2281,7 +2281,7 @@ bool isMatch(alias fun)(string src){
                     auto result = getResult!(rangeLit!())("[a-z]");
                     assert(result.match);
                     assert(result.rest.empty);
-                    assert(result.value == "combinateMemoize!(parseCharRange!('a','z'))");
+                    assert(result.value == "parseCharRange!('a','z')");
                 }
                 {
                     auto result = getResult!(rangeLit!())("[a-zA-Z_]");
@@ -2289,11 +2289,11 @@ bool isMatch(alias fun)(string src){
                     assert(result.rest.empty);
                     assert(
                         result.value ==
-                        "combinateMemoize!(combinateChoice!("
-                            "combinateMemoize!(parseCharRange!('a','z')),"
-                            "combinateMemoize!(parseCharRange!('A','Z')),"
-                            "combinateMemoize!(parseString!\"_\")"
-                        "))"
+                        "combinateChoice!("
+                            "parseCharRange!('a','z'),"
+                            "parseCharRange!('A','Z'),"
+                            "parseString!\"_\""
+                        ")"
                     );
                 }
                 return true;
@@ -2310,7 +2310,7 @@ bool isMatch(alias fun)(string src){
                     combinateNone!(
                         parseString!"$"
                     ),
-                    function() => "combinateMemoize!(parseEOF!())"
+                    function() => "parseEOF!()"
                 ).parse(input, memo, info);
             }
         }
@@ -2321,7 +2321,7 @@ bool isMatch(alias fun)(string src){
                     auto result = getResult!(eofLit!())("$");
                     assert(result.match);
                     assert(result.rest.empty);
-                    assert(result.value == "combinateMemoize!(parseEOF!())");
+                    assert(result.value == "parseEOF!()");
                 }
                 {
                     auto result = getResult!(eofLit!())("#");
@@ -2399,7 +2399,7 @@ bool isMatch(alias fun)(string src){
                         getLine!(),
                         id!()
                     ),
-                    function(size_t callerLine, string callerFile, size_t line, string id) => "combinateMemoize!(checkNonterminal!(__traits(compiles," ~ id ~ "),`" ~ id ~ "`,`" ~ (callerLine + line - 1).to!string() ~ "`,`" ~ callerFile ~ "`," ~ id ~ "!()))"
+                    function(size_t callerLine, string callerFile, size_t line, string id) => "checkNonterminal!(__traits(compiles," ~ id ~ "),`" ~ id ~ "`,`" ~ (callerLine + line - 1).to!string() ~ "`,`" ~ callerFile ~ "`," ~ id ~ "!())"
                 ).parse(input, memo, info);
             }
         }
@@ -2410,13 +2410,13 @@ bool isMatch(alias fun)(string src){
                     auto result = getResult!(nonterminal!())("A");
                     assert(result.match);
                     assert(result.rest.empty);
-                    assert(result.value == "combinateMemoize!(checkNonterminal!(__traits(compiles,A),`A`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,A!()))");
+                    assert(result.value == "checkNonterminal!(__traits(compiles,A),`A`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,A!())");
                 }
                 {
                     auto result = getResult!(nonterminal!())("int");
                     assert(result.match);
                     assert(result.rest.empty);
-                    assert(result.value == "combinateMemoize!(checkNonterminal!(__traits(compiles,int),`int`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,int!()))");
+                    assert(result.value == "checkNonterminal!(__traits(compiles,int),`int`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,int!())");
                 }
                 return true;
             };
