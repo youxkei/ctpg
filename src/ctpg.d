@@ -548,10 +548,13 @@ struct Error{
 // getters
     // getLine
         template getLine(){
-            alias size_t ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                return result(true, input.line, input, Error.init);
+            struct impl{
+                alias size_t ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    return result(true, input.line, input, Error.init);
+                }
             }
+            alias combinateMemoize!impl getLine;
         }
 
         unittest{
@@ -570,10 +573,13 @@ struct Error{
 
     // getCallerLine
         template getCallerLine(){
-            alias size_t ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                return result(true, info.line, input, Error.init);
+            struct impl{
+                alias size_t ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    return result(true, info.line, input, Error.init);
+                }
             }
+            alias combinateMemoize!impl getCallerLine;
         }
 
         unittest{
@@ -592,10 +598,13 @@ struct Error{
 
     // getCallerFile
         template getCallerFile(){
-            alias string ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                return result(true, info.file, input, Error.init);
+            struct impl{
+                alias string ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    return result(true, info.file, input, Error.init);
+                }
             }
+            alias combinateMemoize!impl getCallerFile;
         }
 
 // combinators
@@ -637,18 +646,21 @@ struct Error{
     // combinateUnTuple
         template combinateUnTuple(alias parser){
             static if(isTuple!(ParserType!parser) && ParserType!parser.Types.length == 1){
-                alias ParserType!parser.Types[0] ResultType;
-                Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                    typeof(return) result;
-                    auto r = parser.parse(input, memo, info);
-                    result.match = r.match;
-                    result.value = r.value[0];
-                    result.rest = r.rest;
-                    result.error = r.error;
-                    return result;
+                struct impl{
+                    alias ParserType!parser.Types[0] ResultType;
+                    static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                        typeof(return) result;
+                        auto r = parser.parse(input, memo, info);
+                        result.match = r.match;
+                        result.value = r.value[0];
+                        result.rest = r.rest;
+                        result.error = r.error;
+                        return result;
+                    }
                 }
+                alias combinateMemoize!impl combinateUnTuple;
             }else{
-                alias parser combinateUnTuple;
+                alias combinateMemoize!parser combinateUnTuple;
             }
         }
 
@@ -747,43 +759,46 @@ struct Error{
         }
 
         template combinateSequenceImpl(parsers...){
-            alias CombinateSequenceImplType!(parsers) ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                typeof(return) result;
-                static if(parsers.length == 1){
-                    auto r = parsers[0].parse(input, memo, info);
-                    if(r.match){
-                        result.match = true;
-                        static if(isTuple!(ParserType!(parsers[0]))){
-                            result.value = r.value;
-                        }else{
-                            result.value = tuple(r.value);
-                        }
-                        result.rest = r.rest;
-                    }else{
-                        result.error = r.error;
-                    }
-                }else{
-                    auto r1 = parsers[0].parse(input, memo, info);
-                    if(r1.match){
-                        auto r2 = combinateSequenceImpl!(parsers[1..$]).parse(r1.rest, memo, info);
-                        if(r2.match){
+            struct impl{
+                alias CombinateSequenceImplType!(parsers) ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    typeof(return) result;
+                    static if(parsers.length == 1){
+                        auto r = parsers[0].parse(input, memo, info);
+                        if(r.match){
                             result.match = true;
                             static if(isTuple!(ParserType!(parsers[0]))){
-                                result.value = tuple(r1.value.field, r2.value.field);
+                                result.value = r.value;
                             }else{
-                                result.value = tuple(r1.value, r2.value.field);
+                                result.value = tuple(r.value);
                             }
-                            result.rest = r2.rest;
+                            result.rest = r.rest;
                         }else{
-                            result.error = r2.error;
+                            result.error = r.error;
                         }
                     }else{
-                        result.error = r1.error;
+                        auto r1 = parsers[0].parse(input, memo, info);
+                        if(r1.match){
+                            auto r2 = combinateSequenceImpl!(parsers[1..$]).parse(r1.rest, memo, info);
+                            if(r2.match){
+                                result.match = true;
+                                static if(isTuple!(ParserType!(parsers[0]))){
+                                    result.value = tuple(r1.value.field, r2.value.field);
+                                }else{
+                                    result.value = tuple(r1.value, r2.value.field);
+                                }
+                                result.rest = r2.rest;
+                            }else{
+                                result.error = r2.error;
+                            }
+                        }else{
+                            result.error = r1.error;
+                        }
                     }
+                    return result;
                 }
-                return result;
             }
+            alias combinateMemoize!impl combinateSequenceImpl;
         }
 
         unittest{
@@ -822,31 +837,45 @@ struct Error{
         }
 
     // combinateChoice
+        template CommonParserType(tparsers...){
+            alias CommonType!(staticMap!(ParserType, tparsers)) CommonParserType;
+        }
+
+        unittest{
+            static assert(is(CommonParserType!(TestParser!string, TestParser!string) == string));
+            static assert(is(CommonParserType!(TestParser!int, TestParser!long) == long));
+            static assert(is(CommonParserType!(TestParser!byte, TestParser!short, TestParser!int) == int));
+            static assert(is(CommonParserType!(TestParser!string, TestParser!int) == void));
+        }
+
         template combinateChoice(parsers...){
-            alias CommonParserType!(parsers) ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                static assert(parsers.length > 0);
-                static if(parsers.length == 1){
-                    return parsers[0].parse(input, memo, info);
-                }else{
-                    typeof(return) result;
-                    auto r1 = parsers[0].parse(input.save, memo, info);
-                    if(r1.match){
-                        result = r1;
-                        return result;
+            struct impl{
+                alias CommonParserType!(parsers) ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    static assert(parsers.length > 0);
+                    static if(parsers.length == 1){
+                        return parsers[0].parse(input, memo, info);
                     }else{
-                        result.error = r1.error;
-                    }
-                    auto r2 = combinateChoice!(parsers[1..$]).parse(input, memo, info);
-                    if(r2.match){
-                        result = r2;
+                        typeof(return) result;
+                        auto r1 = parsers[0].parse(input.save, memo, info);
+                        if(r1.match){
+                            result = r1;
+                            return result;
+                        }else{
+                            result.error = r1.error;
+                        }
+                        auto r2 = combinateChoice!(parsers[1..$]).parse(input, memo, info);
+                        if(r2.match){
+                            result = r2;
+                            return result;
+                        }else{
+                            result.error.need ~= " or " ~ r2.error.need;
+                        }
                         return result;
-                    }else{
-                        result.error.need ~= " or " ~ r2.error.need;
                     }
-                    return result;
                 }
             }
+            alias combinateMemoize!impl combinateChoice;
         }
 
         unittest{
@@ -879,36 +908,39 @@ struct Error{
 
     // combinateMore
         template combinateMore(int n, alias parser, alias sep){
-            alias ParserType!(parser)[] ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                typeof(return) result;
-                Input!R rest = input;
-                while(true){
-                    auto input1 = rest.save;
-                    auto r1 = parser.parse(input1, memo, info);
-                    if(r1.match){
-                        result.value = result.value ~ r1.value;
-                        rest = r1.rest;
-                        auto input2 = rest.save;
-                        auto r2 = sep.parse(input2, memo, info);
-                        if(r2.match){
-                            rest = r2.rest;
+            struct impl{
+                alias ParserType!(parser)[] ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    typeof(return) result;
+                    Input!R rest = input;
+                    while(true){
+                        auto input1 = rest.save;
+                        auto r1 = parser.parse(input1, memo, info);
+                        if(r1.match){
+                            result.value = result.value ~ r1.value;
+                            rest = r1.rest;
+                            auto input2 = rest.save;
+                            auto r2 = sep.parse(input2, memo, info);
+                            if(r2.match){
+                                rest = r2.rest;
+                            }else{
+                                break;
+                            }
                         }else{
-                            break;
-                        }
-                    }else{
-                        if(result.value.length < n){
-                            result.error = r1.error;
-                            return result;
-                        }else{
-                            break;
+                            if(result.value.length < n){
+                                result.error = r1.error;
+                                return result;
+                            }else{
+                                break;
+                            }
                         }
                     }
+                    result.match = true;
+                    result.rest = rest;
+                    return result;
                 }
-                result.match = true;
-                result.rest = rest;
-                return result;
             }
+            alias combinateMemoize!impl combinateMore;
         }
 
         template combinateMore0(alias parser, alias sep = success!()){
@@ -956,20 +988,23 @@ struct Error{
 
     // combinateOption
         template combinateOption(alias parser){
-            alias Option!(ParserType!parser) ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                typeof(return) result;
-                result.match = true;
-                auto r = parser.parse(input.save, memo, info);
-                if(r.match){
-                    result.value = r.value;
-                    result.value.some = true;
-                    result.rest = r.rest;
-                }else{
-                    result.rest = input;
+            struct impl{
+                alias Option!(ParserType!parser) ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    typeof(return) result;
+                    result.match = true;
+                    auto r = parser.parse(input.save, memo, info);
+                    if(r.match){
+                        result.value = r.value;
+                        result.value.some = true;
+                        result.rest = r.rest;
+                    }else{
+                        result.rest = input;
+                    }
+                    return result;
                 }
-                return result;
             }
+            alias combinateMemoize!impl combinateOption;
         }
 
         unittest{
@@ -995,18 +1030,21 @@ struct Error{
 
     // combinateNone
         template combinateNone(alias parser){
-            alias None ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                typeof(return) result;
-                auto r = parser.parse(input, memo, info);
-                if(r.match){
-                    result.match = true;
-                    result.rest = r.rest;
-                }else{
-                    result.error = r.error;
+            struct impl{
+                alias None ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    typeof(return) result;
+                    auto r = parser.parse(input, memo, info);
+                    if(r.match){
+                        result.match = true;
+                        result.rest = r.rest;
+                    }else{
+                        result.error = r.error;
+                    }
+                    return result;
                 }
-                return result;
             }
+            alias combinateMemoize!impl combinateNone;
         }
 
         unittest{
@@ -1039,15 +1077,18 @@ struct Error{
 
     // combinateAndPred
         template combinateAndPred(alias parser){
-            alias None ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                typeof(return) result;
-                result.rest = input;
-                auto r = parser.parse(input, memo, info);
-                result.match = r.match;
-                result.error = r.error;
-                return result;
+            struct impl{
+                alias None ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    typeof(return) result;
+                    result.rest = input;
+                    auto r = parser.parse(input, memo, info);
+                    result.match = r.match;
+                    result.error = r.error;
+                    return result;
+                }
             }
+            alias combinateMemoize!impl combinateAndPred;
         }
 
         unittest{
@@ -1087,13 +1128,16 @@ struct Error{
 
     // combinateNotPred
         template combinateNotPred(alias parser){
-            alias None ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                typeof(return) result;
-                result.rest = input;
-                result.match = !parser.parse(input.save, memo, info).match;
-                return result;
+            struct impl{
+                alias None ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    typeof(return) result;
+                    result.rest = input;
+                    result.match = !parser.parse(input.save, memo, info).match;
+                    return result;
+                }
             }
+            alias combinateMemoize!impl combinateNotPred;
         }
 
         unittest{
@@ -1131,29 +1175,32 @@ struct Error{
         }
 
         template combinateConvert(alias parser, alias converter){
-            alias CombinateConvertType!(converter, ParserType!parser) ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                typeof(return) result;
-                auto r = parser.parse(input, memo, info);
-                if(r.match){
-                    result.match = true;
-                    static if(__traits(compiles, converter(r.value.field))){
-                        result.value = converter(r.value.field);
-                    }else static if(__traits(compiles, new converter(r.value.field))){
-                        result.value = new converter(r.value.field);
-                    }else static if(__traits(compiles, converter(r.value))){
-                            result.value = converter(r.value);
-                    }else static if(__traits(compiles, new converter(r.value))){
-                        result.value = new converter(r.value);
+            struct impl{
+                alias CombinateConvertType!(converter, ParserType!parser) ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    typeof(return) result;
+                    auto r = parser.parse(input, memo, info);
+                    if(r.match){
+                        result.match = true;
+                        static if(__traits(compiles, converter(r.value.field))){
+                            result.value = converter(r.value.field);
+                        }else static if(__traits(compiles, new converter(r.value.field))){
+                            result.value = new converter(r.value.field);
+                        }else static if(__traits(compiles, converter(r.value))){
+                                result.value = converter(r.value);
+                        }else static if(__traits(compiles, new converter(r.value))){
+                            result.value = new converter(r.value);
+                        }else{
+                                static assert(false, converter.mangleof ~ " cannot call with argument type " ~ typeof(r.value).stringof);
+                        }
+                        result.rest = r.rest;
                     }else{
-                            static assert(false, converter.mangleof ~ " cannot call with argument type " ~ typeof(r.value).stringof);
+                        result.error = r.error;
                     }
-                    result.rest = r.rest;
-                }else{
-                    result.error = r.error;
+                    return result;
                 }
-                return result;
             }
+            alias combinateMemoize!impl combinateConvert;
         }
 
         unittest{
@@ -1179,21 +1226,24 @@ struct Error{
 
     // combinateCheck
         template combinateCheck(alias parser, alias checker){
-            alias ParserType!parser ResultType;
-            Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                typeof(return) result;
-                auto r = parser.parse(input, memo, info);
-                if(r.match){
-                    if(checker(r.value)){
-                        result = r;
+            struct impl{
+                alias ParserType!parser ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                    typeof(return) result;
+                    auto r = parser.parse(input, memo, info);
+                    if(r.match){
+                        if(checker(r.value)){
+                            result = r;
+                        }else{
+                            result.error = Error("passing check", input.line);
+                        }
                     }else{
-                        result.error = Error("passing check", input.line);
+                        result.error = r.error;
                     }
-                }else{
-                    result.error = r.error;
+                    return result;
                 }
-                return result;
             }
+            alias combinateMemoize!impl combinateCheck;
         }
 
         unittest{
@@ -2694,17 +2744,6 @@ unittest{
     static assert(is(flatTuple!(string) == string));
     static assert(is(flatTuple!(Tuple!(string)) == TypeTuple!string));
     static assert(is(flatTuple!(Tuple!(Tuple!(string))) == TypeTuple!(Tuple!string)));
-}
-
-template CommonParserType(tparsers...){
-    alias CommonType!(staticMap!(ParserType, tparsers)) CommonParserType;
-}
-
-unittest{
-    static assert(is(CommonParserType!(TestParser!string, TestParser!string) == string));
-    static assert(is(CommonParserType!(TestParser!int, TestParser!long) == long));
-    static assert(is(CommonParserType!(TestParser!byte, TestParser!short, TestParser!int) == int));
-    static assert(is(CommonParserType!(TestParser!string, TestParser!int) == void));
 }
 
 dchar decodeRange(R)(ref R range){
