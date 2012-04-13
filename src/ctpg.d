@@ -79,7 +79,8 @@ final class CallerInformation{
                 return Input(range.save, position, line);
             }
 
-            bool isEnd(){
+            @property
+            bool empty(){
                 return range.empty;
             }
 
@@ -1583,7 +1584,7 @@ bool isMatch(alias fun)(string src){
                     Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
                 });
                 assert(result.match);
-                assert(result.rest.range == "");
+                assert(result.rest.empty);
                 assert(
                     result.value ==
                     "template hoge(){"
@@ -1660,7 +1661,7 @@ bool isMatch(alias fun)(string src){
                 {
                     auto result = getResult!(def!())(`bool hoge = !"hello" $ >> {return false;};`);
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(
                         result.value ==
                         "template hoge(){"
@@ -1684,7 +1685,7 @@ bool isMatch(alias fun)(string src){
                 {
                     auto result = getResult!(def!())(`None recursive = A $;`);
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(
                         result.value ==
                         "template recursive(){"
@@ -1732,7 +1733,7 @@ bool isMatch(alias fun)(string src){
                 {
                     auto result = getResult!(choiceExp!())(`!$* / (&(^"a"))?`);
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(
                         result.value ==
                         "combinateMemoize!(combinateChoice!("
@@ -1754,7 +1755,7 @@ bool isMatch(alias fun)(string src){
                 {
                     auto result = getResult!(choiceExp!())(`!"hello" $`);
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(
                         result.value ==
                         "combinateMemoize!(combinateSequence!("
@@ -1808,7 +1809,7 @@ bool isMatch(alias fun)(string src){
                 {
                     auto result = getResult!(convExp!())(q{!"hello" $ >> {return false;}});
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(
                         result.value ==
                         "combinateMemoize!(combinateConvert!("
@@ -1827,7 +1828,7 @@ bool isMatch(alias fun)(string src){
                 {
                     auto result = getResult!(convExp!())(q{"hello" >> flat >> to!int});
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(
                         result.value ==
                         "combinateMemoize!(combinateConvert!("
@@ -1864,7 +1865,7 @@ bool isMatch(alias fun)(string src){
                 {
                     auto result = getResult!(seqExp!())("!$* (&(^$))?");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(
                         result.value ==
                         "combinateMemoize!(combinateSequence!("
@@ -1886,7 +1887,7 @@ bool isMatch(alias fun)(string src){
                 {
                     auto result = getResult!(seqExp!())("!\"hello\" $");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(
                         result.value ==
                         "combinateMemoize!(combinateSequence!("
@@ -1926,7 +1927,7 @@ bool isMatch(alias fun)(string src){
             enum dg = {
                 auto result = getResult!(optionExp!())("(&(^\"hello\"))?");
                 assert(result.match);
-                assert(result.rest.range == "");
+                assert(result.rest.empty);
                 assert(
                     result.value ==
                     "combinateMemoize!(combinateOption!("
@@ -1999,7 +2000,7 @@ bool isMatch(alias fun)(string src){
             enum dg = {
                 auto result = getResult!(postExp!())("!$*");
                 assert(result.match);
-                assert(result.rest.range == "");
+                assert(result.rest.empty);
                 assert(
                     result.value ==
                     "combinateMemoize!(combinateMore0!("
@@ -2053,7 +2054,7 @@ bool isMatch(alias fun)(string src){
             enum dg = {
                 auto result = getResult!(preExp!())("!$");
                 assert(result.match);
-                assert(result.rest.range == "");
+                assert(result.rest.empty);
                 assert(
                     result.value ==
                     "combinateMemoize!(combinateNone!("
@@ -2093,7 +2094,7 @@ bool isMatch(alias fun)(string src){
                 {
                     auto result = getResult!(primaryExp!())("(&(^$)?)");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(
                         result.value ==
                         "combinateMemoize!(combinateOption!("
@@ -2108,7 +2109,7 @@ bool isMatch(alias fun)(string src){
                 {
                     auto result = getResult!(primaryExp!())("int");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(result.value == "combinateMemoize!(checkNonterminal!(__traits(compiles,int),`int`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,int!()))");
                 }
                 {
@@ -2138,19 +2139,19 @@ bool isMatch(alias fun)(string src){
                 {
                     auto result = getResult!(literal!())("\"hello\nworld\"");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(result.value == "combinateMemoize!(parseString!\"hello\nworld\")");
                 }
                 {
                     auto result = getResult!(literal!())("[a-z]");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(result.value == "combinateMemoize!(parseCharRange!('a','z'))");
                 }
                 {
                     auto result = getResult!(literal!())("$");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(result.value == "combinateMemoize!(parseEOF!())");
                 }
                 {
@@ -2279,13 +2280,13 @@ bool isMatch(alias fun)(string src){
                 {
                     auto result = getResult!(rangeLit!())("[a-z]");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(result.value == "combinateMemoize!(parseCharRange!('a','z'))");
                 }
                 {
                     auto result = getResult!(rangeLit!())("[a-zA-Z_]");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(
                         result.value ==
                         "combinateMemoize!(combinateChoice!("
@@ -2319,7 +2320,7 @@ bool isMatch(alias fun)(string src){
                 {
                     auto result = getResult!(eofLit!())("$");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(result.value == "combinateMemoize!(parseEOF!())");
                 }
                 {
@@ -2362,13 +2363,13 @@ bool isMatch(alias fun)(string src){
                 {
                     auto result = getResult!(id!())("A");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(result.value == "A");
                 }
                 {
                     auto result = getResult!(id!())("int");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(result.value == "int");
                 }
                 return true;
@@ -2408,13 +2409,13 @@ bool isMatch(alias fun)(string src){
                 {
                     auto result = getResult!(nonterminal!())("A");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(result.value == "combinateMemoize!(checkNonterminal!(__traits(compiles,A),`A`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,A!()))");
                 }
                 {
                     auto result = getResult!(nonterminal!())("int");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(result.value == "combinateMemoize!(checkNonterminal!(__traits(compiles,int),`int`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,int!()))");
                 }
                 return true;
@@ -2458,19 +2459,19 @@ bool isMatch(alias fun)(string src){
                 {
                     auto result = getResult!(typeName!())("int");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(result.value == "int");
                 }
                 {
                     auto result = getResult!(typeName!())("Tuple!(string, int)");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(result.value == "Tuple!(string, int)");
                 }
                 {
                     auto result = getResult!(typeName!())("int[]");
                     assert(result.match);
-                    assert(result.rest.range == "");
+                    assert(result.rest.empty);
                     assert(result.value == "int[]");
                 }
                 return true;
@@ -2515,7 +2516,7 @@ bool isMatch(alias fun)(string src){
                     "return res;"
                 "}");
                 assert(result.match);
-                assert(result.rest.range == "");
+                assert(result.rest.empty);
                 assert(
                     result.value ==
                     "function(int num, string code){"
