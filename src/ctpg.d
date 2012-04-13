@@ -1560,18 +1560,18 @@ bool isMatch(alias fun)(string src){
         template defs(){
             alias string ResultType;
             Result!(R, string) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateSequence!(
-                        combinateMemoize!(parseSpaces!()),
-                        combinateMemoize!(combinateMore1!(
-                            combinateMemoize!(def!()),
-                            combinateMemoize!(parseSpaces!())
-                        )),
-                        combinateMemoize!(parseSpaces!()),
-                        combinateMemoize!(parseEOF!())
-                    )),
+                return combinateConvert!(
+                    combinateSequence!(
+                        parseSpaces!(),
+                        combinateMore1!(
+                            def!(),
+                            parseSpaces!()
+                        ),
+                        parseSpaces!(),
+                        parseEOF!()
+                    ),
                     flat
-                )).parse(input, memo, info);
+                ).parse(input, memo, info);
             }
         }
 
@@ -1626,22 +1626,22 @@ bool isMatch(alias fun)(string src){
         template def(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateSequence!(
-                        combinateMemoize!(typeName!()),
-                        combinateMemoize!(parseSpaces!()),
-                        combinateMemoize!(id!()),
-                        combinateMemoize!(parseSpaces!()),
-                        combinateMemoize!(combinateNone!(
-                            combinateMemoize!(parseString!"=")
-                        )),
-                        combinateMemoize!(parseSpaces!()),
-                        combinateMemoize!(choiceExp!()),
-                        combinateMemoize!(parseSpaces!()),
-                        combinateMemoize!(combinateNone!(
-                            combinateMemoize!(parseString!";")
-                        ))
-                    )),
+                return combinateConvert!(
+                    combinateSequence!(
+                        typeName!(),
+                        parseSpaces!(),
+                        id!(),
+                        parseSpaces!(),
+                        combinateNone!(
+                            parseString!"="
+                        ),
+                        parseSpaces!(),
+                        choiceExp!(),
+                        parseSpaces!(),
+                        combinateNone!(
+                            parseString!";"
+                        )
+                    ),
                     function(string type, string name, string choiceExp)
                     =>
                         "template " ~ name ~ "(){"
@@ -1650,7 +1650,7 @@ bool isMatch(alias fun)(string src){
                                 "return "~choiceExp~".parse(input, memo, info);"
                             "}"
                         "}"
-                )).parse(input, memo, info);
+                ).parse(input, memo, info);
             }
         }
 
@@ -1708,22 +1708,22 @@ bool isMatch(alias fun)(string src){
         template choiceExp(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateSequence!(
-                        combinateMemoize!(convExp!()),
-                        combinateMemoize!(combinateMore0!(
-                            combinateMemoize!(combinateSequence!(
-                                combinateMemoize!(parseSpaces!()),
-                                combinateMemoize!(combinateNone!(
-                                    combinateMemoize!(parseString!"/")
-                                )),
-                                combinateMemoize!(parseSpaces!()),
-                                combinateMemoize!(convExp!())
-                            ))
-                        ))
-                    )),
+                return combinateConvert!(
+                    combinateSequence!(
+                        convExp!(),
+                        combinateMore0!(
+                            combinateSequence!(
+                                parseSpaces!(),
+                                combinateNone!(
+                                    parseString!"/"
+                                ),
+                                parseSpaces!(),
+                                convExp!()
+                            )
+                        )
+                    ),
                     function(string convExp, string[] convExps) => convExps.length ? "combinateMemoize!(combinateChoice!(" ~ convExp ~ "," ~ convExps.join(",") ~ "))" : convExp
-                )).parse(input, memo, info);
+                ).parse(input, memo, info);
             }
         }
 
@@ -1775,23 +1775,23 @@ bool isMatch(alias fun)(string src){
         template convExp(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateSequence!(
-                        combinateMemoize!(seqExp!()),
-                        combinateMemoize!(combinateMore0!(
-                            combinateMemoize!(combinateSequence!(
-                                combinateMemoize!(parseSpaces!()),
-                                combinateMemoize!(combinateNone!(
+                return combinateConvert!(
+                    combinateSequence!(
+                        seqExp!(),
+                        combinateMore0!(
+                            combinateSequence!(
+                                parseSpaces!(),
+                                combinateNone!(
                                     parseString!">>"
-                                )),
-                                combinateMemoize!(parseSpaces!()),
-                                combinateMemoize!(combinateChoice!(
-                                    combinateMemoize!(func!()),
-                                    combinateMemoize!(typeName!())
-                                ))
-                            ))
-                        ))
-                    )),
+                                ),
+                                parseSpaces!(),
+                                combinateChoice!(
+                                    func!(),
+                                    typeName!()
+                                )
+                            )
+                        )
+                    ),
                     function(string seqExp, string[] funcs){
                         string result = seqExp;
                         foreach(func; funcs){
@@ -1799,7 +1799,7 @@ bool isMatch(alias fun)(string src){
                         }
                         return result;
                     }
-                )).parse(input, memo, info);
+                ).parse(input, memo, info);
             }
         }
 
@@ -1849,13 +1849,13 @@ bool isMatch(alias fun)(string src){
         template seqExp(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateMore1!(
-                        combinateMemoize!(optionExp!()),
-                        combinateMemoize!(parseSpaces!())
-                    )),
+                return combinateConvert!(
+                    combinateMore1!(
+                        optionExp!(),
+                        parseSpaces!()
+                    ),
                     function(string[] optionExps) => optionExps.length > 1 ? "combinateMemoize!(combinateSequence!("~optionExps.join(",")~"))" : optionExps[0]
-                )).parse(input, memo, info);
+                ).parse(input, memo, info);
             }
         }
 
@@ -1907,18 +1907,18 @@ bool isMatch(alias fun)(string src){
         template optionExp(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateSequence!(
-                        combinateMemoize!(postExp!()),
-                        combinateMemoize!(parseSpaces!()),
-                        combinateMemoize!(combinateOption!(
-                            combinateMemoize!(combinateNone!(
-                                combinateMemoize!(parseString!"?")
-                            ))
-                        ))
-                    )),
+                return combinateConvert!(
+                    combinateSequence!(
+                        postExp!(),
+                        parseSpaces!(),
+                        combinateOption!(
+                            combinateNone!(
+                                parseString!"?"
+                            )
+                        )
+                    ),
                     function(string convExp, Option!None op) => op.some ? "combinateMemoize!(combinateOption!("~convExp~"))" : convExp
-                )).parse(input, memo, info);
+                ).parse(input, memo, info);
             }
         }
 
@@ -1947,29 +1947,29 @@ bool isMatch(alias fun)(string src){
         template postExp(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateSequence!(
-                        combinateMemoize!(preExp!()),
-                        combinateMemoize!(combinateOption!(
-                            combinateMemoize!(combinateSequence!(
-                                combinateMemoize!(combinateChoice!(
-                                    combinateMemoize!(parseString!"+"),
-                                    combinateMemoize!(parseString!"*")
-                                )),
-                                combinateMemoize!(combinateOption!(
-                                    combinateMemoize!(combinateSequence!(
-                                        combinateMemoize!(combinateNone!(
-                                            combinateMemoize!(parseString!"<")
-                                        )),
-                                        combinateMemoize!(choiceExp!()),
-                                        combinateMemoize!(combinateNone!(
-                                            combinateMemoize!(parseString!">")
-                                        ))
-                                    ))
-                                ))
-                            ))
-                        ))
-                    )),
+                return combinateConvert!(
+                    combinateSequence!(
+                        preExp!(),
+                        combinateOption!(
+                            combinateSequence!(
+                                combinateChoice!(
+                                    parseString!"+",
+                                    parseString!"*"
+                                ),
+                                combinateOption!(
+                                    combinateSequence!(
+                                        combinateNone!(
+                                            parseString!"<"
+                                        ),
+                                        choiceExp!(),
+                                        combinateNone!(
+                                            parseString!">"
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    ),
                     function(string preExp, Option!(Tuple!(string, Option!string)) op){
                         final switch(op.value[0]){
                             case "+":{
@@ -1991,7 +1991,7 @@ bool isMatch(alias fun)(string src){
                             }
                         }
                     }
-                )).parse(input, memo, info);
+                ).parse(input, memo, info);
             }
         }
 
@@ -2018,17 +2018,17 @@ bool isMatch(alias fun)(string src){
         template preExp(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateSequence!(
-                        combinateMemoize!(combinateOption!(
-                            combinateMemoize!(combinateChoice!(
-                                combinateMemoize!(parseString!"&"),
-                                combinateMemoize!(parseString!"^"),
-                                combinateMemoize!(parseString!"!")
-                            ))
-                        )),
-                        combinateMemoize!(primaryExp!())
-                    )),
+                return combinateConvert!(
+                    combinateSequence!(
+                        combinateOption!(
+                            combinateChoice!(
+                                parseString!"&",
+                                parseString!"^",
+                                parseString!"!"
+                            )
+                        ),
+                        primaryExp!()
+                    ),
                     function(Option!string op, string primaryExp){
                         final switch(op.value){
                             case "&":{
@@ -2045,7 +2045,7 @@ bool isMatch(alias fun)(string src){
                             }
                         }
                     }
-                )).parse(input, memo, info);
+                ).parse(input, memo, info);
             }
         }
 
@@ -2070,21 +2070,21 @@ bool isMatch(alias fun)(string src){
         template primaryExp(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateChoice!(
-                    combinateMemoize!(literal!()),
-                    combinateMemoize!(nonterminal!()),
-                    combinateMemoize!(combinateSequence!(
-                        combinateMemoize!(combinateNone!(
-                            combinateMemoize!(parseString!"(")
-                        )),
-                        combinateMemoize!(parseSpaces!()),
-                        combinateMemoize!(convExp!()),
-                        combinateMemoize!(parseSpaces!()),
-                        combinateMemoize!(combinateNone!(
-                            combinateMemoize!(parseString!")")
-                        ))
-                    ))
-                )).parse(input, memo, info);
+                return combinateChoice!(
+                    literal!(),
+                    nonterminal!(),
+                    combinateSequence!(
+                        combinateNone!(
+                            parseString!"("
+                        ),
+                        parseSpaces!(),
+                        convExp!(),
+                        parseSpaces!(),
+                        combinateNone!(
+                            parseString!")"
+                        )
+                    )
+                ).parse(input, memo, info);
             }
         }
 
@@ -2125,11 +2125,11 @@ bool isMatch(alias fun)(string src){
         template literal(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateChoice!(
-                    combinateMemoize!(rangeLit!()),
-                    combinateMemoize!(stringLit!()),
-                    combinateMemoize!(eofLit!()),
-                )).parse(input, memo, info);
+                return combinateChoice!(
+                    rangeLit!(),
+                    stringLit!(),
+                    eofLit!(),
+                ).parse(input, memo, info);
             }
         }
 
@@ -2167,28 +2167,28 @@ bool isMatch(alias fun)(string src){
         template stringLit(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateSequence!(
-                        combinateMemoize!(combinateNone!(
-                            combinateMemoize!(parseString!"\"")
-                        )),
-                        combinateMemoize!(combinateMore0!(
-                            combinateMemoize!(combinateSequence!(
-                                combinateMemoize!(combinateNotPred!(
-                                    combinateMemoize!(parseString!"\"")
-                                )),
-                                combinateMemoize!(combinateChoice!(
-                                    combinateMemoize!(parseEscapeSequence!()),
-                                    combinateMemoize!(parseAnyChar!())
-                                ))
-                            ))
-                        )),
-                        combinateMemoize!(combinateNone!(
-                            combinateMemoize!(parseString!"\"")
-                        ))
-                    )),
+                return combinateConvert!(
+                    combinateSequence!(
+                        combinateNone!(
+                            parseString!"\""
+                        ),
+                        combinateMore0!(
+                            combinateSequence!(
+                                combinateNotPred!(
+                                    parseString!"\""
+                                ),
+                                combinateChoice!(
+                                    parseEscapeSequence!(),
+                                    parseAnyChar!()
+                                )
+                            )
+                        ),
+                        combinateNone!(
+                            parseString!"\""
+                        )
+                    ),
                     function(string[] strs) => "combinateMemoize!(parseString!\"" ~ strs.flat ~ "\")"
-                )).parse(input, memo, info);
+                ).parse(input, memo, info);
             }
         }
 
@@ -2214,28 +2214,28 @@ bool isMatch(alias fun)(string src){
         template rangeLit(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateSequence!(
-                        combinateMemoize!(combinateNone!(
-                            combinateMemoize!(parseString!"[")
-                        )),
-                        combinateMemoize!(combinateMore1!(
-                            combinateMemoize!(combinateSequence!(
-                                combinateMemoize!(combinateNotPred!(
-                                    combinateMemoize!(parseString!"]")
-                                )),
-                                combinateMemoize!(combinateChoice!(
-                                    combinateMemoize!(charRange!()),
-                                    combinateMemoize!(oneChar!())
-                                ))
-                            ))
-                        )),
-                        combinateMemoize!(combinateNone!(
-                            combinateMemoize!(parseString!"]")
-                        ))
-                    )),
+                return combinateConvert!(
+                    combinateSequence!(
+                        combinateNone!(
+                            parseString!"["
+                        ),
+                        combinateMore1!(
+                            combinateSequence!(
+                                combinateNotPred!(
+                                    parseString!"]"
+                                ),
+                                combinateChoice!(
+                                    charRange!(),
+                                    oneChar!()
+                                )
+                            )
+                        ),
+                        combinateNone!(
+                            parseString!"]"
+                        )
+                    ),
                     function(string[] strs) => strs.length == 1 ? strs[0] : "combinateMemoize!(combinateChoice!("~strs.join(",")~"))"
-                )).parse(input, memo, info);
+                ).parse(input, memo, info);
             }
         }
 
@@ -2305,12 +2305,12 @@ bool isMatch(alias fun)(string src){
         template eofLit(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateNone!(
-                        combinateMemoize!(parseString!"$")
-                    )),
+                return combinateConvert!(
+                    combinateNone!(
+                        parseString!"$"
+                    ),
                     function() => "combinateMemoize!(parseEOF!())"
-                )).parse(input, memo, info);
+                ).parse(input, memo, info);
             }
         }
 
@@ -2336,24 +2336,24 @@ bool isMatch(alias fun)(string src){
         template id(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateSequence!(
-                        combinateMemoize!(combinateChoice!(
-                            combinateMemoize!(parseCharRange!('A','Z')),
-                            combinateMemoize!(parseCharRange!('a','z')),
-                            combinateMemoize!(parseString!"_")
-                        )),
-                        combinateMemoize!(combinateMore0!(
-                            combinateMemoize!(combinateChoice!(
-                                combinateMemoize!(parseCharRange!('0','9')),
-                                combinateMemoize!(parseCharRange!('A','Z')),
-                                combinateMemoize!(parseCharRange!('a','z')),
-                                combinateMemoize!(parseString!"_")
-                            ))
-                        ))
-                    )),
+                return combinateConvert!(
+                    combinateSequence!(
+                        combinateChoice!(
+                            parseCharRange!('A','Z'),
+                            parseCharRange!('a','z'),
+                            parseString!"_"
+                        ),
+                        combinateMore0!(
+                            combinateChoice!(
+                                parseCharRange!('0','9'),
+                                parseCharRange!('A','Z'),
+                                parseCharRange!('a','z'),
+                                parseString!"_"
+                            )
+                        )
+                    ),
                     flat
-                )).parse(input, memo, info);
+                ).parse(input, memo, info);
             }
         }
 
@@ -2391,15 +2391,15 @@ bool isMatch(alias fun)(string src){
         template nonterminal(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateSequence!(
+                return combinateConvert!(
+                    combinateSequence!(
                         getCallerLine!(),
                         getCallerFile!(),
                         getLine!(),
                         id!()
-                    )),
+                    ),
                     function(size_t callerLine, string callerFile, size_t line, string id) => "combinateMemoize!(checkNonterminal!(__traits(compiles," ~ id ~ "),`" ~ id ~ "`,`" ~ (callerLine + line - 1).to!string() ~ "`,`" ~ callerFile ~ "`," ~ id ~ "!()))"
-                )).parse(input, memo, info);
+                ).parse(input, memo, info);
             }
         }
 
@@ -2427,29 +2427,29 @@ bool isMatch(alias fun)(string src){
         template typeName(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateSequence!(
-                        combinateMemoize!(combinateChoice!(
-                            combinateMemoize!(parseCharRange!('A','Z')),
-                            combinateMemoize!(parseCharRange!('a','z')),
-                            combinateMemoize!(parseString!"_")
-                        )),
-                        combinateMemoize!(parseSpaces!()),
-                        combinateMemoize!(combinateMore0!(
-                            combinateMemoize!(combinateChoice!(
-                                combinateMemoize!(parseCharRange!('0','9')),
-                                combinateMemoize!(parseCharRange!('A','Z')),
-                                combinateMemoize!(parseCharRange!('a','z')),
-                                combinateMemoize!(parseString!"_"),
-                                combinateMemoize!(parseString!","),
-                                combinateMemoize!(parseString!"!"),
-                                combinateMemoize!(arch!("(", ")")),
-                                combinateMemoize!(arch!("[", "]"))
-                            ))
-                        ))
-                    )),
+                return combinateConvert!(
+                    combinateSequence!(
+                        combinateChoice!(
+                            parseCharRange!('A','Z'),
+                            parseCharRange!('a','z'),
+                            parseString!"_"
+                        ),
+                        parseSpaces!(),
+                        combinateMore0!(
+                            combinateChoice!(
+                                parseCharRange!('0','9'),
+                                parseCharRange!('A','Z'),
+                                parseCharRange!('a','z'),
+                                parseString!"_",
+                                parseString!",",
+                                parseString!"!",
+                                arch!("(", ")"),
+                                arch!("[", "]")
+                            )
+                        )
+                    ),
                     flat
-                )).parse(input, memo, info);
+                ).parse(input, memo, info);
             }
         }
 
@@ -2483,18 +2483,18 @@ bool isMatch(alias fun)(string src){
         template func(){
             alias string ResultType;
             Result!(R, string) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateSequence!(
-                        combinateMemoize!(combinateOption!(
-                            combinateMemoize!(combinateSequence!(
-                                combinateMemoize!(arch!("(", ")")),
-                                combinateMemoize!(parseSpaces!())
-                            ))
-                        )),
-                        combinateMemoize!(arch!("{", "}"))
-                    )),
+                return combinateConvert!(
+                    combinateSequence!(
+                        combinateOption!(
+                            combinateSequence!(
+                                arch!("(", ")"),
+                                parseSpaces!()
+                            )
+                        ),
+                        arch!("{", "}")
+                    ),
                     function(Option!string arch, string brace) => arch.some ? "function" ~ arch ~ brace : "function()" ~ brace
-                )).parse(input, memo, info);
+                ).parse(input, memo, info);
             }
         }
 
@@ -2542,31 +2542,27 @@ bool isMatch(alias fun)(string src){
         template arch(string open, string close){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateMemoize!(combinateConvert!(
-                    combinateMemoize!(combinateSequence!(
-                        combinateMemoize!(combinateNone!(
-                            combinateMemoize!(parseString!open)
-                        )),
-                        combinateMemoize!(combinateMore0!(
-                            combinateMemoize!(combinateChoice!(
-                                combinateMemoize!(arch!(open, close)),
-                                combinateMemoize!(combinateSequence!(
-                                    combinateMemoize!(combinateNotPred!(
-                                        combinateMemoize!(parseString!close)
-                                    )),
-                                    combinateMemoize!(combinateChoice!(
-                                        combinateMemoize!(parseAnyChar!()),
-                                        combinateMemoize!(parseStringLiteral!())
-                                    ))
-                                ))
-                            ))
-                        )),
-                        combinateMemoize!(combinateNone!(
-                            combinateMemoize!(parseString!close)
-                        ))
-                    )),
-                    function(string[] strs) => open ~ strs.flat ~ close
-                )).parse(input, memo, info);
+                return combinateConvert!(
+                    combinateSequence!(
+                        parseString!open,
+                        combinateMore0!(
+                            combinateChoice!(
+                                arch!(open, close),
+                                combinateSequence!(
+                                    combinateNotPred!(
+                                        parseString!close
+                                    ),
+                                    combinateChoice!(
+                                        parseAnyChar!(),
+                                        parseStringLiteral!()
+                                    )
+                                )
+                            )
+                        ),
+                        parseString!close
+                    ),
+                    flat
+                ).parse(input, memo, info);
             }
         }
 
