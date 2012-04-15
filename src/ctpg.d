@@ -107,7 +107,6 @@ final class CallerInformation{
             Input!R rest;
             Error error;
 
-            pure @safe nothrow
             void opAssign(U)(Result!(R, U) rhs)if(isAssignable!(T, U)){
                 match = rhs.match;
                 value = rhs.value;
@@ -115,7 +114,6 @@ final class CallerInformation{
                 error = rhs.error;
             }
 
-            pure @safe nothrow
             bool opEquals(Result lhs){
                 return match == lhs.match && value == lhs.value && rest == lhs.rest && error == lhs.error;
             }
@@ -1315,6 +1313,8 @@ struct Error{
         template parseSpaces(){
             alias combinateNone!(combinateMore0!(parseSpace!())) parseSpaces;
         }
+
+        alias parseSpaces ss;
 
         unittest{
             static assert(is(parseSpaces!().ResultType));
