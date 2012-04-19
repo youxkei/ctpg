@@ -1161,6 +1161,8 @@ struct Error{
                 alias ReturnType!converter CombinateConvertType;
             }else static if(__traits(compiles, converter(T.init))){
                 alias typeof(converter(T.init)) CombinateConvertType;
+            }else static if(__traits(compiles, converter(T.init.field))){
+                alias typeof(converter(T.init.field)) CombinateConvertType;
             }else{
                 static assert(false);
             }

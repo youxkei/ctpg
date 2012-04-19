@@ -12,13 +12,13 @@ mixin(generateParsers(q{
     int root = addExp $;
 
     int addExp =
-          mulExp !"+" addExp >> (int lhs, int rhs){ return lhs + rhs; }
-        / mulExp !"-" addExp >> (int lhs, int rhs){ return lhs - rhs; }
+          mulExp !"+" addExp >> (lhs, rhs){ return lhs + rhs; }
+        / mulExp !"-" addExp >> (lhs, rhs){ return lhs - rhs; }
         / mulExp;
 
     int mulExp =
-          primary !"*" mulExp >> (int lhs, int rhs){ return lhs * rhs; }
-        / primary !"/" mulExp >> (int lhs, int rhs){ return lhs / rhs; }
+          primary !"*" mulExp >> (lhs, rhs){ return lhs * rhs; }
+        / primary !"/" mulExp >> (lhs, rhs){ return lhs / rhs; }
         / primary;
 
     int primary = !"(" addExp !")" / [0-9]+ >> join >> to!int;
