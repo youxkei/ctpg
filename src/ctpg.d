@@ -131,7 +131,7 @@ struct Error{
 
     public{
         string need;
-        int line = 1;
+        size_t line = 1;
 
         pure @safe nothrow const
         bool opEquals(in Error rhs){
