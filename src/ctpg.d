@@ -1659,7 +1659,7 @@ bool isMatch(alias fun)(string src){
         }
 
     // nonterminal
-        template checkNonterminal(bool defined, string name, string line, string file, alias nonterminal){
+        version(none) template checkNonterminal(bool defined, string name, string line, string file, alias nonterminal){
             static if(defined){
                 alias nonterminal checkNonterminal;
             }else{
@@ -1675,11 +1675,10 @@ bool isMatch(alias fun)(string src){
                 return combinateConvert!(
                     combinateSequence!(
                         getCallerLine!(),
-                        getCallerFile!(),
                         getLine!(),
                         id!()
                     ),
-                    function(size_t callerLine, string callerFile, size_t line, string id) => "checkNonterminal!(__traits(compiles," ~ id ~ "),`" ~ id ~ "`,`" ~ (callerLine + line - 1).to!string() ~ "`,`" ~ callerFile ~ "`," ~ id ~ "!())"
+                    function(size_t callerLine, size_t line, string id) => " #line " ~ (callerLine + line - 1).to!string() ~ "\n" ~ id ~ "!()"
                 ).parse(input, memo, info);
             }
         }
@@ -1690,13 +1689,13 @@ bool isMatch(alias fun)(string src){
                     auto result = getResult!(nonterminal!())("A");
                     assert(result.match);
                     assert(result.rest.empty);
-                    assert(result.value == "checkNonterminal!(__traits(compiles,A),`A`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,A!())");
+                    assert(result.value == " #line " ~ (__LINE__ - 3).to!string() ~ "\nA!()");
                 }
                 {
                     auto result = getResult!(nonterminal!())("int");
                     assert(result.match);
                     assert(result.rest.empty);
-                    assert(result.value == "checkNonterminal!(__traits(compiles,int),`int`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,int!())");
+                    assert(result.value == " #line " ~ (__LINE__ - 3).to!string() ~ "\nint!()");
                 }
                 return true;
             };
@@ -2056,11 +2055,10 @@ bool isMatch(alias fun)(string src){
                     );
                 }
                 {
-                    pragma(msg, getResult!(primaryExp!())("int").value);
                     auto result = getResult!(primaryExp!())("int");
                     assert(result.match);
                     assert(result.rest.empty);
-                    assert(result.value == "checkNonterminal!(__traits(compiles,int),`int`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,int!())");
+                    assert(result.value == " #line " ~ (__LINE__ - 3).to!string() ~ "\nint!()");
                 }
                 {
                     auto result = getResult!(primaryExp!())("###このコメントは表示されません###");
@@ -2503,7 +2501,7 @@ bool isMatch(alias fun)(string src){
                             "alias None ResultType;"
                             "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
                                 "return combinateSequence!("
-                                    "checkNonterminal!(__traits(compiles,A),`A`,`" ~ (__LINE__ - 9).to!string() ~ "`,`src\\ctpg.d`,A!()),"
+                                    " #line " ~ (__LINE__ - 9).to!string() ~ "\nA!(),"
                                     "parseEOF!()"
                                 ").parse(input, memo, info);"
                             "}"
@@ -2567,7 +2565,7 @@ bool isMatch(alias fun)(string src){
                         "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
                             "return combinateConvert!("
                                 "combinateMore0!("
-                                    "checkNonterminal!(__traits(compiles,hoge),`hoge`,`" ~ (__LINE__ - 27).to!string() ~ "`,`src\\ctpg.d`,hoge!())"
+                                    " #line " ~ (__LINE__ - 27).to!string() ~ "\nhoge!()"
                                 "),"
                                 "function(){"
                                     "return tuple(\"foo\");"
