@@ -558,12 +558,12 @@ struct Error{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n" ) == result(true, 3u, makeInput("" , 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n"w) == result(true, 3u, makeInput(""w, 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n"d) == result(true, 3u, makeInput(""d, 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n" )) == result(true, 3u, makeInput(testRange("" ), 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"w)) == result(true, 3u, makeInput(testRange(""w), 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"d)) == result(true, 3u, makeInput(testRange(""d), 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n" ) == result(true, 3LU, makeInput("" , 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n"w) == result(true, 3LU, makeInput(""w, 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n"d) == result(true, 3LU, makeInput(""d, 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n" )) == result(true, 3LU, makeInput(testRange("" ), 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"w)) == result(true, 3LU, makeInput(testRange(""w), 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"d)) == result(true, 3LU, makeInput(testRange(""d), 2, 3), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -916,7 +916,8 @@ struct Error{
                         auto input1 = rest.save;
                         auto r1 = parser.parse(input1, memo, info);
                         if(r1.match){
-                            result.value = result.value ~ r1.value;
+                            //result.value = result.value ~ r1.value;
+                            result.value ~= r1.value;
                             rest = r1.rest;
                             auto input2 = rest.save;
                             auto r2 = sep.parse(input2, memo, info);
@@ -1206,19 +1207,19 @@ struct Error{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www" ) == result(true, 3u, makeInput("" , 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www"w) == result(true, 3u, makeInput(""w, 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www"d) == result(true, 3u, makeInput(""d, 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www" )) == result(true, 3u, makeInput(testRange("" ), 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www"w)) == result(true, 3u, makeInput(testRange(""w), 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www"d)) == result(true, 3u, makeInput(testRange(""d), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www" ) == result(true, 3LU, makeInput("" , 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www"w) == result(true, 3LU, makeInput(""w, 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www"d) == result(true, 3LU, makeInput(""d, 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www" )) == result(true, 3LU, makeInput(testRange("" ), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www"w)) == result(true, 3LU, makeInput(testRange(""w), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www"d)) == result(true, 3LU, makeInput(testRange(""d), 3), Error.init));
 
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a" ) == result(false, 0u, makeInput("" ), Error(q{"w"})));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a"w) == result(false, 0u, makeInput(""w), Error(q{"w"})));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a"d) == result(false, 0u, makeInput(""d), Error(q{"w"})));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a" )) == result(false, 0u, makeInput(testRange("" )), Error(q{"w"})));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a"w)) == result(false, 0u, makeInput(testRange(""w)), Error(q{"w"})));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a"d)) == result(false, 0u, makeInput(testRange(""d)), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a" ) == result(false, 0LU, makeInput("" ), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a"w) == result(false, 0LU, makeInput(""w), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a"d) == result(false, 0LU, makeInput(""d), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a" )) == result(false, 0LU, makeInput(testRange("" )), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a"w)) == result(false, 0LU, makeInput(testRange(""w)), Error(q{"w"})));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a"d)) == result(false, 0LU, makeInput(testRange(""d)), Error(q{"w"})));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1559,821 +1560,98 @@ bool isMatch(alias fun)(string src){
 }
 
 // parsers of DSL
-    // defs
-        template defs(){
+    // arch
+        template arch(string open, string close){
+            alias string ResultType;
+            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                return combinateConvert!(
+                    combinateSequence!(
+                        parseString!open,
+                        combinateMore0!(
+                            combinateChoice!(
+                                arch!(open, close),
+                                combinateSequence!(
+                                    combinateNotPred!(
+                                        parseString!close
+                                    ),
+                                    combinateChoice!(
+                                        parseAnyChar!(),
+                                        parseStringLiteral!()
+                                    )
+                                )
+                            )
+                        ),
+                        parseString!close
+                    ),
+                    flat
+                ).parse(input, memo, info);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                assert(getResult!(arch!("(", ")"))("(a(i(u)e)o())") == result(true, "(a(i(u)e)o())", makeInput("", 13), Error.init));
+                assert(getResult!(arch!("[", "]"))("[a[i[u]e]o[]]") == result(true, "[a[i[u]e]o[]]", makeInput("", 13), Error.init));
+                assert(getResult!(arch!("{", "}"))("{a{i{u}e}o{}}") == result(true, "{a{i{u}e}o{}}", makeInput("", 13), Error.init));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
+    // func
+        template func(){
             alias string ResultType;
             Result!(R, string) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
                 return combinateConvert!(
                     combinateSequence!(
-                        parseSpaces!(),
-                        combinateMore1!(
-                            def!(),
-                            parseSpaces!()
+                        combinateOption!(
+                            combinateSequence!(
+                                arch!("(", ")"),
+                                parseSpaces!()
+                            )
                         ),
-                        parseSpaces!(),
-                        parseEOF!()
+                        arch!("{", "}")
                     ),
-                    flat
+                    function(Option!string arch, string brace) => arch.some ? "function" ~ arch ~ brace : "function()" ~ brace
                 ).parse(input, memo, info);
             }
         }
 
         unittest{
             enum dg = {
-                cast(void)__LINE__;
-                auto result = getResult!(defs!())(q{
-                    bool hoge = !"hello" $ >> {return false;};
-                    Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
-                });
-                assert(result.match);
-                assert(result.rest.empty);
-                assert(
-                    result.value ==
-                    "template hoge(){"
-                        "alias bool ResultType;"
-                        "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
-                            "return combinateConvert!("
-                                "combinateSequence!("
-                                    "combinateNone!("
-                                        "parseString!\"hello\""
-                                    "),"
-                                    "parseEOF!()"
-                                "),"
-                                "function(){"
-                                    "return false;"
-                                "}"
-                            ").parse(input, memo, info);"
+                auto result = getResult!(func!())(
+                "(int num, string code){"
+                    "string res;"
+                    "foreach(staticNum; 0..num){"
+                        "foreach(c;code){"
+                            "if(c == '@'){"
+                                "res ~= to!string(staticNum);"
+                            "}else{"
+                                "res ~= c;"
+                            "}"
                         "}"
                     "}"
-                    "template hoge2(){"
-                        "alias Tuple!piyo ResultType;"
-                        "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
-                            "return combinateConvert!("
-                                "combinateMore0!("
-                                    "checkNonterminal!(__traits(compiles,hoge),`hoge`,`" ~ (__LINE__ - 27).to!string() ~ "`,`src\\ctpg.d`,hoge!())"
-                                "),"
-                                "function(){"
-                                    "return tuple(\"foo\");"
+                    "return res;"
+                "}");
+                assert(result.match);
+                assert(result.rest.empty);
+                assert(
+                    result.value ==
+                    "function(int num, string code){"
+                        "string res;"
+                        "foreach(staticNum; 0..num){"
+                            "foreach(c;code){"
+                                "if(c == '@'){"
+                                    "res ~= to!string(staticNum);"
+                                "}else{"
+                                    "res ~= c;"
                                 "}"
-                            ").parse(input, memo, info);"
+                            "}"
                         "}"
+                        "return res;"
                     "}"
                 );
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        };
-
-    // def
-        template def(){
-            alias string ResultType;
-            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        typeName!(),
-                        parseSpaces!(),
-                        id!(),
-                        parseSpaces!(),
-                        combinateNone!(
-                            parseString!"="
-                        ),
-                        parseSpaces!(),
-                        choiceExp!(),
-                        parseSpaces!(),
-                        combinateNone!(
-                            parseString!";"
-                        )
-                    ),
-                    function(string type, string name, string choiceExp)
-                    =>
-                        "template " ~ name ~ "(){"
-                            "alias " ~ type ~ " ResultType;"
-                            "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
-                                "return "~choiceExp~".parse(input, memo, info);"
-                            "}"
-                        "}"
-                ).parse(input, memo, info);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                cast(void)__LINE__;
-                {
-                    auto result = getResult!(def!())(`bool hoge = !"hello" $ >> {return false;};`);
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(
-                        result.value ==
-                        "template hoge(){"
-                            "alias bool ResultType;"
-                            "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
-                                "return combinateConvert!("
-                                    "combinateSequence!("
-                                        "combinateNone!("
-                                            "parseString!\"hello\""
-                                        "),"
-                                        "parseEOF!()"
-                                    "),"
-                                    "function(){"
-                                        "return false;"
-                                    "}"
-                                ").parse(input, memo, info);"
-                            "}"
-                        "}"
-                    );
-                }
-                {
-                    auto result = getResult!(def!())(`None recursive = A $;`);
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(
-                        result.value ==
-                        "template recursive(){"
-                            "alias None ResultType;"
-                            "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
-                                "return combinateSequence!("
-                                    "checkNonterminal!(__traits(compiles,A),`A`,`" ~ (__LINE__ - 9).to!string() ~ "`,`src\\ctpg.d`,A!()),"
-                                    "parseEOF!()"
-                                ").parse(input, memo, info);"
-                            "}"
-                        "}"
-                    );
-                }
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        };
-
-    // choiceExp
-        template choiceExp(){
-            alias string ResultType;
-            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        convExp!(),
-                        combinateMore0!(
-                            combinateSequence!(
-                                parseSpaces!(),
-                                combinateNone!(
-                                    parseString!"/"
-                                ),
-                                parseSpaces!(),
-                                convExp!()
-                            )
-                        )
-                    ),
-                    function(string convExp, string[] convExps) => convExps.length ? "combinateChoice!(" ~ convExp ~ "," ~ convExps.join(",") ~ ")" : convExp
-                ).parse(input, memo, info);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                {
-                    auto result = getResult!(choiceExp!())(`!$* / (&(^"a"))?`);
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(
-                        result.value ==
-                        "combinateChoice!("
-                            "combinateMore0!("
-                                "combinateNone!("
-                                    "parseEOF!()"
-                                ")"
-                            "),"
-                            "combinateOption!("
-                                "combinateAndPred!("
-                                    "combinateNotPred!("
-                                        "parseString!\"a\""
-                                    ")"
-                                ")"
-                            ")"
-                        ")"
-                    );
-                }
-                {
-                    auto result = getResult!(choiceExp!())(`!"hello" $`);
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(
-                        result.value ==
-                        "combinateSequence!("
-                            "combinateNone!("
-                                "parseString!\"hello\""
-                            "),"
-                            "parseEOF!()"
-                        ")"
-                    );
-                }
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
-    // convExp
-        template convExp(){
-            alias string ResultType;
-            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        seqExp!(),
-                        combinateMore0!(
-                            combinateSequence!(
-                                parseSpaces!(),
-                                combinateNone!(
-                                    parseString!">>"
-                                ),
-                                parseSpaces!(),
-                                combinateChoice!(
-                                    func!(),
-                                    typeName!()
-                                )
-                            )
-                        )
-                    ),
-                    function(string seqExp, string[] funcs){
-                        string result = seqExp;
-                        foreach(func; funcs){
-                            result = "combinateConvert!(" ~ result ~ "," ~ func ~ ")";
-                        }
-                        return result;
-                    }
-                ).parse(input, memo, info);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                {
-                    auto result = getResult!(convExp!())(q{!"hello" $ >> {return false;}});
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(
-                        result.value ==
-                        "combinateConvert!("
-                            "combinateSequence!("
-                                "combinateNone!("
-                                    "parseString!\"hello\""
-                                "),"
-                                "parseEOF!()"
-                            "),"
-                            "function(){"
-                                "return false;"
-                            "}"
-                        ")"
-                    );
-                }
-                {
-                    auto result = getResult!(convExp!())(q{"hello" >> flat >> to!int});
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(
-                        result.value ==
-                        "combinateConvert!("
-                            "combinateConvert!("
-                                "parseString!\"hello\","
-                                "flat"
-                            "),"
-                            "to!int"
-                        ")"
-                    );
-                }
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
-    // seqExp
-        template seqExp(){
-            alias string ResultType;
-            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateConvert!(
-                    combinateMore1!(
-                        optionExp!(),
-                        parseSpaces!()
-                    ),
-                    function(string[] optionExps) => optionExps.length > 1 ? "combinateSequence!("~optionExps.join(",")~")" : optionExps[0]
-                ).parse(input, memo, info);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                {
-                    auto result = getResult!(seqExp!())("!$* (&(^$))?");
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(
-                        result.value ==
-                        "combinateSequence!("
-                            "combinateMore0!("
-                                "combinateNone!("
-                                    "parseEOF!()"
-                                ")"
-                            "),"
-                            "combinateOption!("
-                                "combinateAndPred!("
-                                    "combinateNotPred!("
-                                        "parseEOF!()"
-                                    ")"
-                                ")"
-                            ")"
-                        ")"
-                    );
-                }
-                {
-                    auto result = getResult!(seqExp!())("!\"hello\" $");
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(
-                        result.value ==
-                        "combinateSequence!("
-                            "combinateNone!("
-                                "parseString!\"hello\""
-                            "),"
-                            "parseEOF!()"
-                        ")"
-                    );
-                }
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
-    // optionExp
-        template optionExp(){
-            alias string ResultType;
-            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        postExp!(),
-                        parseSpaces!(),
-                        combinateOption!(
-                            combinateNone!(
-                                parseString!"?"
-                            )
-                        )
-                    ),
-                    function(string convExp, Option!None op) => op.some ? "combinateOption!("~convExp~")" : convExp
-                ).parse(input, memo, info);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                auto result = getResult!(optionExp!())("(&(^\"hello\"))?");
-                assert(result.match);
-                assert(result.rest.empty);
-                assert(
-                    result.value ==
-                    "combinateOption!("
-                        "combinateAndPred!("
-                            "combinateNotPred!("
-                                "parseString!\"hello\""
-                            ")"
-                        ")"
-                    ")"
-                );
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
-    // postExp
-        template postExp(){
-            alias string ResultType;
-            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        preExp!(),
-                        combinateOption!(
-                            combinateSequence!(
-                                combinateChoice!(
-                                    parseString!"+",
-                                    parseString!"*"
-                                ),
-                                combinateOption!(
-                                    combinateSequence!(
-                                        combinateNone!(
-                                            parseString!"<"
-                                        ),
-                                        choiceExp!(),
-                                        combinateNone!(
-                                            parseString!">"
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    ),
-                    function(string preExp, Option!(Tuple!(string, Option!string)) op){
-                        final switch(op.value[0]){
-                            case "+":{
-                                if(op.value[1].some){
-                                    return "combinateMore1!(" ~ preExp ~ "," ~ op.value[1].value ~ ")";
-                                }else{
-                                    return "combinateMore1!(" ~ preExp ~ ")";
-                                }
-                            }
-                            case "*":{
-                                if(op.value[1].some){
-                                    return "combinateMore0!(" ~ preExp ~ "," ~ op.value[1].value ~ ")";
-                                }else{
-                                    return "combinateMore0!(" ~ preExp ~ ")";
-                                }
-                            }
-                            case "":{
-                                return preExp;
-                            }
-                        }
-                    }
-                ).parse(input, memo, info);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                auto result = getResult!(postExp!())("!$*");
-                assert(result.match);
-                assert(result.rest.empty);
-                assert(
-                    result.value ==
-                    "combinateMore0!("
-                        "combinateNone!("
-                            "parseEOF!()"
-                        ")"
-                    ")"
-                );
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
-    // preExp
-        template preExp(){
-            alias string ResultType;
-            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        combinateOption!(
-                            combinateChoice!(
-                                parseString!"&",
-                                parseString!"^",
-                                parseString!"!"
-                            )
-                        ),
-                        primaryExp!()
-                    ),
-                    function(Option!string op, string primaryExp){
-                        final switch(op.value){
-                            case "&":{
-                                return "combinateAndPred!(" ~ primaryExp ~ ")";
-                            }
-                            case "!":{
-                                return "combinateNone!(" ~ primaryExp ~ ")";
-                            }
-                            case "^":{
-                                return "combinateNotPred!(" ~ primaryExp ~ ")";
-                            }
-                            case "":{
-                                return primaryExp;
-                            }
-                        }
-                    }
-                ).parse(input, memo, info);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                auto result = getResult!(preExp!())("!$");
-                assert(result.match);
-                assert(result.rest.empty);
-                assert(
-                    result.value ==
-                    "combinateNone!("
-                        "parseEOF!()"
-                    ")"
-                );
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
-    // primaryExp
-        template primaryExp(){
-            alias string ResultType;
-            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateChoice!(
-                    literal!(),
-                    nonterminal!(),
-                    combinateSequence!(
-                        combinateNone!(
-                            parseString!"("
-                        ),
-                        parseSpaces!(),
-                        convExp!(),
-                        parseSpaces!(),
-                        combinateNone!(
-                            parseString!")"
-                        )
-                    )
-                ).parse(input, memo, info);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                {
-                    auto result = getResult!(primaryExp!())("(&(^$)?)");
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(
-                        result.value ==
-                        "combinateOption!("
-                            "combinateAndPred!("
-                                "combinateNotPred!("
-                                    "parseEOF!()"
-                                ")"
-                            ")"
-                        ")"
-                    );
-                }
-                {
-                    auto result = getResult!(primaryExp!())("int");
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(result.value == "checkNonterminal!(__traits(compiles,int),`int`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,int!())");
-                }
-                {
-                    auto result = getResult!(primaryExp!())("###このコメントは表示されません###");
-                    assert(!result.match);
-                }
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
-    // literal
-        template literal(){
-            alias string ResultType;
-            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateChoice!(
-                    rangeLit!(),
-                    stringLit!(),
-                    eofLit!(),
-                ).parse(input, memo, info);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                {
-                    auto result = getResult!(literal!())("\"hello\nworld\"");
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(result.value == "parseString!\"hello\nworld\"");
-                }
-                {
-                    auto result = getResult!(literal!())("[a-z]");
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(result.value == "parseCharRange!('a','z')");
-                }
-                {
-                    auto result = getResult!(literal!())("$");
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(result.value == "parseEOF!()");
-                }
-                {
-                    auto result = getResult!(literal!())("表が怖い噂のソフト");
-                    assert(!result.match);
-                }
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
-    // stringLit
-        template stringLit(){
-            alias string ResultType;
-            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        combinateNone!(
-                            parseString!"\""
-                        ),
-                        combinateMore0!(
-                            combinateSequence!(
-                                combinateNotPred!(
-                                    parseString!"\""
-                                ),
-                                combinateChoice!(
-                                    parseEscapeSequence!(),
-                                    parseAnyChar!()
-                                )
-                            )
-                        ),
-                        combinateNone!(
-                            parseString!"\""
-                        )
-                    ),
-                    function(string[] strs) => "parseString!\"" ~ strs.flat ~ "\""
-                ).parse(input, memo, info);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                {
-                    auto result = getResult!(stringLit!())("\"hello\nworld\" ");
-                    assert(result.match);
-                    assert(result.rest.range == " ");
-                    assert(result.value == "parseString!\"hello\nworld\"");
-                }
-                {
-                    auto result = getResult!(stringLit!())("aa\"");
-                    assert(!result.match);
-                }
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
-    // rangeLit
-        template rangeLit(){
-            alias string ResultType;
-            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        combinateNone!(
-                            parseString!"["
-                        ),
-                        combinateMore1!(
-                            combinateSequence!(
-                                combinateNotPred!(
-                                    parseString!"]"
-                                ),
-                                combinateChoice!(
-                                    charRange!(),
-                                    oneChar!()
-                                )
-                            )
-                        ),
-                        combinateNone!(
-                            parseString!"]"
-                        )
-                    ),
-                    function(string[] strs) => strs.length == 1 ? strs[0] : "combinateChoice!("~strs.join(",")~")"
-                ).parse(input, memo, info);
-            }
-        }
-
-        template charRange(){
-            alias string ResultType;
-            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        combinateChoice!(
-                            parseEscapeSequence!(),
-                            parseAnyChar!()
-                        ),
-                        combinateNone!(
-                            parseString!"-"
-                        ),
-                        combinateChoice!(
-                            parseEscapeSequence!(),
-                            parseAnyChar!()
-                        ),
-                    ),
-                    function(string low, string high) => "parseCharRange!('" ~ low ~ "','" ~ high ~ "')"
-                ).parse(input, memo, info);
-            }
-        }
-
-        template oneChar(){
-            alias string ResultType;
-            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateConvert!(
-                    combinateChoice!(
-                        parseEscapeSequence!(),
-                        parseAnyChar!()
-                    ),
-                    function(string c) => "parseString!\"" ~ c ~ "\""
-                ).parse(input, memo, info);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                {
-                    auto result = getResult!(rangeLit!())("[a-z]");
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(result.value == "parseCharRange!('a','z')");
-                }
-                {
-                    auto result = getResult!(rangeLit!())("[a-zA-Z_]");
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(
-                        result.value ==
-                        "combinateChoice!("
-                            "parseCharRange!('a','z'),"
-                            "parseCharRange!('A','Z'),"
-                            "parseString!\"_\""
-                        ")"
-                    );
-                }
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
-    // eofLit
-        template eofLit(){
-            alias string ResultType;
-            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateConvert!(
-                    combinateNone!(
-                        parseString!"$"
-                    ),
-                    function() => "parseEOF!()"
-                ).parse(input, memo, info);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                {
-                    auto result = getResult!(eofLit!())("$");
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(result.value == "parseEOF!()");
-                }
-                {
-                    auto result = getResult!(eofLit!())("#");
-                    assert(!result.match);
-                }
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
-    // id
-        template id(){
-            alias string ResultType;
-            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        combinateChoice!(
-                            parseCharRange!('A','Z'),
-                            parseCharRange!('a','z'),
-                            parseString!"_"
-                        ),
-                        combinateMore0!(
-                            combinateChoice!(
-                                parseCharRange!('0','9'),
-                                parseCharRange!('A','Z'),
-                                parseCharRange!('a','z'),
-                                parseString!"_"
-                            )
-                        )
-                    ),
-                    flat
-                ).parse(input, memo, info);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                {
-                    auto result = getResult!(id!())("A");
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(result.value == "A");
-                }
-                {
-                    auto result = getResult!(id!())("int");
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(result.value == "int");
-                }
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -2482,87 +1760,25 @@ bool isMatch(alias fun)(string src){
             dg();
         }
 
-    // func
-        template func(){
-            alias string ResultType;
-            Result!(R, string) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        combinateOption!(
-                            combinateSequence!(
-                                arch!("(", ")"),
-                                parseSpaces!()
-                            )
-                        ),
-                        arch!("{", "}")
-                    ),
-                    function(Option!string arch, string brace) => arch.some ? "function" ~ arch ~ brace : "function()" ~ brace
-                ).parse(input, memo, info);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                auto result = getResult!(func!())(
-                "(int num, string code){"
-                    "string res;"
-                    "foreach(staticNum; 0..num){"
-                        "foreach(c;code){"
-                            "if(c == '@'){"
-                                "res ~= to!string(staticNum);"
-                            "}else{"
-                                "res ~= c;"
-                            "}"
-                        "}"
-                    "}"
-                    "return res;"
-                "}");
-                assert(result.match);
-                assert(result.rest.empty);
-                assert(
-                    result.value ==
-                    "function(int num, string code){"
-                        "string res;"
-                        "foreach(staticNum; 0..num){"
-                            "foreach(c;code){"
-                                "if(c == '@'){"
-                                    "res ~= to!string(staticNum);"
-                                "}else{"
-                                    "res ~= c;"
-                                "}"
-                            "}"
-                        "}"
-                        "return res;"
-                    "}"
-                );
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
-    // arch
-        template arch(string open, string close){
+    // id
+        template id(){
             alias string ResultType;
             Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
                 return combinateConvert!(
                     combinateSequence!(
-                        parseString!open,
+                        combinateChoice!(
+                            parseCharRange!('A','Z'),
+                            parseCharRange!('a','z'),
+                            parseString!"_"
+                        ),
                         combinateMore0!(
                             combinateChoice!(
-                                arch!(open, close),
-                                combinateSequence!(
-                                    combinateNotPred!(
-                                        parseString!close
-                                    ),
-                                    combinateChoice!(
-                                        parseAnyChar!(),
-                                        parseStringLiteral!()
-                                    )
-                                )
+                                parseCharRange!('0','9'),
+                                parseCharRange!('A','Z'),
+                                parseCharRange!('a','z'),
+                                parseString!"_"
                             )
-                        ),
-                        parseString!close
+                        )
                     ),
                     flat
                 ).parse(input, memo, info);
@@ -2571,14 +1787,800 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                assert(getResult!(arch!("(", ")"))("(a(i(u)e)o())") == result(true, "(a(i(u)e)o())", makeInput("", 13), Error.init));
-                assert(getResult!(arch!("[", "]"))("[a[i[u]e]o[]]") == result(true, "[a[i[u]e]o[]]", makeInput("", 13), Error.init));
-                assert(getResult!(arch!("{", "}"))("{a{i{u}e}o{}}") == result(true, "{a{i{u}e}o{}}", makeInput("", 13), Error.init));
+                {
+                    auto result = getResult!(id!())("A");
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(result.value == "A");
+                }
+                {
+                    auto result = getResult!(id!())("int");
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(result.value == "int");
+                }
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
             dg();
         }
+
+    // eofLit
+        template eofLit(){
+            alias string ResultType;
+            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                return combinateConvert!(
+                    combinateNone!(
+                        parseString!"$"
+                    ),
+                    function() => "parseEOF!()"
+                ).parse(input, memo, info);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                {
+                    auto result = getResult!(eofLit!())("$");
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(result.value == "parseEOF!()");
+                }
+                {
+                    auto result = getResult!(eofLit!())("#");
+                    assert(!result.match);
+                }
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
+    // rangeLit
+        template rangeLit(){
+            alias string ResultType;
+            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                return combinateConvert!(
+                    combinateSequence!(
+                        combinateNone!(
+                            parseString!"["
+                        ),
+                        combinateMore1!(
+                            combinateSequence!(
+                                combinateNotPred!(
+                                    parseString!"]"
+                                ),
+                                combinateChoice!(
+                                    charRange!(),
+                                    oneChar!()
+                                )
+                            )
+                        ),
+                        combinateNone!(
+                            parseString!"]"
+                        )
+                    ),
+                    function(string[] strs) => strs.length == 1 ? strs[0] : "combinateChoice!("~strs.join(",")~")"
+                ).parse(input, memo, info);
+            }
+        }
+
+        template charRange(){
+            alias string ResultType;
+            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                return combinateConvert!(
+                    combinateSequence!(
+                        combinateChoice!(
+                            parseEscapeSequence!(),
+                            parseAnyChar!()
+                        ),
+                        combinateNone!(
+                            parseString!"-"
+                        ),
+                        combinateChoice!(
+                            parseEscapeSequence!(),
+                            parseAnyChar!()
+                        ),
+                    ),
+                    function(string low, string high) => "parseCharRange!('" ~ low ~ "','" ~ high ~ "')"
+                ).parse(input, memo, info);
+            }
+        }
+
+        template oneChar(){
+            alias string ResultType;
+            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                return combinateConvert!(
+                    combinateChoice!(
+                        parseEscapeSequence!(),
+                        parseAnyChar!()
+                    ),
+                    function(string c) => "parseString!\"" ~ c ~ "\""
+                ).parse(input, memo, info);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                {
+                    auto result = getResult!(rangeLit!())("[a-z]");
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(result.value == "parseCharRange!('a','z')");
+                }
+                {
+                    auto result = getResult!(rangeLit!())("[a-zA-Z_]");
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(
+                        result.value ==
+                        "combinateChoice!("
+                            "parseCharRange!('a','z'),"
+                            "parseCharRange!('A','Z'),"
+                            "parseString!\"_\""
+                        ")"
+                    );
+                }
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
+    // stringLit
+        template stringLit(){
+            alias string ResultType;
+            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                return combinateConvert!(
+                    combinateSequence!(
+                        combinateNone!(
+                            parseString!"\""
+                        ),
+                        combinateMore0!(
+                            combinateSequence!(
+                                combinateNotPred!(
+                                    parseString!"\""
+                                ),
+                                combinateChoice!(
+                                    parseEscapeSequence!(),
+                                    parseAnyChar!()
+                                )
+                            )
+                        ),
+                        combinateNone!(
+                            parseString!"\""
+                        )
+                    ),
+                    function(string[] strs) => "parseString!\"" ~ strs.flat ~ "\""
+                ).parse(input, memo, info);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                {
+                    auto result = getResult!(stringLit!())("\"hello\nworld\" ");
+                    assert(result.match);
+                    assert(result.rest.range == " ");
+                    assert(result.value == "parseString!\"hello\nworld\"");
+                }
+                {
+                    auto result = getResult!(stringLit!())("aa\"");
+                    assert(!result.match);
+                }
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
+    // literal
+        template literal(){
+            alias string ResultType;
+            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                return combinateChoice!(
+                    rangeLit!(),
+                    stringLit!(),
+                    eofLit!(),
+                ).parse(input, memo, info);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                {
+                    auto result = getResult!(literal!())("\"hello\nworld\"");
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(result.value == "parseString!\"hello\nworld\"");
+                }
+                {
+                    auto result = getResult!(literal!())("[a-z]");
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(result.value == "parseCharRange!('a','z')");
+                }
+                {
+                    auto result = getResult!(literal!())("$");
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(result.value == "parseEOF!()");
+                }
+                {
+                    auto result = getResult!(literal!())("表が怖い噂のソフト");
+                    assert(!result.match);
+                }
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
+    // primaryExp
+        template primaryExp(){
+            alias string ResultType;
+            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                return combinateChoice!(
+                    literal!(),
+                    nonterminal!(),
+                    combinateSequence!(
+                        combinateNone!(
+                            parseString!"("
+                        ),
+                        parseSpaces!(),
+                        convExp!(),
+                        parseSpaces!(),
+                        combinateNone!(
+                            parseString!")"
+                        )
+                    )
+                ).parse(input, memo, info);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                {
+                    auto result = getResult!(primaryExp!())("(&(^$)?)");
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(
+                        result.value ==
+                        "combinateOption!("
+                            "combinateAndPred!("
+                                "combinateNotPred!("
+                                    "parseEOF!()"
+                                ")"
+                            ")"
+                        ")"
+                    );
+                }
+                {
+                    pragma(msg, getResult!(primaryExp!())("int").value);
+                    auto result = getResult!(primaryExp!())("int");
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(result.value == "checkNonterminal!(__traits(compiles,int),`int`,`" ~ (__LINE__ - 3).to!string() ~ "`,`src\\ctpg.d`,int!())");
+                }
+                {
+                    auto result = getResult!(primaryExp!())("###このコメントは表示されません###");
+                    assert(!result.match);
+                }
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
+    // preExp
+        template preExp(){
+            alias string ResultType;
+            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                return combinateConvert!(
+                    combinateSequence!(
+                        combinateOption!(
+                            combinateChoice!(
+                                parseString!"&",
+                                parseString!"^",
+                                parseString!"!"
+                            )
+                        ),
+                        primaryExp!()
+                    ),
+                    function(Option!string op, string primaryExp){
+                        final switch(op.value){
+                            case "&":{
+                                return "combinateAndPred!(" ~ primaryExp ~ ")";
+                            }
+                            case "!":{
+                                return "combinateNone!(" ~ primaryExp ~ ")";
+                            }
+                            case "^":{
+                                return "combinateNotPred!(" ~ primaryExp ~ ")";
+                            }
+                            case "":{
+                                return primaryExp;
+                            }
+                        }
+                    }
+                ).parse(input, memo, info);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                auto result = getResult!(preExp!())("!$");
+                assert(result.match);
+                assert(result.rest.empty);
+                assert(
+                    result.value ==
+                    "combinateNone!("
+                        "parseEOF!()"
+                    ")"
+                );
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
+    // postExp
+        template postExp(){
+            alias string ResultType;
+            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                return combinateConvert!(
+                    combinateSequence!(
+                        preExp!(),
+                        combinateOption!(
+                            combinateSequence!(
+                                combinateChoice!(
+                                    parseString!"+",
+                                    parseString!"*"
+                                ),
+                                combinateOption!(
+                                    combinateSequence!(
+                                        combinateNone!(
+                                            parseString!"<"
+                                        ),
+                                        choiceExp!(),
+                                        combinateNone!(
+                                            parseString!">"
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    ),
+                    function(string preExp, Option!(Tuple!(string, Option!string)) op){
+                        final switch(op.value[0]){
+                            case "+":{
+                                if(op.value[1].some){
+                                    return "combinateMore1!(" ~ preExp ~ "," ~ op.value[1].value ~ ")";
+                                }else{
+                                    return "combinateMore1!(" ~ preExp ~ ")";
+                                }
+                            }
+                            case "*":{
+                                if(op.value[1].some){
+                                    return "combinateMore0!(" ~ preExp ~ "," ~ op.value[1].value ~ ")";
+                                }else{
+                                    return "combinateMore0!(" ~ preExp ~ ")";
+                                }
+                            }
+                            case "":{
+                                return preExp;
+                            }
+                        }
+                    }
+                ).parse(input, memo, info);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                auto result = getResult!(postExp!())("!$*");
+                assert(result.match);
+                assert(result.rest.empty);
+                assert(
+                    result.value ==
+                    "combinateMore0!("
+                        "combinateNone!("
+                            "parseEOF!()"
+                        ")"
+                    ")"
+                );
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
+    // optionExp
+        template optionExp(){
+            alias string ResultType;
+            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                return combinateConvert!(
+                    combinateSequence!(
+                        postExp!(),
+                        parseSpaces!(),
+                        combinateOption!(
+                            combinateNone!(
+                                parseString!"?"
+                            )
+                        )
+                    ),
+                    function(string convExp, Option!None op) => op.some ? "combinateOption!("~convExp~")" : convExp
+                ).parse(input, memo, info);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                auto result = getResult!(optionExp!())("(&(^\"hello\"))?");
+                assert(result.match);
+                assert(result.rest.empty);
+                assert(
+                    result.value ==
+                    "combinateOption!("
+                        "combinateAndPred!("
+                            "combinateNotPred!("
+                                "parseString!\"hello\""
+                            ")"
+                        ")"
+                    ")"
+                );
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
+    // seqExp
+        template seqExp(){
+            alias string ResultType;
+            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                return combinateConvert!(
+                    combinateMore1!(
+                        optionExp!(),
+                        parseSpaces!()
+                    ),
+                    function(string[] optionExps) => optionExps.length > 1 ? "combinateSequence!("~optionExps.join(",")~")" : optionExps[0]
+                ).parse(input, memo, info);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                {
+                    auto result = getResult!(seqExp!())("!$* (&(^$))?");
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(
+                        result.value ==
+                        "combinateSequence!("
+                            "combinateMore0!("
+                                "combinateNone!("
+                                    "parseEOF!()"
+                                ")"
+                            "),"
+                            "combinateOption!("
+                                "combinateAndPred!("
+                                    "combinateNotPred!("
+                                        "parseEOF!()"
+                                    ")"
+                                ")"
+                            ")"
+                        ")"
+                    );
+                }
+                {
+                    auto result = getResult!(seqExp!())("!\"hello\" $");
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(
+                        result.value ==
+                        "combinateSequence!("
+                            "combinateNone!("
+                                "parseString!\"hello\""
+                            "),"
+                            "parseEOF!()"
+                        ")"
+                    );
+                }
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
+    // convExp
+        template convExp(){
+            alias string ResultType;
+            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                return combinateConvert!(
+                    combinateSequence!(
+                        seqExp!(),
+                        combinateMore0!(
+                            combinateSequence!(
+                                parseSpaces!(),
+                                combinateNone!(
+                                    parseString!">>"
+                                ),
+                                parseSpaces!(),
+                                combinateChoice!(
+                                    func!(),
+                                    typeName!()
+                                )
+                            )
+                        )
+                    ),
+                    function(string seqExp, string[] funcs){
+                        string result = seqExp;
+                        foreach(func; funcs){
+                            result = "combinateConvert!(" ~ result ~ "," ~ func ~ ")";
+                        }
+                        return result;
+                    }
+                ).parse(input, memo, info);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                {
+                    auto result = getResult!(convExp!())(q{!"hello" $ >> {return false;}});
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(
+                        result.value ==
+                        "combinateConvert!("
+                            "combinateSequence!("
+                                "combinateNone!("
+                                    "parseString!\"hello\""
+                                "),"
+                                "parseEOF!()"
+                            "),"
+                            "function(){"
+                                "return false;"
+                            "}"
+                        ")"
+                    );
+                }
+                {
+                    auto result = getResult!(convExp!())(q{"hello" >> flat >> to!int});
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(
+                        result.value ==
+                        "combinateConvert!("
+                            "combinateConvert!("
+                                "parseString!\"hello\","
+                                "flat"
+                            "),"
+                            "to!int"
+                        ")"
+                    );
+                }
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
+    // choiceExp
+        template choiceExp(){
+            alias string ResultType;
+            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                return combinateConvert!(
+                    combinateSequence!(
+                        convExp!(),
+                        combinateMore0!(
+                            combinateSequence!(
+                                parseSpaces!(),
+                                combinateNone!(
+                                    parseString!"/"
+                                ),
+                                parseSpaces!(),
+                                convExp!()
+                            )
+                        )
+                    ),
+                    function(string convExp, string[] convExps) => convExps.length ? "combinateChoice!(" ~ convExp ~ "," ~ convExps.join(",") ~ ")" : convExp
+                ).parse(input, memo, info);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                {
+                    auto result = getResult!(choiceExp!())(`!$* / (&(^"a"))?`);
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(
+                        result.value ==
+                        "combinateChoice!("
+                            "combinateMore0!("
+                                "combinateNone!("
+                                    "parseEOF!()"
+                                ")"
+                            "),"
+                            "combinateOption!("
+                                "combinateAndPred!("
+                                    "combinateNotPred!("
+                                        "parseString!\"a\""
+                                    ")"
+                                ")"
+                            ")"
+                        ")"
+                    );
+                }
+                {
+                    auto result = getResult!(choiceExp!())(`!"hello" $`);
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(
+                        result.value ==
+                        "combinateSequence!("
+                            "combinateNone!("
+                                "parseString!\"hello\""
+                            "),"
+                            "parseEOF!()"
+                        ")"
+                    );
+                }
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
+    // def
+        template def(){
+            alias string ResultType;
+            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                return combinateConvert!(
+                    combinateSequence!(
+                        typeName!(),
+                        parseSpaces!(),
+                        id!(),
+                        parseSpaces!(),
+                        combinateNone!(
+                            parseString!"="
+                        ),
+                        parseSpaces!(),
+                        choiceExp!(),
+                        parseSpaces!(),
+                        combinateNone!(
+                            parseString!";"
+                        )
+                    ),
+                    function(string type, string name, string choiceExp)
+                    =>
+                        "template " ~ name ~ "(){"
+                            "alias " ~ type ~ " ResultType;"
+                            "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
+                                "return "~choiceExp~".parse(input, memo, info);"
+                            "}"
+                        "}"
+                ).parse(input, memo, info);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                cast(void)__LINE__;
+                {
+                    auto result = getResult!(def!())(`bool hoge = !"hello" $ >> {return false;};`);
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(
+                        result.value ==
+                        "template hoge(){"
+                            "alias bool ResultType;"
+                            "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
+                                "return combinateConvert!("
+                                    "combinateSequence!("
+                                        "combinateNone!("
+                                            "parseString!\"hello\""
+                                        "),"
+                                        "parseEOF!()"
+                                    "),"
+                                    "function(){"
+                                        "return false;"
+                                    "}"
+                                ").parse(input, memo, info);"
+                            "}"
+                        "}"
+                    );
+                }
+                {
+                    auto result = getResult!(def!())(`None recursive = A $;`);
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(
+                        result.value ==
+                        "template recursive(){"
+                            "alias None ResultType;"
+                            "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
+                                "return combinateSequence!("
+                                    "checkNonterminal!(__traits(compiles,A),`A`,`" ~ (__LINE__ - 9).to!string() ~ "`,`src\\ctpg.d`,A!()),"
+                                    "parseEOF!()"
+                                ").parse(input, memo, info);"
+                            "}"
+                        "}"
+                    );
+                }
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        };
+
+    // defs
+        template defs(){
+            alias string ResultType;
+            Result!(R, string) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+                return combinateConvert!(
+                    combinateSequence!(
+                        parseSpaces!(),
+                        combinateMore1!(
+                            def!(),
+                            parseSpaces!()
+                        ),
+                        parseSpaces!(),
+                        parseEOF!()
+                    ),
+                    flat
+                ).parse(input, memo, info);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                cast(void)__LINE__;
+                auto result = getResult!(defs!())(q{
+                    bool hoge = !"hello" $ >> {return false;};
+                    Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
+                });
+                assert(result.match);
+                assert(result.rest.empty);
+                assert(
+                    result.value ==
+                    "template hoge(){"
+                        "alias bool ResultType;"
+                        "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
+                            "return combinateConvert!("
+                                "combinateSequence!("
+                                    "combinateNone!("
+                                        "parseString!\"hello\""
+                                    "),"
+                                    "parseEOF!()"
+                                "),"
+                                "function(){"
+                                    "return false;"
+                                "}"
+                            ").parse(input, memo, info);"
+                        "}"
+                    "}"
+                    "template hoge2(){"
+                        "alias Tuple!piyo ResultType;"
+                        "Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){"
+                            "return combinateConvert!("
+                                "combinateMore0!("
+                                    "checkNonterminal!(__traits(compiles,hoge),`hoge`,`" ~ (__LINE__ - 27).to!string() ~ "`,`src\\ctpg.d`,hoge!())"
+                                "),"
+                                "function(){"
+                                    "return tuple(\"foo\");"
+                                "}"
+                            ").parse(input, memo, info);"
+                        "}"
+                    "}"
+                );
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        };
 
 string flat(Arg)(Arg arg){
     static if(is(Arg == Tuple!(string, string[]))){
