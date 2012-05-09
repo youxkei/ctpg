@@ -25,6 +25,8 @@ alias Object[size_t][string] memo_t;
 
 version = memoize;
 
+//version = Issue_8038_Fixed
+
 final class CallerInformation{
     this(size_t line, string file){
         _line = line;
@@ -1671,31 +1673,59 @@ bool isMatch(alias fun)(string src){
 
         template nonterminal(){
             alias string ResultType;
-            Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        getCallerLine!(),
-                        getLine!(),
-                        id!()
-                    ),
-                    function(size_t callerLine, size_t line, string id) => " #line " ~ (callerLine + line - 1).to!string() ~ "\n" ~ id ~ "!()"
-                ).parse(input, memo, info);
+            version(Issue_8038_Fixed){
+                Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                    return combinateConvert!(
+                        combinateSequence!(
+                            getCallerLine!(),
+                            getLine!(),
+                            id!()
+                        ),
+                        function(size_t callerLine, size_t line, string id) => " #line " ~ (callerLine + line - 1).to!string() ~ "\n" ~ id ~ "!()"
+                    ).parse(input, memo, info);
+                }
+            }else{
+                Result!(string, ResultType) parse(Input!string input, ref memo_t memo, in CallerInformation info){
+                    return combinateConvert!(
+                        combinateSequence!(
+                            getCallerLine!(),
+                            getLine!(),
+                            id!()
+                        ),
+                        function(size_t callerLine, size_t line, string id) => id ~ "!()"
+                    ).parse(input, memo, info);
+                }
             }
         }
 
         unittest{
             enum dg = {
-                {
-                    auto result = getResult!(nonterminal!())("A");
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(result.value == " #line " ~ (__LINE__ - 3).to!string() ~ "\nA!()");
-                }
-                {
-                    auto result = getResult!(nonterminal!())("int");
-                    assert(result.match);
-                    assert(result.rest.empty);
-                    assert(result.value == " #line " ~ (__LINE__ - 3).to!string() ~ "\nint!()");
+                version(Issue_8038_Fixed){
+                    {
+                        auto result = getResult!(nonterminal!())("A");
+                        assert(result.match);
+                        assert(result.rest.empty);
+                        assert(result.value == " #line " ~ (__LINE__ - 3).to!string() ~ "\nA!()");
+                    }
+                    {
+                        auto result = getResult!(nonterminal!())("int");
+                        assert(result.match);
+                        assert(result.rest.empty);
+                        assert(result.value == " #line " ~ (__LINE__ - 3).to!string() ~ "\nint!()");
+                    }
+                }else{
+                    {
+                        auto result = getResult!(nonterminal!())("A");
+                        assert(result.match);
+                        assert(result.rest.empty);
+                        assert(result.value == "A!()");
+                    }
+                    {
+                        auto result = getResult!(nonterminal!())("int");
+                        assert(result.match);
+                        assert(result.rest.empty);
+                        assert(result.value == "int!()");
+                    }
                 }
                 return true;
             };
