@@ -40,4 +40,3 @@ void main(){
     import std.stdio; writeln(parse!root("5*(8+3)*50"));
     dg();
 }
-
