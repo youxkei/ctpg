@@ -27,6 +27,63 @@ version = memoize;
 
 //version = Issue_8038_Fixed
 
+private:
+
+debug void main(){
+    import std.stdio; writeln("unittest passed");
+}
+
+version(unittest){
+    template TestParser(T){
+        alias T ResultType;
+        Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
+            return typeof(return)();
+        }
+    }
+
+    struct TestRange(T){
+        static assert(isForwardRange!(typeof(this)));
+        immutable(T)[] source;
+
+        const pure @safe nothrow @property
+        T front(){ return source[0]; }
+
+        pure @safe nothrow @property
+        void popFront(){ source = source[1..$]; }
+
+        const pure @safe nothrow @property
+        bool empty(){ return source.length == 0; }
+
+        const pure @safe nothrow @property
+        typeof(this) save(){ return this; }
+
+        const pure @safe nothrow
+        bool opEquals(in TestRange rhs){
+            return source == rhs.source;
+        }
+    }
+
+    TestRange!(T) testRange(T)(immutable(T)[] source){
+        return TestRange!T(source);
+    }
+}
+
+template ParserType(alias parser){
+    static if(is(parser.ResultType)){
+        alias parser.ResultType ParserType;
+    }else{
+        static assert(false);
+    }
+}
+
+unittest{
+    static assert(is(ParserType!(TestParser!string) == string));
+    static assert(is(ParserType!(TestParser!int) == int));
+    static assert(is(ParserType!(TestParser!long) == long));
+}
+
+public:
+
 final class CallerInformation{
     this(size_t line, string file){
         _line = line;
@@ -49,7 +106,7 @@ final class CallerInformation{
     }
 }
 
-// Option
+// struct Option
     struct Option(T){
         public{
             bool some;
@@ -59,11 +116,11 @@ final class CallerInformation{
         }
     }
 
-    Option!T option(T)(bool some, T value){
+    Option!T makeOption(T)(bool some, T value){
         return Option!T(some, value);
     }
 
-// Input
+// struct Input
     struct Input(R){
         static assert(isSomeString!R || isForwardRange!R);
 
@@ -76,18 +133,20 @@ final class CallerInformation{
             size_t position;
             size_t line = 1;
 
-            //cannot apply some qualifiers due to unclearness of R
-            Input save(){
-                return Input(range.save, position, line);
-            }
+            static if(isForwardRange!R){
+                //cannot apply some qualifiers due to unclearness of R
+                Input save(){
+                    return Input(range.save, position, line);
+                }
 
-            @property
-            bool empty(){
-                return range.empty;
+                @property
+                bool empty(){
+                    return range.empty;
+                }
             }
 
             pure @safe nothrow
-            bool opEquals(Input lhs){
+            bool opEquals(in Input lhs){
                 return range == lhs.range && position == lhs.position && line == lhs.line;
             }
         }
@@ -101,7 +160,7 @@ final class CallerInformation{
         return Input!R(range, position, line);
     }
 
-// Result
+// struct Result
     struct Result(R, T){
         public{
             bool match;
@@ -116,7 +175,8 @@ final class CallerInformation{
                 error = rhs.error;
             }
 
-            bool opEquals(Result lhs){
+            pure @safe nothrow
+            bool opEquals(in Result lhs){
                 return match == lhs.match && value == lhs.value && rest == lhs.rest && error == lhs.error;
             }
         }
@@ -126,21 +186,70 @@ final class CallerInformation{
         return Result!(R, T)(match, value, rest, error);
     }
 
-struct Error{
-    invariant(){
-        assert(line >= 1);
-    }
+// struct Error
+    struct Error{
+        invariant(){
+            assert(line >= 1);
+        }
 
-    public{
-        string need;
-        size_t line = 1;
+        public{
+            string need;
+            size_t line = 1;
 
-        pure @safe nothrow const
-        bool opEquals(in Error rhs){
-            return need == rhs.need && line == rhs.line;
+            pure @safe nothrow const
+            bool opEquals(in Error rhs){
+                return need == rhs.need && line == rhs.line;
+            }
         }
     }
-}
+
+// function flat
+    string flat(Arg)(Arg arg){
+        static if(is(Arg == Tuple!(string, string[]))){
+            string result = arg[0];
+            foreach(elem; arg[1]){
+                result ~= elem;
+            }
+            return result;
+        }else{
+            string result;
+            static if(isTuple!Arg || isArray!Arg){
+                if(arg.length){
+                    foreach(elem; arg){
+                        result ~= flat(elem);
+                    }
+                }
+            }else{
+                result = arg.to!string();
+            }
+            return result;
+        }
+    }
+
+    unittest{
+        enum dg = {
+            {
+                auto result = flat(tuple(1, "hello", tuple(2, "world")));
+                assert(result == "1hello2world");
+            }
+            {
+                auto result = flat(tuple([0, 1, 2], "hello", tuple([3, 4, 5], ["wor", "ld!!"]), ["!", "!"]));
+                assert(result == "012hello345world!!!!");
+            }
+            {
+                auto result = flat(tuple('表', 'が', '怖', 'い', '噂', 'の', 'ソ', 'フ', 'ト'));
+                assert(result == "表が怖い噂のソフト");
+            }
+            {
+                string[] ary;
+                auto result = flat(tuple("A", ary));
+                assert(result == "A");
+            }
+            return true;
+        };
+        debug(ctpg_compile_time) static assert(dg());
+        dg();
+    }
 
 // parsers
     // success
@@ -166,6 +275,63 @@ struct Error{
         }
 
     // parseString
+        template staticConvertString(string str, T){
+            static if(is(T == string)){
+                alias str staticConvertString;
+            }else static if(is(T == wstring)){
+                enum staticConvertString = str.to!wstring();
+            }else static if(is(T == dstring)){
+                enum staticConvertString = str.to!dstring();
+            }else static if(isForwardRange!T){
+                static if(is(Unqual!(ElementType!T) == char)){
+                    alias str staticConvertString;
+                }else static if(is(Unqual!(ElementType!T) == wchar)){
+                    enum staticConvertString = str.to!wstring();
+                }else static if(is(Unqual!(ElementType!T) == dchar)){
+                    enum staticConvertString = str.to!dstring();
+                }else{
+                    static assert(false);
+                }
+            }else{
+                static assert(false);
+            }
+        }
+
+        unittest{
+            static assert(staticConvertString!("foobar", string) == "foobar");
+            static assert(staticConvertString!("foobar", wstring) == "foobar"w);
+            static assert(staticConvertString!("foobar", dstring) == "foobar"d);
+            static assert(staticConvertString!("foobar", TestRange!char) == "foobar");
+            static assert(staticConvertString!("foobar", TestRange!wchar) == "foobar"w);
+            static assert(staticConvertString!("foobar", TestRange!dchar) == "foobar"d);
+        }
+
+        Tuple!(size_t, "width", size_t, "line") countBreadth(string str)in{
+            assert(str.length > 0);
+        }body{
+            typeof(return) result;
+            size_t idx;
+            while(idx < str.length){
+                auto c = decode(str, idx);
+                if(c == '\n'){
+                    ++result.line;
+                }
+                ++result.width;
+            }
+            return result;
+        }
+
+        unittest{
+            static assert({
+                assert(countBreadth("これ\nとこれ") == Tuple!(size_t, "width", size_t, "line")(6, 1));
+                assert(countBreadth("これ\nとこれ\nとさらにこれ") == Tuple!(size_t, "width", size_t, "line")(13, 2));
+                {
+                    auto result = countBreadth("helloワールド");
+                }
+                return true;
+            }());
+        }
+
         template parseString(string str) if(str.length > 0){
             struct impl{
                 alias string ResultType;
@@ -242,6 +408,81 @@ struct Error{
         }
 
     // parseCharRange
+        dchar decodeRange(R)(ref R range){
+            static assert(isForwardRange!R);
+            static assert(isSomeChar!(Unqual!(ElementType!R)));
+            dchar result;
+            static if(is(Unqual!(ElementType!R) == char)){
+                if(!(range.front & 0b_1000_0000)){
+                    result = range.front;
+                    range.popFront;
+                    return result;
+                }else if(!(range.front & 0b_0010_0000)){
+                    result = range.front & 0b_0001_1111;
+                    result <<= 6;
+                    range.popFront;
+                    result |= range.front & 0b_0011_1111;
+                    range.popFront;
+                    return result;
+                }else if(!(range.front & 0b_0001_0000)){
+                    result = range.front & 0b_0000_1111;
+                    result <<= 6;
+                    range.popFront;
+                    result |= range.front & 0b_0011_1111;
+                    result <<= 6;
+                    range.popFront;
+                    result |= range.front & 0b_0011_1111;
+                    range.popFront;
+                    return result;
+                }else{
+                    result = range.front & 0b_0000_0111;
+                    result <<= 6;
+                    range.popFront;
+                    result |= range.front & 0b_0011_1111;
+                    result <<= 6;
+                    range.popFront;
+                    result |= range.front & 0b_0011_1111;
+                    result <<= 6;
+                    range.popFront;
+                    result |= range.front & 0b_0011_1111;
+                    range.popFront;
+                    return result;
+                }
+            }else static if(is(Unqual!(ElementType!R) == wchar)){
+                if(range.front <= 0xD7FF || (0xE000 <= range.front && range.front < 0xFFFF)){
+                    result = range.front;
+                    range.popFront;
+                    return result;
+                }else{
+                    result = (range.front & 0b_0000_0011_1111_1111) * 0x400;
+                    range.popFront;
+                    result += (range.front & 0b_0000_0011_1111_1111) + 0x10000;
+                    range.popFront;
+                    return result;
+                }
+            }else static if(is(Unqual!(ElementType!R) == dchar)){
+                result = range.front;
+                range.popFront;
+                return result;
+            }
+        }
+
+        unittest{
+            enum dg = {
+                assert(decodeRange([testRange("\u0001")][0]) == '\u0001');
+                assert(decodeRange([testRange("\u0081")][0]) == '\u0081');
+                assert(decodeRange([testRange("\u0801")][0]) == '\u0801');
+                assert(decodeRange([testRange("\U00012345")][0]) == '\U00012345');
+                assert(decodeRange([testRange("\u0001"w)][0]) == '\u0001');
+                assert(decodeRange([testRange("\uE001"w)][0]) == '\uE001');
+                assert(decodeRange([testRange("\U00012345"w)][0]) == '\U00012345');
+                assert(decodeRange([testRange("\U0010FFFE")][0]) == '\U0010FFFE');
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
         template parseCharRange(dchar low, dchar high){
             static assert(low <= high);
 
@@ -743,6 +984,20 @@ struct Error{
         }
 
     // combinateSequence
+        template flatTuple(T){
+            static if(isTuple!T){
+                alias T.Types flatTuple;
+            }else{
+                alias T flatTuple;
+            }
+        }
+
+        unittest{
+            static assert(is(flatTuple!(string) == string));
+            static assert(is(flatTuple!(Tuple!(string)) == TypeTuple!string));
+            static assert(is(flatTuple!(Tuple!(Tuple!(string))) == TypeTuple!(Tuple!string)));
+        }
+
         template CombinateSequenceImplType(parsers...){
             alias Tuple!(staticMap!(flatTuple, staticMap!(ParserType, parsers))) CombinateSequenceImplType;
         }
@@ -1011,19 +1266,19 @@ struct Error{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateOption!(parseString!"w"))("w" ) == result(true, option(true, "w"), makeInput("" , 1), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))("w"w) == result(true, option(true, "w"), makeInput(""w, 1), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))("w"d) == result(true, option(true, "w"), makeInput(""d, 1), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))(testRange("w" )) == result(true, option(true, "w"), makeInput(testRange("" ), 1), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))(testRange("w"w)) == result(true, option(true, "w"), makeInput(testRange(""w), 1), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))(testRange("w"d)) == result(true, option(true, "w"), makeInput(testRange(""d), 1), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))("w" ) == result(true, makeOption(true, "w"), makeInput("" , 1), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))("w"w) == result(true, makeOption(true, "w"), makeInput(""w, 1), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))("w"d) == result(true, makeOption(true, "w"), makeInput(""d, 1), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("w" )) == result(true, makeOption(true, "w"), makeInput(testRange("" ), 1), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("w"w)) == result(true, makeOption(true, "w"), makeInput(testRange(""w), 1), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("w"d)) == result(true, makeOption(true, "w"), makeInput(testRange(""d), 1), Error.init));
 
-                assert(getResult!(combinateOption!(parseString!"w"))("hoge" ) == result(true, option(false, ""), makeInput("hoge" , 0), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))("hoge"w) == result(true, option(false, ""), makeInput("hoge"w, 0), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))("hoge"d) == result(true, option(false, ""), makeInput("hoge"d, 0), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))(testRange("hoge" )) == result(true, option(false, ""), makeInput(testRange("hoge" ), 0), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))(testRange("hoge"w)) == result(true, option(false, ""), makeInput(testRange("hoge"w), 0), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))(testRange("hoge"d)) == result(true, option(false, ""), makeInput(testRange("hoge"d), 0), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))("hoge" ) == result(true, makeOption(false, ""), makeInput("hoge" , 0), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))("hoge"w) == result(true, makeOption(false, ""), makeInput("hoge"w, 0), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))("hoge"d) == result(true, makeOption(false, ""), makeInput("hoge"d, 0), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("hoge" )) == result(true, makeOption(false, ""), makeInput(testRange("hoge" ), 0), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("hoge"w)) == result(true, makeOption(false, ""), makeInput(testRange("hoge"w), 0), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("hoge"d)) == result(true, makeOption(false, ""), makeInput(testRange("hoge"d), 0), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -2664,244 +2919,4 @@ bool isMatch(alias fun)(string src){
             debug(ctpg_compile_time) static assert(dg());
             dg();
         };
-
-string flat(Arg)(Arg arg){
-    static if(is(Arg == Tuple!(string, string[]))){
-        string result = arg[0];
-        foreach(elem; arg[1]){
-            result ~= elem;
-        }
-        return result;
-    }else{
-        string result;
-        static if(isTuple!Arg || isArray!Arg){
-            if(arg.length){
-                foreach(elem; arg){
-                    result ~= flat(elem);
-                }
-            }
-        }else{
-            result = arg.to!string();
-        }
-        return result;
-    }
-}
-
-unittest{
-    enum dg = {
-        {
-            auto result = flat(tuple(1, "hello", tuple(2, "world")));
-            assert(result == "1hello2world");
-        }
-        {
-            auto result = flat(tuple([0, 1, 2], "hello", tuple([3, 4, 5], ["wor", "ld!!"]), ["!", "!"]));
-            assert(result == "012hello345world!!!!");
-        }
-        {
-            auto result = flat(tuple('表', 'が', '怖', 'い', '噂', 'の', 'ソ', 'フ', 'ト'));
-            assert(result == "表が怖い噂のソフト");
-        }
-        {
-            string[] ary;
-            auto result = flat(tuple("A", ary));
-            assert(result == "A");
-        }
-        return true;
-    };
-    debug(ctpg_compile_time) static assert(dg());
-    dg();
-}
-
-debug void main(){
-    import std.stdio; writeln("unittest passed");
-}
-
-private:
-
-version(unittest) template TestParser(T){
-    alias T ResultType;
-    Result!(R, ResultType) parse(R)(Input!R input, ref memo_t memo, in CallerInformation info){
-        typeof(return) result;
-        return result;
-    }
-}
-
-version(unittest) struct TestRange(T){
-    static assert(isForwardRange!(typeof(this)));
-    immutable(T)[] source;
-    @property T front(){ return source[0]; }
-    @property void popFront(){ source = source[1..$]; }
-    @property bool empty(){ return source.length == 0; }
-    @property typeof(this) save(){ return this; }
-
-    pure @safe nothrow
-    bool opEquals(typeof(this) rhs){
-        return source == rhs.source;
-    }
-}
-
-version(unittest) TestRange!(T) testRange(T)(immutable(T)[] source){
-    return TestRange!T(source);
-}
-
-template staticConvertString(string str, T){
-    static if(is(T == string)){
-        alias str staticConvertString;
-    }else static if(is(T == wstring)){
-        enum staticConvertString = str.to!wstring();
-    }else static if(is(T == dstring)){
-        enum staticConvertString = str.to!dstring();
-    }else static if(isForwardRange!T){
-        static if(is(Unqual!(ElementType!T) == char)){
-            alias str staticConvertString;
-        }else static if(is(Unqual!(ElementType!T) == wchar)){
-            enum staticConvertString = str.to!wstring();
-        }else static if(is(Unqual!(ElementType!T) == dchar)){
-            enum staticConvertString = str.to!dstring();
-        }else{
-            static assert(false);
-        }
-    }else{
-        static assert(false);
-    }
-}
-
-unittest{
-    static assert(staticConvertString!("foobar", string) == "foobar");
-    static assert(staticConvertString!("foobar", wstring) == "foobar"w);
-    static assert(staticConvertString!("foobar", dstring) == "foobar"d);
-    static assert(staticConvertString!("foobar", TestRange!char) == "foobar");
-    static assert(staticConvertString!("foobar", TestRange!wchar) == "foobar"w);
-    static assert(staticConvertString!("foobar", TestRange!dchar) == "foobar"d);
-}
-
-Tuple!(size_t, "width", size_t, "line") countBreadth(string str)in{
-    assert(str.length > 0);
-}body{
-    typeof(return) result;
-    size_t idx;
-    while(idx < str.length){
-        auto c = decode(str, idx);
-        if(c == '\n'){
-            ++result.line;
-        }
-        ++result.width;
-    }
-    return result;
-}
-
-unittest{
-    static assert({
-        assert(countBreadth("これ\nとこれ") == Tuple!(size_t, "width", size_t, "line")(6, 1));
-        assert(countBreadth("これ\nとこれ\nとさらにこれ") == Tuple!(size_t, "width", size_t, "line")(13, 2));
-        {
-            auto result = countBreadth("helloワールド");
-        }
-        return true;
-    }());
-}
-
-template ParserType(alias parser){
-    static if(is(parser.ResultType)){
-        alias parser.ResultType ParserType;
-    }else{
-        static assert(false);
-    }
-}
-
-unittest{
-    static assert(is(ParserType!(TestParser!string) == string));
-    static assert(is(ParserType!(TestParser!int) == int));
-    static assert(is(ParserType!(TestParser!long) == long));
-
-}
-
-template flatTuple(T){
-    static if(isTuple!T){
-        alias T.Types flatTuple;
-    }else{
-        alias T flatTuple;
-    }
-}
-
-unittest{
-    static assert(is(flatTuple!(string) == string));
-    static assert(is(flatTuple!(Tuple!(string)) == TypeTuple!string));
-    static assert(is(flatTuple!(Tuple!(Tuple!(string))) == TypeTuple!(Tuple!string)));
-}
-
-dchar decodeRange(R)(ref R range){
-    static assert(isForwardRange!R);
-    static assert(isSomeChar!(Unqual!(ElementType!R)));
-    dchar result;
-    static if(is(Unqual!(ElementType!R) == char)){
-        if(!(range.front & 0b_1000_0000)){
-            result = range.front;
-            range.popFront;
-            return result;
-        }else if(!(range.front & 0b_0010_0000)){
-            result = range.front & 0b_0001_1111;
-            result <<= 6;
-            range.popFront;
-            result |= range.front & 0b_0011_1111;
-            range.popFront;
-            return result;
-        }else if(!(range.front & 0b_0001_0000)){
-            result = range.front & 0b_0000_1111;
-            result <<= 6;
-            range.popFront;
-            result |= range.front & 0b_0011_1111;
-            result <<= 6;
-            range.popFront;
-            result |= range.front & 0b_0011_1111;
-            range.popFront;
-            return result;
-        }else{
-            result = range.front & 0b_0000_0111;
-            result <<= 6;
-            range.popFront;
-            result |= range.front & 0b_0011_1111;
-            result <<= 6;
-            range.popFront;
-            result |= range.front & 0b_0011_1111;
-            result <<= 6;
-            range.popFront;
-            result |= range.front & 0b_0011_1111;
-            range.popFront;
-            return result;
-        }
-    }else static if(is(Unqual!(ElementType!R) == wchar)){
-        if(range.front <= 0xD7FF || (0xE000 <= range.front && range.front < 0xFFFF)){
-            result = range.front;
-            range.popFront;
-            return result;
-        }else{
-            result = (range.front & 0b_0000_0011_1111_1111) * 0x400;
-            range.popFront;
-            result += (range.front & 0b_0000_0011_1111_1111) + 0x10000;
-            range.popFront;
-            return result;
-        }
-    }else static if(is(Unqual!(ElementType!R) == dchar)){
-        result = range.front;
-        range.popFront;
-        return result;
-    }
-}
-
-unittest{
-    enum dg = {
-        assert(decodeRange([testRange("\u0001")][0]) == '\u0001');
-        assert(decodeRange([testRange("\u0081")][0]) == '\u0081');
-        assert(decodeRange([testRange("\u0801")][0]) == '\u0801');
-        assert(decodeRange([testRange("\U00012345")][0]) == '\U00012345');
-        assert(decodeRange([testRange("\u0001"w)][0]) == '\u0001');
-        assert(decodeRange([testRange("\uE001"w)][0]) == '\uE001');
-        assert(decodeRange([testRange("\U00012345"w)][0]) == '\U00012345');
-        assert(decodeRange([testRange("\U0010FFFE")][0]) == '\U0010FFFE');
-        return true;
-    };
-    debug(ctpg_compile_time) static assert(dg());
-    dg();
-}
 
