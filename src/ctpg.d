@@ -2725,7 +2725,7 @@ bool isMatch(alias fun)(string src){
                     =>
                         "template " ~ name ~ "(){"
                             "alias " ~ type ~ " ResultType;"
-                            "Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){"
+                            "static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){"
                                 "return "~choiceExp~".parse(input, memo, info);"
                             "}"
                         "}"
@@ -2744,7 +2744,7 @@ bool isMatch(alias fun)(string src){
                         result.value ==
                         "template hoge(){"
                             "alias bool ResultType;"
-                            "Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){"
+                            "static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){"
                                 "return combinateConvert!("
                                     "combinateSequence!("
                                         "combinateNone!("
@@ -2769,7 +2769,7 @@ bool isMatch(alias fun)(string src){
                             result.value ==
                             "template recursive(){"
                                 "alias None ResultType;"
-                                "Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){"
+                                "static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){"
                                     "return combinateSequence!("
                                         " #line " ~ (__LINE__ - 9).to!string() ~ "\nA!(),"
                                         "parseEOF!()"
@@ -2782,7 +2782,7 @@ bool isMatch(alias fun)(string src){
                             result.value ==
                             "template recursive(){"
                                 "alias None ResultType;"
-                                "Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){"
+                                "static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){"
                                     "return combinateSequence!("
                                         "A!(),"
                                         "parseEOF!()"
@@ -2831,7 +2831,7 @@ bool isMatch(alias fun)(string src){
                         result.value ==
                         "template hoge(){"
                             "alias bool ResultType;"
-                            "Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){"
+                            "static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){"
                                 "return combinateConvert!("
                                     "combinateSequence!("
                                         "combinateNone!("
@@ -2847,7 +2847,7 @@ bool isMatch(alias fun)(string src){
                         "}"
                         "template hoge2(){"
                             "alias Tuple!piyo ResultType;"
-                            "Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){"
+                            "static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){"
                                 "return combinateConvert!("
                                     "combinateMore0!("
                                         " #line " ~ (__LINE__ - 27).to!string() ~ "\nhoge!()"
@@ -2864,7 +2864,7 @@ bool isMatch(alias fun)(string src){
                         result.value ==
                         "template hoge(){"
                             "alias bool ResultType;"
-                            "Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){"
+                            "static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){"
                                 "return combinateConvert!("
                                     "combinateSequence!("
                                         "combinateNone!("
@@ -2880,7 +2880,7 @@ bool isMatch(alias fun)(string src){
                         "}"
                         "template hoge2(){"
                             "alias Tuple!piyo ResultType;"
-                            "Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){"
+                            "static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){"
                                 "return combinateConvert!("
                                     "combinateMore0!("
                                         "hoge!()"
@@ -2892,7 +2892,6 @@ bool isMatch(alias fun)(string src){
                             "}"
                         "}"
                     );
-
                 }
                 return true;
             };
