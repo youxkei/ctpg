@@ -1114,22 +1114,11 @@ final class CallerInformation{
                     static if(parsers.length == 1){
                         return parsers[0].parse(input, memo, info);
                     }else{
-                        typeof(return) result;
-                        auto r1 = parsers[0].parse(input.save, memo, info);
-                        if(r1.match){
-                            result = r1;
-                            return result;
-                        }else{
-                            result.error = r1.error;
+                        auto r = parsers[0].parse(input.save, memo, info);
+                        if(r.match){
+                            return r;
                         }
-                        auto r2 = combinateChoice!(parsers[1..$]).parse(input, memo, info);
-                        if(r2.match){
-                            result = r2;
-                            return result;
-                        }else{
-                            result.error.need ~= " or " ~ r2.error.need;
-                        }
-                        return result;
+                        return combinateChoice!(parsers[1..$]).parse(input, memo, info);
                     }
                 }
             }
@@ -1152,12 +1141,12 @@ final class CallerInformation{
                 assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("w"w)) == result(true, "w", makeInput(testRange(""w), 1), Error.init));
                 assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("w"d)) == result(true, "w", makeInput(testRange(""d), 1), Error.init));
 
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("" ) == result(false, "", makeInput("" ), Error(q{"h" or "w"})));
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(""w) == result(false, "", makeInput(""w), Error(q{"h" or "w"})));
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(""d) == result(false, "", makeInput(""d), Error(q{"h" or "w"})));
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("" )) == result(false, "", makeInput(testRange("" )), Error(q{"h" or "w"})));
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange(""w)) == result(false, "", makeInput(testRange(""w)), Error(q{"h" or "w"})));
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange(""d)) == result(false, "", makeInput(testRange(""d)), Error(q{"h" or "w"})));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("" ) == result(false, "", makeInput("" ), Error(q{"w"})));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(""w) == result(false, "", makeInput(""w), Error(q{"w"})));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(""d) == result(false, "", makeInput(""d), Error(q{"w"})));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("" )) == result(false, "", makeInput(testRange("" )), Error(q{"w"})));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange(""w)) == result(false, "", makeInput(testRange(""w)), Error(q{"w"})));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange(""d)) == result(false, "", makeInput(testRange(""d)), Error(q{"w"})));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1642,19 +1631,19 @@ final class CallerInformation{
                 assert(getResult!(parseIdent!())(testRange("_0"w)) == result(true, "_0", makeInput(testRange(""w), 2), Error.init));
                 assert(getResult!(parseIdent!())(testRange("_0"d)) == result(true, "_0", makeInput(testRange(""d), 2), Error.init));
 
-                assert(getResult!(parseIdent!())("0" ) == result(false, "", makeInput("" ), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())("0"w) == result(false, "", makeInput(""w), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())("0"d) == result(false, "", makeInput(""d), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())(testRange("0" )) == result(false, "", makeInput(testRange("" )), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())(testRange("0"w)) == result(false, "", makeInput(testRange(""w)), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())(testRange("0"d)) == result(false, "", makeInput(testRange(""d)), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent!())("0" ) == result(false, "", makeInput("" ), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent!())("0"w) == result(false, "", makeInput(""w), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent!())("0"d) == result(false, "", makeInput(""d), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent!())(testRange("0" )) == result(false, "", makeInput(testRange("" )), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent!())(testRange("0"w)) == result(false, "", makeInput(testRange(""w)), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent!())(testRange("0"d)) == result(false, "", makeInput(testRange(""d)), Error("c: 'A' <= c <= 'Z'")));
 
-                assert(getResult!(parseIdent!())("あ" ) == result(false, "", makeInput("" ), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())("あ"w) == result(false, "", makeInput(""w), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())("あ"d) == result(false, "", makeInput(""d), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())(testRange("あ" )) == result(false, "", makeInput(testRange("" )), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())(testRange("あ"w)) == result(false, "", makeInput(testRange(""w)), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
-                assert(getResult!(parseIdent!())(testRange("あ"d)) == result(false, "", makeInput(testRange(""d)), Error("\"_\" or c: 'a' <= c <= 'z' or c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent!())("あ" ) == result(false, "", makeInput("" ), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent!())("あ"w) == result(false, "", makeInput(""w), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent!())("あ"d) == result(false, "", makeInput(""d), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent!())(testRange("あ" )) == result(false, "", makeInput(testRange("" )), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent!())(testRange("あ"w)) == result(false, "", makeInput(testRange(""w)), Error("c: 'A' <= c <= 'Z'")));
+                assert(getResult!(parseIdent!())(testRange("あ"d)) == result(false, "", makeInput(testRange(""d)), Error("c: 'A' <= c <= 'Z'")));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1917,16 +1906,6 @@ bool isMatch(alias fun)(string src){
         }
 
     // nonterminal
-        version(none) template checkNonterminal(bool defined, string name, string line, string file, alias nonterminal){
-            static if(defined){
-                alias nonterminal checkNonterminal;
-            }else{
-                mixin("#line " ~ line ~ " \"" ~ file ~ "\"" ~ q{
-                    static assert(false, name ~ " is not defined");
-                });
-            }
-        }
-
         template nonterminal(){
             alias string ResultType;
             version(Issue_8038_Fixed){
