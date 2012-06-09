@@ -332,8 +332,8 @@ final class CallerInformation{
 
         template parseString(string str) if(str.length > 0){
             alias string ResultType;
-            static Result!(R, ResultType) parse(R)(Input!R ainput, auto ref memo_t memo, in CallerInformation info){
-                auto input = ainput;
+            static Result!(R, ResultType) parse(R)(Input!R _input, auto ref memo_t memo, in CallerInformation info){
+                auto input = _input; // Somehow this parser doesn't work well without this line.
                 enum breadth = countBreadth(str);
                 enum convertedString = staticConvertString!(str, R);
                 typeof(return) result;
@@ -483,7 +483,7 @@ final class CallerInformation{
 
             alias string ResultType;
             static Result!(R, ResultType) parse(R)(Input!R _input, auto ref memo_t memo, in CallerInformation info){
-                auto input = _input;
+                auto input = _input; // Somehow this parser doesn't work well without this line.
                 typeof(return) result;
                 static if(isSomeString!R){
                     if(input.range.length){
