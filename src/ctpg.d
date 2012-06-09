@@ -26,12 +26,14 @@ alias Object[size_t][string] memo_t;
 version = memoize;
 
 //version = Issue_8038_Fixed
+debug = ctpg_compile_time;
+debug = ctpg;
 
 private:
 
 import std.stdio;
 
-debug void main(){
+debug(ctpg) void main(){
     "unittest passed".writeln;
 }
 
