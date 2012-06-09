@@ -258,24 +258,18 @@ final class CallerInformation{
 // parsers
     // success
         template success(){
-            struct impl{
-                alias None ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    return result(true, None.init, input, Error.init);
-                }
+            alias None ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                return result(true, None.init, input, Error.init);
             }
-            alias combinateMemoize!impl success;
         }
 
     // failure
         template failure(){
-            struct impl{
-                alias None ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    return result(false, None.init, Input!R.init, Error.init);
-                }
+            alias None ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                return result(false, None.init, Input!R.init, Error.init);
             }
-            alias combinateMemoize!impl failure;
         }
 
     // parseString
@@ -337,43 +331,40 @@ final class CallerInformation{
         }
 
         template parseString(string str) if(str.length > 0){
-            struct impl{
-                alias string ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R ainput, auto ref memo_t memo, in CallerInformation info){
-                    auto input = ainput;
-                    enum breadth = countBreadth(str);
-                    enum convertedString = staticConvertString!(str, R);
-                    typeof(return) result;
-                    static if(isSomeString!R){
-                        if(input.range.length >= convertedString.length && convertedString == input.range[0..convertedString.length]){
-                            result.match = true;
-                            result.value = str;
-                            result.rest.range = input.range[convertedString.length..$];
-                            result.rest.position = input.position + breadth.width;
-                            result.rest.line = input.line + breadth.line;
-                            return result;
-                        }
-                    }else{
-                        foreach(c; convertedString){
-                            if(input.range.empty || c != input.range.front){
-                                goto Lerror;
-                            }else{
-                                input.range.popFront;
-                            }
-                        }
+            alias string ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R ainput, auto ref memo_t memo, in CallerInformation info){
+                auto input = ainput;
+                enum breadth = countBreadth(str);
+                enum convertedString = staticConvertString!(str, R);
+                typeof(return) result;
+                static if(isSomeString!R){
+                    if(input.range.length >= convertedString.length && convertedString == input.range[0..convertedString.length]){
                         result.match = true;
                         result.value = str;
-                        result.rest.range = input.range;
+                        result.rest.range = input.range[convertedString.length..$];
                         result.rest.position = input.position + breadth.width;
                         result.rest.line = input.line + breadth.line;
                         return result;
                     }
-                Lerror:
-                    result.error = Error('"' ~ str ~ '"', input.line);
+                }else{
+                    foreach(c; convertedString){
+                        if(input.range.empty || c != input.range.front){
+                            goto Lerror;
+                        }else{
+                            input.range.popFront;
+                        }
+                    }
+                    result.match = true;
+                    result.value = str;
+                    result.rest.range = input.range;
+                    result.rest.position = input.position + breadth.width;
+                    result.rest.line = input.line + breadth.line;
                     return result;
                 }
+            Lerror:
+                result.error = Error('"' ~ str ~ '"', input.line);
+                return result;
             }
-            alias combinateMemoize!impl parseString;
         }
 
         unittest{
@@ -490,46 +481,43 @@ final class CallerInformation{
         template parseCharRange(dchar low, dchar high){
             static assert(low <= high);
 
-            struct impl{
-                alias string ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R _input, auto ref memo_t memo, in CallerInformation info){
-                    auto input = _input;
-                    typeof(return) result;
-                    static if(isSomeString!R){
-                        if(input.range.length){
-                            size_t idx;
-                            dchar c = decode(input.range, idx);
-                            if(low <= c && c <= high){
-                                result.match = true;
-                                result.value = c.to!string();
-                                result.rest.range = input.range[idx..$];
-                                result.rest.position = input.position + 1;
-                                result.rest.line = c == '\n' ? input.line + 1 : input.line;
-                                return result;
-                            }
-                        }
-                    }else{
-                        if(!input.range.empty){
-                            dchar c = decodeRange(input.range);
-                            if(low <= c && c <= high){
-                                result.match = true;
-                                result.value = c.to!string();
-                                result.rest.range = input.range;
-                                result.rest.position = input.position + 1;
-                                result.rest.line = c == '\n' ? input.line + 1 : input.line;
-                                return result;
-                            }
+            alias string ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R _input, auto ref memo_t memo, in CallerInformation info){
+                auto input = _input;
+                typeof(return) result;
+                static if(isSomeString!R){
+                    if(input.range.length){
+                        size_t idx;
+                        dchar c = decode(input.range, idx);
+                        if(low <= c && c <= high){
+                            result.match = true;
+                            result.value = c.to!string();
+                            result.rest.range = input.range[idx..$];
+                            result.rest.position = input.position + 1;
+                            result.rest.line = c == '\n' ? input.line + 1 : input.line;
+                            return result;
                         }
                     }
-                    if(low == dchar.min && high == dchar.max){
-                        result.error = Error("any char", input.line);
-                    }else{
-                        result.error = Error("c: '" ~ low.to!string() ~ "' <= c <= '" ~ high.to!string() ~ "'", input.line);
+                }else{
+                    if(!input.range.empty){
+                        dchar c = decodeRange(input.range);
+                        if(low <= c && c <= high){
+                            result.match = true;
+                            result.value = c.to!string();
+                            result.rest.range = input.range;
+                            result.rest.position = input.position + 1;
+                            result.rest.line = c == '\n' ? input.line + 1 : input.line;
+                            return result;
+                        }
                     }
-                    return result;
                 }
+                if(low == dchar.min && high == dchar.max){
+                    result.error = Error("any char", input.line);
+                }else{
+                    result.error = Error("c: '" ~ low.to!string() ~ "' <= c <= '" ~ high.to!string() ~ "'", input.line);
+                }
+                return result;
             }
-            alias combinateMemoize!impl parseCharRange;
         }
 
         unittest{
@@ -562,96 +550,93 @@ final class CallerInformation{
 
     // parseEscapeSequence
         template parseEscapeSequence(){
-            struct impl{
-                alias string ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    typeof(return) result;
-                    static if(isSomeString!R){
-                        if(input.range[0] == '\\'){
-                            switch(input.range[1]){
-                                case 'u':{
-                                    result.match = true;
-                                    result.value = input.range[0..6].to!string();
-                                    result.rest.range = input.range[6..$];
-                                    result.rest.position = input.position + 6;
-                                    result.rest.line = input.line;
-                                    return result;
-                                }
-                                case 'U':{
-                                    result.match = true;
-                                    result.value = input.range[0..10].to!string();
-                                    result.rest.range = input.range[10..$];
-                                    result.rest.position = input.position + 10;
-                                    result.rest.line = input.line;
-                                    return result;
-                                }
-                                case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
-                                    result.match = true;
-                                    result.value = input.range[0..2].to!string();
-                                    result.rest.range = input.range[2..$];
-                                    result.rest.position = input.position + 2;
-                                    result.rest.line = input.line;
-                                    return result;
-                                }
-                                default:{
-                                }
+            alias string ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                typeof(return) result;
+                static if(isSomeString!R){
+                    if(input.range[0] == '\\'){
+                        switch(input.range[1]){
+                            case 'u':{
+                                result.match = true;
+                                result.value = input.range[0..6].to!string();
+                                result.rest.range = input.range[6..$];
+                                result.rest.position = input.position + 6;
+                                result.rest.line = input.line;
+                                return result;
                             }
-                        }
-                    }else{
-                        auto c1 = input.range.front;
-                        if(c1 == '\\'){
-                            input.range.popFront;
-                            auto c2 = input.range.front;
-                            switch(c2){
-                                case 'u':{
-                                    result.match = true;
-                                    input.range.popFront;
-                                    char[6] data;
-                                    data[0..2] = "\\u";
-                                    foreach(idx; 2..6){
-                                        data[idx] = cast(char)input.range.front;
-                                        input.range.popFront;
-                                    }
-                                    result.value = to!string(data);
-                                    result.rest.range = input.range;
-                                    result.rest.position = input.position + 6;
-                                    result.rest.line = input.line;
-                                    return result;
-                                }
-                                case 'U':{
-                                    result.match = true;
-                                    input.range.popFront;
-                                    char[10] data;
-                                    data[0..2] = "\\U";
-                                    foreach(idx; 2..10){
-                                        data[idx] = cast(char)input.range.front;
-                                        input.range.popFront;
-                                    }
-                                    result.value = to!string(data);
-                                    result.rest.range = input.range;
-                                    result.rest.position = input.position + 10;
-                                    result.rest.line = input.line;
-                                    return result;
-                                }
-                                case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
-                                    result.match = true;
-                                    input.range.popFront;
-                                    result.value = "\\" ~ to!string(c2);
-                                    result.rest.position = input.position + 2;
-                                    result.rest.range = input.range;
-                                    result.rest.line = input.line;
-                                    return result;
-                                }
-                                default:{
-                                }
+                            case 'U':{
+                                result.match = true;
+                                result.value = input.range[0..10].to!string();
+                                result.rest.range = input.range[10..$];
+                                result.rest.position = input.position + 10;
+                                result.rest.line = input.line;
+                                return result;
+                            }
+                            case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
+                                result.match = true;
+                                result.value = input.range[0..2].to!string();
+                                result.rest.range = input.range[2..$];
+                                result.rest.position = input.position + 2;
+                                result.rest.line = input.line;
+                                return result;
+                            }
+                            default:{
                             }
                         }
                     }
-                    result.error = Error("escape sequence", input.line);
-                    return result;
+                }else{
+                    auto c1 = input.range.front;
+                    if(c1 == '\\'){
+                        input.range.popFront;
+                        auto c2 = input.range.front;
+                        switch(c2){
+                            case 'u':{
+                                result.match = true;
+                                input.range.popFront;
+                                char[6] data;
+                                data[0..2] = "\\u";
+                                foreach(idx; 2..6){
+                                    data[idx] = cast(char)input.range.front;
+                                    input.range.popFront;
+                                }
+                                result.value = to!string(data);
+                                result.rest.range = input.range;
+                                result.rest.position = input.position + 6;
+                                result.rest.line = input.line;
+                                return result;
+                            }
+                            case 'U':{
+                                result.match = true;
+                                input.range.popFront;
+                                char[10] data;
+                                data[0..2] = "\\U";
+                                foreach(idx; 2..10){
+                                    data[idx] = cast(char)input.range.front;
+                                    input.range.popFront;
+                                }
+                                result.value = to!string(data);
+                                result.rest.range = input.range;
+                                result.rest.position = input.position + 10;
+                                result.rest.line = input.line;
+                                return result;
+                            }
+                            case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
+                                result.match = true;
+                                input.range.popFront;
+                                result.value = "\\" ~ to!string(c2);
+                                result.rest.position = input.position + 2;
+                                result.rest.range = input.range;
+                                result.rest.line = input.line;
+                                return result;
+                            }
+                            default:{
+                            }
+                        }
+                    }
                 }
+                result.error = Error("escape sequence", input.line);
+                return result;
             }
-            alias combinateMemoize!impl parseEscapeSequence;
         }
 
         unittest{
@@ -698,38 +683,35 @@ final class CallerInformation{
 
     // parseSpace
         template parseSpace(){
-            struct impl{
-                alias string ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    typeof(return) result;
-                    static if(isSomeString!R){
-                        if(input.range.length > 0 && (input.range[0] == ' ' || input.range[0] == '\n' || input.range[0] == '\t' || input.range[0] == '\r' || input.range[0] == '\f')){
+            alias string ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                typeof(return) result;
+                static if(isSomeString!R){
+                    if(input.range.length > 0 && (input.range[0] == ' ' || input.range[0] == '\n' || input.range[0] == '\t' || input.range[0] == '\r' || input.range[0] == '\f')){
+                        result.match = true;
+                        result.value = input.range[0..1].to!string();
+                        result.rest.range = input.range[1..$];
+                        result.rest.position = input.position + 1;
+                        result.rest.line = (input.range[0] == '\n' ? input.line + 1 : input.line);
+                        return result;
+                    }
+                }else{
+                    if(!input.range.empty){
+                        Unqual!(ElementType!R) c = input.range.front;
+                        if(c == ' ' || c == '\n' || c == '\t' || c == '\r' || c == '\f'){
                             result.match = true;
-                            result.value = input.range[0..1].to!string();
-                            result.rest.range = input.range[1..$];
+                            result.value = c.to!string();
+                            input.range.popFront;
+                            result.rest.range = input.range;
                             result.rest.position = input.position + 1;
-                            result.rest.line = (input.range[0] == '\n' ? input.line + 1 : input.line);
+                            result.rest.line = (c == '\n' ? input.line + 1 : input.line);
                             return result;
                         }
-                    }else{
-                        if(!input.range.empty){
-                            Unqual!(ElementType!R) c = input.range.front;
-                            if(c == ' ' || c == '\n' || c == '\t' || c == '\r' || c == '\f'){
-                                result.match = true;
-                                result.value = c.to!string();
-                                input.range.popFront;
-                                result.rest.range = input.range;
-                                result.rest.position = input.position + 1;
-                                result.rest.line = (c == '\n' ? input.line + 1 : input.line);
-                                return result;
-                            }
-                        }
                     }
-                    result.error = Error("space", input.line);
-                    return result;
                 }
+                result.error = Error("space", input.line);
+                return result;
             }
-            alias combinateMemoize!impl parseSpace;
         }
 
         unittest{
@@ -755,19 +737,16 @@ final class CallerInformation{
 
     // parseEOF
         template parseEOF(){
-            struct impl{
-                alias None ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    typeof(return) result;
-                    if(input.range.empty){
-                        result.match = true;
-                    }else{
-                        result.error = Error("EOF", input.line);
-                    }
-                    return result;
+            alias None ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                typeof(return) result;
+                if(input.range.empty){
+                    result.match = true;
+                }else{
+                    result.error = Error("EOF", input.line);
                 }
+                return result;
             }
-            alias combinateMemoize!impl parseEOF;
         }
 
         unittest{
@@ -794,13 +773,10 @@ final class CallerInformation{
 // getters
     // getLine
         template getLine(){
-            struct impl{
-                alias size_t ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    return result(true, input.line, input, Error.init);
-                }
+            alias size_t ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                return result(true, input.line, input, Error.init);
             }
-            alias combinateMemoize!impl getLine;
         }
 
         unittest{
@@ -819,13 +795,10 @@ final class CallerInformation{
 
     // getCallerLine
         template getCallerLine(){
-            struct impl{
-                alias size_t ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    return result(true, info.line, input, Error.init);
-                }
+            alias size_t ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                return result(true, info.line, input, Error.init);
             }
-            alias combinateMemoize!impl getCallerLine;
         }
 
         unittest{
@@ -844,13 +817,10 @@ final class CallerInformation{
 
     // getCallerFile
         template getCallerFile(){
-            struct impl{
-                alias string ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    return result(true, info.file, input, Error.init);
-                }
+            alias string ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                return result(true, info.file, input, Error.init);
             }
-            alias combinateMemoize!impl getCallerFile;
         }
 
 // combinators
@@ -892,19 +862,16 @@ final class CallerInformation{
     // combinateUnTuple
         template combinateUnTuple(alias parser){
             static if(isTuple!(ParserType!parser) && ParserType!parser.Types.length == 1){
-                struct impl{
-                    alias ParserType!parser.Types[0] ResultType;
-                    static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                        typeof(return) result;
-                        auto r = parser.parse(input, memo, info);
-                        result.match = r.match;
-                        result.value = r.value[0];
-                        result.rest = r.rest;
-                        result.error = r.error;
-                        return result;
-                    }
+                alias ParserType!parser.Types[0] ResultType;
+                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                    typeof(return) result;
+                    auto r = parser.parse(input, memo, info);
+                    result.match = r.match;
+                    result.value = r.value[0];
+                    result.rest = r.rest;
+                    result.error = r.error;
+                    return result;
                 }
-                alias combinateMemoize!impl combinateUnTuple;
             }else{
                 alias combinateMemoize!parser combinateUnTuple;
             }
@@ -1019,46 +986,43 @@ final class CallerInformation{
         }
 
         template combinateSequenceImpl(parsers...){
-            struct impl{
-                alias CombinateSequenceImplType!(parsers) ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    typeof(return) result;
-                    static if(parsers.length == 1){
-                        auto r = parsers[0].parse(input, memo, info);
-                        if(r.match){
+            alias CombinateSequenceImplType!(parsers) ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                typeof(return) result;
+                static if(parsers.length == 1){
+                    auto r = parsers[0].parse(input, memo, info);
+                    if(r.match){
+                        result.match = true;
+                        static if(isTuple!(ParserType!(parsers[0]))){
+                            result.value = r.value;
+                        }else{
+                            result.value = tuple(r.value);
+                        }
+                        result.rest = r.rest;
+                    }else{
+                        result.error = r.error;
+                    }
+                }else{
+                    auto r1 = parsers[0].parse(input, memo, info);
+                    if(r1.match){
+                        auto r2 = combinateSequenceImpl!(parsers[1..$]).parse(r1.rest, memo, info);
+                        if(r2.match){
                             result.match = true;
                             static if(isTuple!(ParserType!(parsers[0]))){
-                                result.value = r.value;
+                                result.value = tuple(r1.value.field, r2.value.field);
                             }else{
-                                result.value = tuple(r.value);
+                                result.value = tuple(r1.value, r2.value.field);
                             }
-                            result.rest = r.rest;
+                            result.rest = r2.rest;
                         }else{
-                            result.error = r.error;
+                            result.error = r2.error;
                         }
                     }else{
-                        auto r1 = parsers[0].parse(input, memo, info);
-                        if(r1.match){
-                            auto r2 = combinateSequenceImpl!(parsers[1..$]).parse(r1.rest, memo, info);
-                            if(r2.match){
-                                result.match = true;
-                                static if(isTuple!(ParserType!(parsers[0]))){
-                                    result.value = tuple(r1.value.field, r2.value.field);
-                                }else{
-                                    result.value = tuple(r1.value, r2.value.field);
-                                }
-                                result.rest = r2.rest;
-                            }else{
-                                result.error = r2.error;
-                            }
-                        }else{
-                            result.error = r1.error;
-                        }
+                        result.error = r1.error;
                     }
-                    return result;
                 }
+                return result;
             }
-            alias combinateMemoize!impl combinateSequenceImpl;
         }
 
         unittest{
@@ -1109,22 +1073,19 @@ final class CallerInformation{
         }
 
         template combinateChoice(parsers...){
-            struct impl{
-                alias CommonParserType!(parsers) ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    static assert(parsers.length > 0);
-                    static if(parsers.length == 1){
-                        return parsers[0].parse(input, memo, info);
-                    }else{
-                        auto r = parsers[0].parse(input.save, memo, info);
-                        if(r.match){
-                            return r;
-                        }
-                        return combinateChoice!(parsers[1..$]).parse(input, memo, info);
+            alias CommonParserType!(parsers) ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                static assert(parsers.length > 0);
+                static if(parsers.length == 1){
+                    return parsers[0].parse(input, memo, info);
+                }else{
+                    auto r = parsers[0].parse(input.save, memo, info);
+                    if(r.match){
+                        return r;
                     }
+                    return combinateChoice!(parsers[1..$]).parse(input, memo, info);
                 }
             }
-            alias combinateMemoize!impl combinateChoice;
         }
 
         unittest{
@@ -1157,40 +1118,37 @@ final class CallerInformation{
 
     // combinateMore
         template combinateMore(int n, alias parser, alias sep){
-            struct impl{
-                alias ParserType!(parser)[] ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    typeof(return) result;
-                    Input!R rest = input;
-                    while(true){
-                        auto input1 = rest.save;
-                        auto r1 = parser.parse(input1, memo, info);
-                        if(r1.match){
-                            //result.value = result.value ~ r1.value;
-                            result.value ~= r1.value;
-                            rest = r1.rest;
-                            auto input2 = rest.save;
-                            auto r2 = sep.parse(input2, memo, info);
-                            if(r2.match){
-                                rest = r2.rest;
-                            }else{
-                                break;
-                            }
+            alias ParserType!(parser)[] ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                typeof(return) result;
+                Input!R rest = input;
+                while(true){
+                    auto input1 = rest.save;
+                    auto r1 = parser.parse(input1, memo, info);
+                    if(r1.match){
+                        //result.value = result.value ~ r1.value;
+                        result.value ~= r1.value;
+                        rest = r1.rest;
+                        auto input2 = rest.save;
+                        auto r2 = sep.parse(input2, memo, info);
+                        if(r2.match){
+                            rest = r2.rest;
                         }else{
-                            if(result.value.length < n){
-                                result.error = r1.error;
-                                return result;
-                            }else{
-                                break;
-                            }
+                            break;
+                        }
+                    }else{
+                        if(result.value.length < n){
+                            result.error = r1.error;
+                            return result;
+                        }else{
+                            break;
                         }
                     }
-                    result.match = true;
-                    result.rest = rest;
-                    return result;
                 }
+                result.match = true;
+                result.rest = rest;
+                return result;
             }
-            alias combinateMemoize!impl combinateMore;
         }
 
         template combinateMore0(alias parser, alias sep = success!()){
@@ -1238,23 +1196,20 @@ final class CallerInformation{
 
     // combinateOption
         template combinateOption(alias parser){
-            struct impl{
-                alias Option!(ParserType!parser) ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    typeof(return) result;
-                    result.match = true;
-                    auto r = parser.parse(input.save, memo, info);
-                    if(r.match){
-                        result.value = r.value;
-                        result.value.some = true;
-                        result.rest = r.rest;
-                    }else{
-                        result.rest = input;
-                    }
-                    return result;
+            alias Option!(ParserType!parser) ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                typeof(return) result;
+                result.match = true;
+                auto r = parser.parse(input.save, memo, info);
+                if(r.match){
+                    result.value = r.value;
+                    result.value.some = true;
+                    result.rest = r.rest;
+                }else{
+                    result.rest = input;
                 }
+                return result;
             }
-            alias combinateMemoize!impl combinateOption;
         }
 
         unittest{
@@ -1280,21 +1235,18 @@ final class CallerInformation{
 
     // combinateNone
         template combinateNone(alias parser){
-            struct impl{
-                alias None ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    typeof(return) result;
-                    auto r = parser.parse(input, memo, info);
-                    if(r.match){
-                        result.match = true;
-                        result.rest = r.rest;
-                    }else{
-                        result.error = r.error;
-                    }
-                    return result;
+            alias None ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                typeof(return) result;
+                auto r = parser.parse(input, memo, info);
+                if(r.match){
+                    result.match = true;
+                    result.rest = r.rest;
+                }else{
+                    result.error = r.error;
                 }
+                return result;
             }
-            alias combinateMemoize!impl combinateNone;
         }
 
         unittest{
@@ -1327,18 +1279,15 @@ final class CallerInformation{
 
     // combinateAndPred
         template combinateAndPred(alias parser){
-            struct impl{
-                alias None ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    typeof(return) result;
-                    result.rest = input;
-                    auto r = parser.parse(input, memo, info);
-                    result.match = r.match;
-                    result.error = r.error;
-                    return result;
-                }
+            alias None ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                typeof(return) result;
+                result.rest = input;
+                auto r = parser.parse(input, memo, info);
+                result.match = r.match;
+                result.error = r.error;
+                return result;
             }
-            alias combinateMemoize!impl combinateAndPred;
         }
 
         unittest{
@@ -1378,16 +1327,13 @@ final class CallerInformation{
 
     // combinateNotPred
         template combinateNotPred(alias parser){
-            struct impl{
-                alias None ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    typeof(return) result;
-                    result.rest = input;
-                    result.match = !parser.parse(input.save, memo, info).match;
-                    return result;
-                }
+            alias None ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                typeof(return) result;
+                result.rest = input;
+                result.match = !parser.parse(input.save, memo, info).match;
+                return result;
             }
-            alias combinateMemoize!impl combinateNotPred;
         }
 
         unittest{
@@ -1427,32 +1373,29 @@ final class CallerInformation{
         }
 
         template combinateConvert(alias parser, alias converter){
-            struct impl{
-                alias CombinateConvertType!(converter, ParserType!parser) ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    typeof(return) result;
-                    auto r = parser.parse(input, memo, info);
-                    if(r.match){
-                        result.match = true;
-                        static if(__traits(compiles, converter(r.value.field))){
-                            result.value = converter(r.value.field);
-                        }else static if(__traits(compiles, new converter(r.value.field))){
-                            result.value = new converter(r.value.field);
-                        }else static if(__traits(compiles, converter(r.value))){
-                                result.value = converter(r.value);
-                        }else static if(__traits(compiles, new converter(r.value))){
-                            result.value = new converter(r.value);
-                        }else{
-                                static assert(false, converter.mangleof ~ " cannot call with argument type " ~ typeof(r.value).stringof);
-                        }
-                        result.rest = r.rest;
+            alias CombinateConvertType!(converter, ParserType!parser) ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                typeof(return) result;
+                auto r = parser.parse(input, memo, info);
+                if(r.match){
+                    result.match = true;
+                    static if(__traits(compiles, converter(r.value.field))){
+                        result.value = converter(r.value.field);
+                    }else static if(__traits(compiles, new converter(r.value.field))){
+                        result.value = new converter(r.value.field);
+                    }else static if(__traits(compiles, converter(r.value))){
+                            result.value = converter(r.value);
+                    }else static if(__traits(compiles, new converter(r.value))){
+                        result.value = new converter(r.value);
                     }else{
-                        result.error = r.error;
+                            static assert(false, converter.mangleof ~ " cannot call with argument type " ~ typeof(r.value).stringof);
                     }
-                    return result;
+                    result.rest = r.rest;
+                }else{
+                    result.error = r.error;
                 }
+                return result;
             }
-            alias combinateMemoize!impl combinateConvert;
         }
 
         unittest{
@@ -1478,24 +1421,21 @@ final class CallerInformation{
 
     // combinateCheck
         template combinateCheck(alias parser, alias checker){
-            struct impl{
-                alias ParserType!parser ResultType;
-                static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                    typeof(return) result;
-                    auto r = parser.parse(input, memo, info);
-                    if(r.match){
-                        if(checker(r.value)){
-                            result = r;
-                        }else{
-                            result.error = Error("passing check", input.line);
-                        }
+            alias ParserType!parser ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                typeof(return) result;
+                auto r = parser.parse(input, memo, info);
+                if(r.match){
+                    if(checker(r.value)){
+                        result = r;
                     }else{
-                        result.error = r.error;
+                        result.error = Error("passing check", input.line);
                     }
-                    return result;
+                }else{
+                    result.error = r.error;
                 }
+                return result;
             }
-            alias combinateMemoize!impl combinateCheck;
         }
 
         unittest{
