@@ -94,6 +94,7 @@ unittest{
     static assert(isCharRange!(TestRange! char));
     static assert(isCharRange!(TestRange!wchar));
     static assert(isCharRange!(TestRange!dchar));
+    static assert(!isCharRange!int);
 }
 
 public:
