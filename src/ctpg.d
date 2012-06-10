@@ -379,6 +379,7 @@ final class CallerInformation{
                         result.rest.line = input.line + breadth.line;
                         return result;
                     }
+                    result.error = Error('"' ~ str ~ '"', input.line);
                 }else static if(isCharRange!R){
                     enum convertedString = staticConvertString!(str, R);
                     foreach(c; convertedString){
@@ -394,13 +395,13 @@ final class CallerInformation{
                     result.rest.position = input.position + breadth.width;
                     result.rest.line = input.line + breadth.line;
                     return result;
+
+                    Lerror:
+
+                    result.error = Error('"' ~ str ~ '"', input.line);
                 }else{
                     throw new Exception("");
                 }
-
-                Lerror:
-
-                result.error = Error('"' ~ str ~ '"', input.line);
                 return result;
             }
         }
@@ -434,6 +435,11 @@ final class CallerInformation{
                 assert(getResult!(parseString!"hello")(testRange("hllo world" )) == result(false, "", makeInput(testRange("" )), Error("\"hello\"")));
                 assert(getResult!(parseString!"hello")(testRange("hllo world"w)) == result(false, "", makeInput(testRange(""w)), Error("\"hello\"")));
                 assert(getResult!(parseString!"hello")(testRange("hllo world"d)) == result(false, "", makeInput(testRange(""d)), Error("\"hello\"")));
+
+                try{
+                    scope(success) assert(false);
+                    auto result = getResult!(parseString!"hello")(6);
+                }catch(Exception ex){}
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -534,6 +540,11 @@ final class CallerInformation{
                             return result;
                         }
                     }
+                    if(low == dchar.min && high == dchar.max){
+                        result.error = Error("any char", input.line);
+                    }else{
+                        result.error = Error("c: '" ~ low.to!string() ~ "' <= c <= '" ~ high.to!string() ~ "'", input.line);
+                    }
                 }else static if(isCharRange!R){
                     if(!input.range.empty){
                         dchar c = decodeRange(input.range);
@@ -546,13 +557,13 @@ final class CallerInformation{
                             return result;
                         }
                     }
+                    if(low == dchar.min && high == dchar.max){
+                        result.error = Error("any char", input.line);
+                    }else{
+                        result.error = Error("c: '" ~ low.to!string() ~ "' <= c <= '" ~ high.to!string() ~ "'", input.line);
+                    }
                 }else{
-                    throw new Exception();
-                }
-                if(low == dchar.min && high == dchar.max){
-                    result.error = Error("any char", input.line);
-                }else{
-                    result.error = Error("c: '" ~ low.to!string() ~ "' <= c <= '" ~ high.to!string() ~ "'", input.line);
+                    throw new Exception("");
                 }
                 return result;
             }
@@ -580,6 +591,11 @@ final class CallerInformation{
                 assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("hello world" )) == result(false, "", makeInput(testRange("" )), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
                 assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("hello world"w)) == result(false, "", makeInput(testRange(""w)), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
                 assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("hello world"d)) == result(false, "", makeInput(testRange(""d)), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
+
+                try{
+                    scope(success) assert(false);
+                    auto result = getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(6);
+                }catch(Exception ex){}
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -622,6 +638,7 @@ final class CallerInformation{
                             }
                         }
                     }
+                    result.error = Error("escape sequence", input.line);
                 }else static if(isCharRange!R){
                     auto c1 = input.range.front;
                     if(c1 == '\\'){
@@ -671,10 +688,10 @@ final class CallerInformation{
                             }
                         }
                     }
+                    result.error = Error("escape sequence", input.line);
                 }else{
                     throw new Exception("");
                 }
-                result.error = Error("escape sequence", input.line);
                 return result;
             }
         }
@@ -715,6 +732,11 @@ final class CallerInformation{
                 assert(getResult!(parseEscapeSequence!())(testRange("鬱hoge" )) == result(false, "", makeInput(testRange("" )), Error("escape sequence")));
                 assert(getResult!(parseEscapeSequence!())(testRange("鬱hoge"w)) == result(false, "", makeInput(testRange(""w)), Error("escape sequence")));
                 assert(getResult!(parseEscapeSequence!())(testRange("鬱hoge"d)) == result(false, "", makeInput(testRange(""d)), Error("escape sequence")));
+
+                try{
+                    scope(success) assert(false);
+                    auto result = getResult!(parseEscapeSequence!())(6);
+                }catch(Exception ex){}
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -735,7 +757,8 @@ final class CallerInformation{
                         result.rest.line = (input.range[0] == '\n' ? input.line + 1 : input.line);
                         return result;
                     }
-                }else if(isCharRange!R){
+                    result.error = Error("space", input.line);
+                }else static if(isCharRange!R){
                     if(!input.range.empty){
                         Unqual!(ElementType!R) c = input.range.front;
                         if(c == ' ' || c == '\n' || c == '\t' || c == '\r' || c == '\f'){
@@ -748,10 +771,10 @@ final class CallerInformation{
                             return result;
                         }
                     }
+                    result.error = Error("space", input.line);
                 }else{
                     throw new Exception("");
                 }
-                result.error = Error("space", input.line);
                 return result;
             }
         }
@@ -771,6 +794,11 @@ final class CallerInformation{
                 assert(getResult!(parseSpace!())(testRange("hoge" )) == result(false, "", makeInput(testRange("" )), Error("space")));
                 assert(getResult!(parseSpace!())(testRange("hoge"w)) == result(false, "", makeInput(testRange(""w)), Error("space")));
                 assert(getResult!(parseSpace!())(testRange("hoge"d)) == result(false, "", makeInput(testRange(""d)), Error("space")));
+
+                try{
+                    scope(success) assert(false);
+                    auto result = getResult!(parseSpace!())(6);
+                }catch(Exception ex){}
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -785,7 +813,11 @@ final class CallerInformation{
                 if(input.range.empty){
                     result.match = true;
                 }else{
-                    result.error = Error("EOF", input.line);
+                    static if(isSomeString!R || isCharRange!R){
+                        result.error = Error("EOF", input.line);
+                    }else{
+                        result.error = Error("EOF");
+                    }
                 }
                 return result;
             }
@@ -833,6 +865,11 @@ final class CallerInformation{
                 assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n" )) == result(true, 3LU, makeInput(testRange("" ), 2, 3), Error.init));
                 assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"w)) == result(true, 3LU, makeInput(testRange(""w), 2, 3), Error.init));
                 assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"d)) == result(true, 3LU, makeInput(testRange(""d), 2, 3), Error.init));
+
+                try{
+                    scope(failure) assert(true);
+                    auto result = getResult!(combinateSequence!(parseSpaces!(), getLine!()))(6);
+                }catch(Exception ex){}
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1789,7 +1826,11 @@ string getSource(size_t callerLine = __LINE__, string callerFile = __FILE__)(str
 }
 
 auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, R)(R input){
-    return fun.parse(Input!R(input, 0, 1), null, new CallerInformation(callerLine, callerFile));
+    static if(isSomeString!R || isCharRange!R){
+        return fun.parse(Input!R(input, 0, 1), null, new CallerInformation(callerLine, callerFile));
+    }else{
+        return fun.parse(Input!R(input, 0), null, new CallerInformation(callerLine, callerFile));
+    }
 }
 
 auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
