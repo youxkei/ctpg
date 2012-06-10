@@ -364,7 +364,7 @@ final class CallerInformation{
         }
 
         template parseString(string str){
-            static assert(srt.length);
+            static assert(str.length);
             alias string ResultType;
             static Result!(R, ResultType) parse(R)(Input!R _input, auto ref memo_t memo, in CallerInformation info){
                 auto input = _input; // Somehow this parser doesn't work well without this line.
@@ -448,7 +448,7 @@ final class CallerInformation{
         }
 
     // parseCharRange
-        dchar decodeRange(R)(ref R range){
+        dchar decodeRange(R)(auto ref R range){
             dchar result;
             static if(is(Unqual!(ElementType!R) == char)){
                 if(!(range.front & 0b_1000_0000)){
@@ -507,14 +507,14 @@ final class CallerInformation{
 
         unittest{
             enum dg = {
-                assert(decodeRange([testRange("\u0001")][0]) == '\u0001');
-                assert(decodeRange([testRange("\u0081")][0]) == '\u0081');
-                assert(decodeRange([testRange("\u0801")][0]) == '\u0801');
-                assert(decodeRange([testRange("\U00012345")][0]) == '\U00012345');
-                assert(decodeRange([testRange("\u0001"w)][0]) == '\u0001');
-                assert(decodeRange([testRange("\uE001"w)][0]) == '\uE001');
-                assert(decodeRange([testRange("\U00012345"w)][0]) == '\U00012345');
-                assert(decodeRange([testRange("\U0010FFFE")][0]) == '\U0010FFFE');
+                assert(decodeRange(testRange("\u0001")) == '\u0001');
+                assert(decodeRange(testRange("\u0081")) == '\u0081');
+                assert(decodeRange(testRange("\u0801")) == '\u0801');
+                assert(decodeRange(testRange("\U00012345")) == '\U00012345');
+                assert(decodeRange(testRange("\u0001"w)) == '\u0001');
+                assert(decodeRange(testRange("\uE001"w)) == '\uE001');
+                assert(decodeRange(testRange("\U00012345"w)) == '\U00012345');
+                assert(decodeRange(testRange("\U0010FFFE")) == '\U0010FFFE');
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
