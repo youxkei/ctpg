@@ -391,8 +391,12 @@ final class CallerInformation{
                     result.rest.position = input.position + breadth.width;
                     result.rest.line = input.line + breadth.line;
                     return result;
+                }else{
+                    throw new Exception("");
                 }
-            Lerror:
+
+                Lerror:
+
                 result.error = Error('"' ~ str ~ '"', input.line);
                 return result;
             }
@@ -435,8 +439,6 @@ final class CallerInformation{
 
     // parseCharRange
         dchar decodeRange(R)(ref R range){
-            static assert(isForwardRange!R);
-            static assert(isSomeChar!(Unqual!(ElementType!R)));
             dchar result;
             static if(is(Unqual!(ElementType!R) == char)){
                 if(!(range.front & 0b_1000_0000)){
@@ -529,7 +531,7 @@ final class CallerInformation{
                             return result;
                         }
                     }
-                }else{
+                }else static if(isCharRange!R){
                     if(!input.range.empty){
                         dchar c = decodeRange(input.range);
                         if(low <= c && c <= high){
@@ -541,6 +543,8 @@ final class CallerInformation{
                             return result;
                         }
                     }
+                }else{
+                    throw new Exception();
                 }
                 if(low == dchar.min && high == dchar.max){
                     result.error = Error("any char", input.line);
@@ -615,7 +619,7 @@ final class CallerInformation{
                             }
                         }
                     }
-                }else{
+                }else static if(isCharRange!R){
                     auto c1 = input.range.front;
                     if(c1 == '\\'){
                         input.range.popFront;
@@ -664,6 +668,8 @@ final class CallerInformation{
                             }
                         }
                     }
+                }else{
+                    throw new Exception("");
                 }
                 result.error = Error("escape sequence", input.line);
                 return result;
@@ -726,7 +732,7 @@ final class CallerInformation{
                         result.rest.line = (input.range[0] == '\n' ? input.line + 1 : input.line);
                         return result;
                     }
-                }else{
+                }else if(isCharRange!R){
                     if(!input.range.empty){
                         Unqual!(ElementType!R) c = input.range.front;
                         if(c == ' ' || c == '\n' || c == '\t' || c == '\r' || c == '\f'){
@@ -739,6 +745,8 @@ final class CallerInformation{
                             return result;
                         }
                     }
+                }else{
+                    throw new Exception("");
                 }
                 result.error = Error("space", input.line);
                 return result;
@@ -806,7 +814,11 @@ final class CallerInformation{
         template getLine(){
             alias size_t ResultType;
             static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                return result(true, input.line, input, Error.init);
+                static if(isSomeString!R || isCharRange!R){
+                    return result(true, input.line, input, Error.init);
+                }else{
+                    throw new Exception("");
+                }
             }
         }
 
@@ -1107,14 +1119,18 @@ final class CallerInformation{
             alias CommonParserType!(parsers) ResultType;
             static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
                 static assert(parsers.length > 0);
-                static if(parsers.length == 1){
-                    return parsers[0].parse(input, memo, info);
-                }else{
-                    auto r = parsers[0].parse(input.save, memo, info);
-                    if(r.match){
-                        return r;
+                static if(isForwardRange!R){
+                    static if(parsers.length == 1){
+                        return parsers[0].parse(input, memo, info);
+                    }else{
+                        auto r = parsers[0].parse(input.save, memo, info);
+                        if(r.match){
+                            return r;
+                        }
+                        return combinateChoice!(parsers[1..$]).parse(input, memo, info);
                     }
-                    return combinateChoice!(parsers[1..$]).parse(input, memo, info);
+                }else{
+                    throw new Exception("");
                 }
             }
         }
@@ -1151,34 +1167,37 @@ final class CallerInformation{
         template combinateMore(int n, alias parser, alias sep){
             alias ParserType!(parser)[] ResultType;
             static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                typeof(return) result;
-                Input!R rest = input;
-                while(true){
-                    auto input1 = rest.save;
-                    auto r1 = parser.parse(input1, memo, info);
-                    if(r1.match){
-                        //result.value = result.value ~ r1.value;
-                        result.value ~= r1.value;
-                        rest = r1.rest;
-                        auto input2 = rest.save;
-                        auto r2 = sep.parse(input2, memo, info);
-                        if(r2.match){
-                            rest = r2.rest;
+                static if(isForwardRange!R){
+                    typeof(return) result;
+                    Input!R rest = input;
+                    while(true){
+                        auto input1 = rest.save;
+                        auto r1 = parser.parse(input1, memo, info);
+                        if(r1.match){
+                            result.value ~= r1.value;
+                            rest = r1.rest;
+                            auto input2 = rest.save;
+                            auto r2 = sep.parse(input2, memo, info);
+                            if(r2.match){
+                                rest = r2.rest;
+                            }else{
+                                break;
+                            }
                         }else{
-                            break;
-                        }
-                    }else{
-                        if(result.value.length < n){
-                            result.error = r1.error;
-                            return result;
-                        }else{
-                            break;
+                            if(result.value.length < n){
+                                result.error = r1.error;
+                                return result;
+                            }else{
+                                break;
+                            }
                         }
                     }
+                    result.match = true;
+                    result.rest = rest;
+                    return result;
+                }else{
+                    throw new Exception("");
                 }
-                result.match = true;
-                result.rest = rest;
-                return result;
             }
         }
 
@@ -1229,17 +1248,21 @@ final class CallerInformation{
         template combinateOption(alias parser){
             alias Option!(ParserType!parser) ResultType;
             static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
-                typeof(return) result;
-                result.match = true;
-                auto r = parser.parse(input.save, memo, info);
-                if(r.match){
-                    result.value = r.value;
-                    result.value.some = true;
-                    result.rest = r.rest;
+                static if(isForwardRange!R){
+                    typeof(return) result;
+                    result.match = true;
+                    auto r = parser.parse(input.save, memo, info);
+                    if(r.match){
+                        result.value = r.value;
+                        result.value.some = true;
+                        result.rest = r.rest;
+                    }else{
+                        result.rest = input;
+                    }
+                    return result;
                 }else{
-                    result.rest = input;
+                    throw new Exception("");
                 }
-                return result;
             }
         }
 
