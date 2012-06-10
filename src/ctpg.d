@@ -363,7 +363,8 @@ final class CallerInformation{
             }());
         }
 
-        template parseString(string str) if(str.length > 0){
+        template parseString(string str){
+            static assert(srt.length);
             alias string ResultType;
             static Result!(R, ResultType) parse(R)(Input!R _input, auto ref memo_t memo, in CallerInformation info){
                 auto input = _input; // Somehow this parser doesn't work well without this line.
