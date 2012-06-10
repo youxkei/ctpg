@@ -357,11 +357,8 @@ final class CallerInformation{
 
         unittest{
             static assert({
-                assert(countBreadth("これ\nとこれ") == Tuple!(size_t, "width", size_t, "line")(6, 1));
-                assert(countBreadth("これ\nとこれ\nとさらにこれ") == Tuple!(size_t, "width", size_t, "line")(13, 2));
-                {
-                    auto result = countBreadth("helloワールド");
-                }
+                assert(countBreadth("これ\nとこれ") == tuple(6, 1));
+                assert(countBreadth("これ\nとこれ\nとさらにこれ") == tuple(13, 2));
                 return true;
             }());
         }
