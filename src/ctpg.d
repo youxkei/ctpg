@@ -90,6 +90,12 @@ template isCharRange(R){
     enum isCharRange = isInputRange!R && isSomeChar!(ElementType!R);
 }
 
+unittest{
+    static assert(isCharRange!(TestRange! char));
+    static assert(isCharRange!(TestRange!wchar));
+    static assert(isCharRange!(TestRange!dchar));
+}
+
 public:
 
 final class CallerInformation{
