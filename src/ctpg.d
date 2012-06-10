@@ -12,7 +12,7 @@ module ctpg;
 
 import std.array: save, empty, join;
 import std.conv: to;
-import std.range: isForwardRange, ElementType;
+import std.range: isInputRange, isForwardRange, ElementType;
 import std.traits: CommonType, isCallable, ReturnType, isSomeChar, isSomeString, Unqual, isAssignable, isArray;
 import std.typetuple: staticMap, TypeTuple;
 
@@ -126,16 +126,36 @@ final class CallerInformation{
 
 // struct Input
     struct Input(R){
-        static assert(isSomeString!R || isForwardRange!R);
+        R range;
+        size_t position;
 
-        invariant(){
-            assert(line >= 1);
-        }
-
-        public{
-            R range;
-            size_t position;
+        static if(isSomeString!R){
             size_t line = 1;
+
+            invariant(){
+                assert(line >= 1);
+            }
+
+            const pure @safe nothrow
+            Input save(){
+                return this;
+            }
+
+            const pure @safe nothrow
+            bool empty(){
+                return range.length == 0;
+            }
+
+            const pure @safe nothrow
+            equals_t opEquals(in Input rhs){
+                return range == rhs.range && position == rhs.position && line == rhs.line;
+            }
+        }else static if(isInputRange!R && isSomeChar!(ElementType!R)){
+            size_t line = 1;
+
+            invariant(){
+                assert(line >= 1);
+            }
 
             static if(isForwardRange!R){
                 //cannot apply some qualifiers due to unclearness of R
@@ -143,15 +163,21 @@ final class CallerInformation{
                     return Input(range.save, position, line);
                 }
 
-                @property
-                bool empty(){
-                    return range.empty;
-                }
             }
 
-            pure @safe nothrow
-            bool opEquals(in Input lhs){
-                return range == lhs.range && position == lhs.position && line == lhs.line;
+            @property
+            bool empty(){
+                return range.empty;
+            }
+
+            const pure @safe nothrow
+            equals_t opEquals(in Input rhs){
+                return range == rhs.range && position == rhs.position && line == rhs.line;
+            }
+        }else{
+            const pure @safe nothrow
+            equals_t opEquals(in Input rhs){
+                return range == rhs.range && position == rhs.position;
             }
         }
     }
