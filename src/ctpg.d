@@ -86,6 +86,10 @@ unittest{
     static assert(is(ParserType!(TestParser!long) == long));
 }
 
+template isCharRange(R){
+    enum isCharRange = isInputRange!R && isSomeChar!(ElementType!R);
+}
+
 public:
 
 final class CallerInformation{
@@ -150,7 +154,7 @@ final class CallerInformation{
             equals_t opEquals(in Input rhs){
                 return range == rhs.range && position == rhs.position && line == rhs.line;
             }
-        }else static if(isInputRange!R && isSomeChar!(ElementType!R)){
+        }else static if(isCharRange!R){
             size_t line = 1;
 
             invariant(){
@@ -361,9 +365,9 @@ final class CallerInformation{
             static Result!(R, ResultType) parse(R)(Input!R _input, auto ref memo_t memo, in CallerInformation info){
                 auto input = _input; // Somehow this parser doesn't work well without this line.
                 enum breadth = countBreadth(str);
-                enum convertedString = staticConvertString!(str, R);
                 typeof(return) result;
                 static if(isSomeString!R){
+                    enum convertedString = staticConvertString!(str, R);
                     if(input.range.length >= convertedString.length && convertedString == input.range[0..convertedString.length]){
                         result.match = true;
                         result.value = str;
@@ -372,7 +376,8 @@ final class CallerInformation{
                         result.rest.line = input.line + breadth.line;
                         return result;
                     }
-                }else{
+                }else static if(isCharRange!R){
+                    enum convertedString = staticConvertString!(str, R);
                     foreach(c; convertedString){
                         if(input.range.empty || c != input.range.front){
                             goto Lerror;
