@@ -2334,7 +2334,7 @@ bool isMatch(alias fun)(string src){
                             parseString!"("
                         ),
                         parseSpaces!(),
-                        convExp!(),
+                        choiceExp!(),
                         parseSpaces!(),
                         combinateNone!(
                             parseString!")"
