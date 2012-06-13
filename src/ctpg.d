@@ -26,8 +26,8 @@ alias Object[size_t][string] memo_t;
 version = memoize;
 
 //version = Issue_8038_Fixed
-debug = ctpg_compile_time;
-debug = ctpg;
+//debug = ctpg_compile_time;
+//debug = ctpg;
 
 private:
 
