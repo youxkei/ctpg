@@ -1838,7 +1838,7 @@ final class CallerInformation{
         }
 
 string generateParsers(size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
-    return src.parse!(defs, callerLine, callerFile);
+    return src.parse!(defs, callerLine, callerFile)();
 }
 
 string getSource(size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
