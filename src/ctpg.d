@@ -217,7 +217,7 @@ final class CallerInformation{
             }
 
             pure @safe nothrow
-            bool opEquals(in Result lhs){
+            bool opEquals(Result lhs){
                 return match == lhs.match && value == lhs.value && rest == lhs.rest && error == lhs.error;
             }
         }
