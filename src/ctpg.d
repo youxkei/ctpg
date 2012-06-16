@@ -1854,7 +1854,7 @@ auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FI
 }
 
 auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
-    auto result = src.getResult!(fun!(), callerLine, callerFile);
+    auto result = src.getResult!(fun!(), callerLine, callerFile)();
     if(result.match){
         return result.value;
     }else{
