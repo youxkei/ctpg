@@ -944,6 +944,23 @@ final class CallerInformation{
             }
         }
 
+    // combinateSkip
+        template combinateSkip(alias parser, alias skip){
+            alias ParserType!parser ResultType;
+            static Result!(R, ResultType) parse(R)(Input!R input, auto ref memo_t memo, in CallerInformation info){
+                return parser.parse(skip.parse(input, memo, info).rest, memo, info);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                assert(getResult!(combinateSkip!(parseString!"foo", parseString!" "))(" foo") == result(true, "foo", makeInput("" , 4), Error.init));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
     // combinateUnTuple
         template combinateUnTuple(alias parser){
             static if(isTuple!(ParserType!parser) && ParserType!parser.Types.length == 1){
