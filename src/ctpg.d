@@ -147,7 +147,7 @@ final class CallerInformation{
                 assert(line >= 1);
             }
 
-            const pure @safe nothrow
+            pure @safe nothrow
             Input save(){
                 return this;
             }
