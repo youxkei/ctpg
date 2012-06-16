@@ -34,7 +34,7 @@ private:
 import std.stdio;
 
 debug(ctpg) void main(){
-    "unittest passed".writeln;
+    "unittest passed".writeln();
 }
 
 version(unittest){
@@ -147,12 +147,12 @@ final class CallerInformation{
                 assert(line >= 1);
             }
 
-            pure @safe nothrow
+            pure @safe nothrow @property
             Input save(){
                 return this;
             }
 
-            const pure @safe nothrow
+            const pure @safe nothrow @property
             bool empty(){
                 return range.length == 0;
             }
@@ -170,6 +170,7 @@ final class CallerInformation{
 
             static if(isForwardRange!R){
                 //cannot apply some qualifiers due to unclearness of R
+                @property
                 Input save(){
                     return Input(range.save, position, line);
                 }
@@ -2274,7 +2275,7 @@ bool isMatch(alias fun)(string src){
                             parseString!"\""
                         )
                     ),
-                    function(string[] strs) => "parseString!\"" ~ strs.flat ~ "\""
+                    function(string[] strs) => "parseString!\"" ~ strs.flat() ~ "\""
                 ).parse(input, memo, info);
             }
         }
