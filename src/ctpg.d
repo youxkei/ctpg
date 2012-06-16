@@ -2630,7 +2630,10 @@ bool isMatch(alias fun)(string src){
                             combinateSequence!(
                                 parseSpaces!(),
                                 combinateNone!(
-                                    parseString!">>"
+                                    combinateChoice!(
+                                        parseString!"|",
+                                        parseString!">>"
+                                    )
                                 ),
                                 parseSpaces!(),
                                 combinateChoice!(
