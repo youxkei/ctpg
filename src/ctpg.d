@@ -157,9 +157,9 @@ final class CallerInformation{
                 return input.length == 0;
             }
 
-            const pure @safe nothrow
+            /+ const +/ pure @safe nothrow
             equals_t opEquals(Context rhs){
-                return input == rhs.input && position == rhs.position && line == rhs.line;
+                return input == rhs.input && position == rhs.position && line == rhs.line && state == rhs.state;
             }
         }else static if(isCharRange!R){
             size_t line = 1;
@@ -182,14 +182,14 @@ final class CallerInformation{
                 return input.empty;
             }
 
-            const pure @safe nothrow
+            /+ const +/ pure @safe nothrow
             equals_t opEquals(Context rhs){
-                return input == rhs.input && position == rhs.position && line == rhs.line;
+                return input == rhs.input && position == rhs.position && line == rhs.line && state == rhs.state;
             }
         }else{
-            const pure @safe nothrow
+            /+ const +/ pure @safe nothrow
             equals_t opEquals(Context rhs){
-                return input == rhs.input && position == rhs.position;
+                return input == rhs.input && position == rhs.position && state == rhs.state;
             }
         }
 
@@ -978,7 +978,7 @@ final class CallerInformation{
                     return result;
                 }
             }else{
-                alias combinateMemoize!parser combinateUnTuple;
+                alias parser combinateUnTuple;
             }
         }
 
