@@ -21,9 +21,6 @@ import std.utf: decode;
 public import std.typecons: Tuple, isTuple, tuple;
 
 alias Tuple!() None;
-alias Object[size_t][string] memo_t;
-
-version = memoize;
 
 //version = Issue_8038_Fixed
 //debug = ctpg_compile_time;
@@ -40,7 +37,7 @@ debug(ctpg) void main(){
 version(unittest){
     template TestParser(T){
         alias T ResultType;
-        Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+        Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
             return typeof(return)();
         }
     }
@@ -299,7 +296,7 @@ final class CallerInformation{
     // success
         template success(){
             alias None ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 return result(true, None.init, input, Error.init);
             }
         }
@@ -307,7 +304,7 @@ final class CallerInformation{
     // failure
         template failure(){
             alias None ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 return result(false, None.init, Context!R.init, Error.init);
             }
         }
@@ -370,7 +367,7 @@ final class CallerInformation{
         template parseString(string str){
             static assert(str.length);
             alias string ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R _input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R _input, in CallerInformation info){
                 auto input = _input; // Somehow this parser doesn't work well without this line.
                 enum breadth = countBreadth(str);
                 typeof(return) result;
@@ -529,7 +526,7 @@ final class CallerInformation{
             static assert(low <= high);
 
             alias string ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R _input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R _input, in CallerInformation info){
                 auto input = _input; // Somehow this parser doesn't work well without this line.
                 typeof(return) result;
                 static if(isSomeString!R){
@@ -610,7 +607,7 @@ final class CallerInformation{
     // parseEscapeSequence
         template parseEscapeSequence(){
             alias string ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 typeof(return) result;
                 static if(isSomeString!R){
                     if(input.input[0] == '\\'){
@@ -751,7 +748,7 @@ final class CallerInformation{
     // parseSpace
         template parseSpace(){
             alias string ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 typeof(return) result;
                 static if(isSomeString!R){
                     if(input.input.length > 0 && (input.input[0] == ' ' || input.input[0] == '\n' || input.input[0] == '\t' || input.input[0] == '\r' || input.input[0] == '\f')){
@@ -813,7 +810,7 @@ final class CallerInformation{
     // parseEOF
         template parseEOF(){
             alias None ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 typeof(return) result;
                 if(input.input.empty){
                     result.match = true;
@@ -853,7 +850,7 @@ final class CallerInformation{
     // getLine
         template getLine(){
             alias size_t ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 static if(isSomeString!R || isCharRange!R){
                     return result(true, input.line, input, Error.init);
                 }else{
@@ -884,7 +881,7 @@ final class CallerInformation{
     // getCallerLine
         template getCallerLine(){
             alias size_t ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 return result(true, info.line, input, Error.init);
             }
         }
@@ -906,52 +903,35 @@ final class CallerInformation{
     // getCallerFile
         template getCallerFile(){
             alias string ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 return result(true, info.file, input, Error.init);
             }
         }
 
 // combinators
     // combinateMemoize
-        version(memoize){
-            final class Wrapper(T){
-                this(T value){
-                    this.value = value;
-                }
-                T value;
-            }
-
-            Wrapper!T wrap(T)(T value){
-                return new Wrapper!T(value);
-            }
-
-            template combinateMemoize(alias parser){
-                alias ParserType!parser ResultType;
-                Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
-                    auto memo0 = parser.mangleof in memo;
-                    if(memo0){
-                        auto memo1 = input.position in *memo0;
-                        if(memo1){
-                            Object p = *memo1;
-                            return (cast(Wrapper!(Result!(R, ParserType!parser)))p).value;
-                        }
+        template combinateMemoize(alias parser){
+            alias ParserType!parser ResultType;
+            Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
+                if(!__ctfe){
+                    static ResultType[typeof(input)] memo;
+                    auto p = input in memo;
+                    if(p){
+                        return *p;
                     }
-                    auto result = parser.parse(input, memo, info);
-                    memo[parser.mangleof][input.position] = wrap(result);
+                    auto result = parser.parse(input, info);
                     return result;
+                }else{
+                    return parser.parse(input, info);
                 }
-            }
-        }else{
-            template combinateMemoize(alias parser){
-                alias parser combinateMemoize;
             }
         }
 
     // combinateSkip
         template combinateSkip(alias parser, alias skip){
             alias ParserType!parser ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
-                return parser.parse(skip.parse(input, memo, info).rest, memo, info);
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
+                return parser.parse(skip.parse(input, info).rest, info);
             }
         }
 
@@ -968,9 +948,9 @@ final class CallerInformation{
         template combinateUnTuple(alias parser){
             static if(isTuple!(ParserType!parser) && ParserType!parser.Types.length == 1){
                 alias ParserType!parser.Types[0] ResultType;
-                static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+                static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                     typeof(return) result;
-                    auto r = parser.parse(input, memo, info);
+                    auto r = parser.parse(input, info);
                     result.match = r.match;
                     result.value = r.value[0];
                     result.rest = r.rest;
@@ -1092,10 +1072,10 @@ final class CallerInformation{
 
         template combinateSequenceImpl(parsers...){
             alias CombinateSequenceImplType!(parsers) ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 typeof(return) result;
                 static if(parsers.length == 1){
-                    auto r = parsers[0].parse(input, memo, info);
+                    auto r = parsers[0].parse(input, info);
                     if(r.match){
                         result.match = true;
                         static if(isTuple!(ParserType!(parsers[0]))){
@@ -1108,9 +1088,9 @@ final class CallerInformation{
                         result.error = r.error;
                     }
                 }else{
-                    auto r1 = parsers[0].parse(input, memo, info);
+                    auto r1 = parsers[0].parse(input, info);
                     if(r1.match){
-                        auto r2 = combinateSequenceImpl!(parsers[1..$]).parse(r1.rest, memo, info);
+                        auto r2 = combinateSequenceImpl!(parsers[1..$]).parse(r1.rest, info);
                         if(r2.match){
                             result.match = true;
                             static if(isTuple!(ParserType!(parsers[0]))){
@@ -1166,8 +1146,8 @@ final class CallerInformation{
         }
 
     // combinateChoice
-        template CommonParserType(tparsers...){
-            alias CommonType!(staticMap!(ParserType, tparsers)) CommonParserType;
+        template CommonParserType(parsers...){
+            alias CommonType!(staticMap!(ParserType, parsers)) CommonParserType;
         }
 
         unittest{
@@ -1179,17 +1159,17 @@ final class CallerInformation{
 
         template combinateChoice(parsers...){
             alias CommonParserType!(parsers) ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 static assert(parsers.length > 0);
                 static if(isForwardRange!R){
                     static if(parsers.length == 1){
-                        return parsers[0].parse(input, memo, info);
+                        return parsers[0].parse(input, info);
                     }else{
-                        auto r = parsers[0].parse(input.save, memo, info);
+                        auto r = parsers[0].parse(input.save, info);
                         if(r.match){
                             return r;
                         }
-                        return combinateChoice!(parsers[1..$]).parse(input, memo, info);
+                        return combinateChoice!(parsers[1..$]).parse(input, info);
                     }
                 }else{
                     throw new Exception("");
@@ -1228,18 +1208,18 @@ final class CallerInformation{
     // combinateMore
         template combinateMore(int n, alias parser, alias sep){
             alias ParserType!(parser)[] ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 static if(isForwardRange!R){
                     typeof(return) result;
                     Context!R rest = input;
                     while(true){
                         auto input1 = rest.save;
-                        auto r1 = parser.parse(input1, memo, info);
+                        auto r1 = parser.parse(input1, info);
                         if(r1.match){
                             result.value ~= r1.value;
                             rest = r1.rest;
                             auto input2 = rest.save;
-                            auto r2 = sep.parse(input2, memo, info);
+                            auto r2 = sep.parse(input2, info);
                             if(r2.match){
                                 rest = r2.rest;
                             }else{
@@ -1309,11 +1289,11 @@ final class CallerInformation{
     // combinateOption
         template combinateOption(alias parser){
             alias Option!(ParserType!parser) ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 static if(isForwardRange!R){
                     typeof(return) result;
                     result.match = true;
-                    auto r = parser.parse(input.save, memo, info);
+                    auto r = parser.parse(input.save, info);
                     if(r.match){
                         result.value = r.value;
                         result.value.some = true;
@@ -1352,9 +1332,9 @@ final class CallerInformation{
     // combinateNone
         template combinateNone(alias parser){
             alias None ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 typeof(return) result;
-                auto r = parser.parse(input, memo, info);
+                auto r = parser.parse(input, info);
                 if(r.match){
                     result.match = true;
                     result.rest = r.rest;
@@ -1396,10 +1376,10 @@ final class CallerInformation{
     // combinateAndPred
         template combinateAndPred(alias parser){
             alias None ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 typeof(return) result;
                 result.rest = input;
-                auto r = parser.parse(input, memo, info);
+                auto r = parser.parse(input, info);
                 result.match = r.match;
                 result.error = r.error;
                 return result;
@@ -1444,10 +1424,10 @@ final class CallerInformation{
     // combinateNotPred
         template combinateNotPred(alias parser){
             alias None ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 typeof(return) result;
                 result.rest = input;
-                result.match = !parser.parse(input.save, memo, info).match;
+                result.match = !parser.parse(input.save, info).match;
                 return result;
             }
         }
@@ -1490,9 +1470,9 @@ final class CallerInformation{
 
         template combinateConvert(alias parser, alias converter){
             alias CombinateConvertType!(converter, ParserType!parser) ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 typeof(return) result;
-                auto r = parser.parse(input, memo, info);
+                auto r = parser.parse(input, info);
                 if(r.match){
                     result.match = true;
                     static if(__traits(compiles, converter(r.value.field))){
@@ -1538,9 +1518,9 @@ final class CallerInformation{
     // combinateCheck
         template combinateCheck(alias parser, alias checker){
             alias ParserType!parser ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){
                 typeof(return) result;
-                auto r = parser.parse(input, memo, info);
+                auto r = parser.parse(input, info);
                 if(r.match){
                     if(checker(r.value)){
                         result = r;
@@ -1849,9 +1829,9 @@ string getSource(size_t callerLine = __LINE__, string callerFile = __FILE__)(str
 
 auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, R)(R input){
     static if(isSomeString!R || isCharRange!R){
-        return fun.parse(Context!R(input, 0, 1), null, new CallerInformation(callerLine, callerFile));
+        return fun.parse(Context!R(input, 0, 1), new CallerInformation(callerLine, callerFile));
     }else{
-        return fun.parse(Context!R(input, 0), null, new CallerInformation(callerLine, callerFile));
+        return fun.parse(Context!R(input, 0), new CallerInformation(callerLine, callerFile));
     }
 }
 
@@ -1872,7 +1852,7 @@ bool isMatch(alias fun)(string src){
     // arch
         template arch(string open, string close){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateSequence!(
                         parseString!open,
@@ -1893,7 +1873,7 @@ bool isMatch(alias fun)(string src){
                         parseString!close
                     ),
                     flat
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -1911,7 +1891,7 @@ bool isMatch(alias fun)(string src){
     // func
         template func(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateSequence!(
                         combinateOption!(
@@ -1923,7 +1903,7 @@ bool isMatch(alias fun)(string src){
                         arch!("{", "}")
                     ),
                     function(Option!string arch, string brace) => arch.some ? "function" ~ arch ~ brace : "function()" ~ brace
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -1971,7 +1951,7 @@ bool isMatch(alias fun)(string src){
         template nonterminal(){
             alias string ResultType;
             version(Issue_8038_Fixed){
-                Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+                Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                     return combinateConvert!(
                         combinateSequence!(
                             getCallerLine!(),
@@ -1979,10 +1959,10 @@ bool isMatch(alias fun)(string src){
                             id!()
                         ),
                         function(size_t callerLine, size_t line, string id) => " #line " ~ (callerLine + line - 1).to!string() ~ "\n" ~ id ~ "!()"
-                    ).parse(input, memo, info);
+                    ).parse(input, info);
                 }
             }else{
-                Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+                Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                     return combinateConvert!(
                         combinateSequence!(
                             getCallerLine!(),
@@ -1990,7 +1970,7 @@ bool isMatch(alias fun)(string src){
                             id!()
                         ),
                         function(size_t callerLine, size_t line, string id) => id ~ "!()"
-                    ).parse(input, memo, info);
+                    ).parse(input, info);
                 }
             }
         }
@@ -2033,7 +2013,7 @@ bool isMatch(alias fun)(string src){
     // typeName
         template typeName(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateSequence!(
                         combinateChoice!(
@@ -2056,7 +2036,7 @@ bool isMatch(alias fun)(string src){
                         )
                     ),
                     flat
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -2089,7 +2069,7 @@ bool isMatch(alias fun)(string src){
     // id
         template id(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateSequence!(
                         combinateChoice!(
@@ -2107,7 +2087,7 @@ bool isMatch(alias fun)(string src){
                         )
                     ),
                     flat
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -2134,13 +2114,13 @@ bool isMatch(alias fun)(string src){
     // eofLit
         template eofLit(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateNone!(
                         parseString!"$"
                     ),
                     function() => "parseEOF!()"
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -2165,7 +2145,7 @@ bool isMatch(alias fun)(string src){
     // rangeLit
         template rangeLit(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateSequence!(
                         combinateNone!(
@@ -2187,13 +2167,13 @@ bool isMatch(alias fun)(string src){
                         )
                     ),
                     function(string[] strs) => strs.length == 1 ? strs[0] : "combinateChoice!("~strs.join(",")~")"
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
         template charRange(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateSequence!(
                         combinateChoice!(
@@ -2209,20 +2189,20 @@ bool isMatch(alias fun)(string src){
                         ),
                     ),
                     function(string low, string high) => "parseCharRange!('" ~ low ~ "','" ~ high ~ "')"
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
         template oneChar(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateChoice!(
                         parseEscapeSequence!(),
                         parseAnyChar!()
                     ),
                     function(string c) => "parseString!\"" ~ c ~ "\""
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -2256,7 +2236,7 @@ bool isMatch(alias fun)(string src){
     // stringLit
         template stringLit(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateSequence!(
                         combinateNone!(
@@ -2278,7 +2258,7 @@ bool isMatch(alias fun)(string src){
                         )
                     ),
                     function(string[] strs) => "parseString!\"" ~ strs.flat() ~ "\""
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -2303,12 +2283,12 @@ bool isMatch(alias fun)(string src){
     // literal
         template literal(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateChoice!(
                     rangeLit!(),
                     stringLit!(),
                     eofLit!(),
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -2345,7 +2325,7 @@ bool isMatch(alias fun)(string src){
     // primaryExp
         template primaryExp(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateChoice!(
                     literal!(),
                     nonterminal!(),
@@ -2360,7 +2340,7 @@ bool isMatch(alias fun)(string src){
                             parseString!")"
                         )
                     )
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -2404,7 +2384,7 @@ bool isMatch(alias fun)(string src){
     // preExp
         template preExp(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateSequence!(
                         combinateOption!(
@@ -2432,7 +2412,7 @@ bool isMatch(alias fun)(string src){
                             }
                         }
                     }
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -2456,7 +2436,7 @@ bool isMatch(alias fun)(string src){
     // postExp
         template postExp(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateSequence!(
                         preExp!(),
@@ -2501,7 +2481,7 @@ bool isMatch(alias fun)(string src){
                             }
                         }
                     }
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -2527,7 +2507,7 @@ bool isMatch(alias fun)(string src){
     // optionExp
         template optionExp(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateSequence!(
                         postExp!(),
@@ -2539,7 +2519,7 @@ bool isMatch(alias fun)(string src){
                         )
                     ),
                     function(string convExp, Option!None op) => op.some ? "combinateOption!("~convExp~")" : convExp
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -2567,14 +2547,14 @@ bool isMatch(alias fun)(string src){
     // seqExp
         template seqExp(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateMore1!(
                         optionExp!(),
                         parseSpaces!()
                     ),
                     function(string[] optionExps) => optionExps.length > 1 ? "combinateSequence!("~optionExps.join(",")~")" : optionExps[0]
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -2625,7 +2605,7 @@ bool isMatch(alias fun)(string src){
     // convExp
         template convExp(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateSequence!(
                         seqExp!(),
@@ -2653,7 +2633,7 @@ bool isMatch(alias fun)(string src){
                         }
                         return result;
                     }
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -2702,7 +2682,7 @@ bool isMatch(alias fun)(string src){
     // choiceExp
         template choiceExp(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateSequence!(
                         convExp!(),
@@ -2718,7 +2698,7 @@ bool isMatch(alias fun)(string src){
                         )
                     ),
                     function(string convExp, string[] convExps) => convExps.length ? "combinateChoice!(" ~ convExp ~ "," ~ convExps.join(",") ~ ")" : convExp
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -2769,7 +2749,7 @@ bool isMatch(alias fun)(string src){
     // def
         template def(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateSequence!(
                         typeName!(),
@@ -2790,11 +2770,11 @@ bool isMatch(alias fun)(string src){
                     =>
                         "template " ~ name ~ "(){"
                             "alias " ~ type ~ " ResultType;"
-                            "static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){"
-                                "return "~choiceExp~".parse(input, memo, info);"
+                            "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){"
+                                "return "~choiceExp~".parse(input, info);"
                             "}"
                         "}"
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -2809,7 +2789,7 @@ bool isMatch(alias fun)(string src){
                         result.value ==
                         "template hoge(){"
                             "alias bool ResultType;"
-                            "static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){"
+                            "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){"
                                 "return combinateConvert!("
                                     "combinateSequence!("
                                         "combinateNone!("
@@ -2820,7 +2800,7 @@ bool isMatch(alias fun)(string src){
                                     "function(){"
                                         "return false;"
                                     "}"
-                                ").parse(input, memo, info);"
+                                ").parse(input, info);"
                             "}"
                         "}"
                     );
@@ -2834,11 +2814,11 @@ bool isMatch(alias fun)(string src){
                             result.value ==
                             "template recursive(){"
                                 "alias None ResultType;"
-                                "static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){"
+                                "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){"
                                     "return combinateSequence!("
                                         " #line " ~ (__LINE__ - 9).to!string() ~ "\nA!(),"
                                         "parseEOF!()"
-                                    ").parse(input, memo, info);"
+                                    ").parse(input, info);"
                                 "}"
                             "}"
                         );
@@ -2847,11 +2827,11 @@ bool isMatch(alias fun)(string src){
                             result.value ==
                             "template recursive(){"
                                 "alias None ResultType;"
-                                "static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){"
+                                "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){"
                                     "return combinateSequence!("
                                         "A!(),"
                                         "parseEOF!()"
-                                    ").parse(input, memo, info);"
+                                    ").parse(input, info);"
                                 "}"
                             "}"
                         );
@@ -2866,7 +2846,7 @@ bool isMatch(alias fun)(string src){
     // defs
         template defs(){
             alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, auto ref memo_t memo, in CallerInformation info){
+            Result!(string, ResultType) parse()(Context!string input, in CallerInformation info){
                 return combinateConvert!(
                     combinateSequence!(
                         parseSpaces!(),
@@ -2878,7 +2858,7 @@ bool isMatch(alias fun)(string src){
                         parseEOF!()
                     ),
                     flat
-                ).parse(input, memo, info);
+                ).parse(input, info);
             }
         }
 
@@ -2896,7 +2876,7 @@ bool isMatch(alias fun)(string src){
                         result.value ==
                         "template hoge(){"
                             "alias bool ResultType;"
-                            "static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){"
+                            "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){"
                                 "return combinateConvert!("
                                     "combinateSequence!("
                                         "combinateNone!("
@@ -2907,12 +2887,12 @@ bool isMatch(alias fun)(string src){
                                     "function(){"
                                         "return false;"
                                     "}"
-                                ").parse(input, memo, info);"
+                                ").parse(input, info);"
                             "}"
                         "}"
                         "template hoge2(){"
                             "alias Tuple!piyo ResultType;"
-                            "static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){"
+                            "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){"
                                 "return combinateConvert!("
                                     "combinateMore0!("
                                         " #line " ~ (__LINE__ - 27).to!string() ~ "\nhoge!()"
@@ -2920,7 +2900,7 @@ bool isMatch(alias fun)(string src){
                                     "function(){"
                                         "return tuple(\"foo\");"
                                     "}"
-                                ").parse(input, memo, info);"
+                                ").parse(input, info);"
                             "}"
                         "}"
                     );
@@ -2929,7 +2909,7 @@ bool isMatch(alias fun)(string src){
                         result.value ==
                         "template hoge(){"
                             "alias bool ResultType;"
-                            "static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){"
+                            "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){"
                                 "return combinateConvert!("
                                     "combinateSequence!("
                                         "combinateNone!("
@@ -2940,12 +2920,12 @@ bool isMatch(alias fun)(string src){
                                     "function(){"
                                         "return false;"
                                     "}"
-                                ").parse(input, memo, info);"
+                                ").parse(input, info);"
                             "}"
                         "}"
                         "template hoge2(){"
                             "alias Tuple!piyo ResultType;"
-                            "static Result!(R, ResultType) parse(R)(Context!R input, auto ref memo_t memo, in CallerInformation info){"
+                            "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInformation info){"
                                 "return combinateConvert!("
                                     "combinateMore0!("
                                         "hoge!()"
@@ -2953,7 +2933,7 @@ bool isMatch(alias fun)(string src){
                                     "function(){"
                                         "return tuple(\"foo\");"
                                     "}"
-                                ").parse(input, memo, info);"
+                                ").parse(input, info);"
                             "}"
                         "}"
                     );
