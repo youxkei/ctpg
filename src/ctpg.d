@@ -133,64 +133,79 @@ final class CallerInfo{
     }
 
 // struct Context
-    struct Context(R, T = None){
-        R input;
+    struct Context(Range, T = None) if(isSomeString!Range){
+        Range input;
         size_t position;
+        size_t line = 1;
+        T state;
 
-        static if(isSomeString!R){
-            size_t line = 1;
+        invariant(){
+            assert(line >= 1);
+        }
 
-            invariant(){
-                assert(line >= 1);
-            }
+        pure @safe nothrow @property
+        Context save(){
+            return this;
+        }
 
-            pure @safe nothrow @property
-            Context save(){
-                return this;
-            }
+        const pure @safe nothrow @property
+        bool empty(){
+            return input.length == 0;
+        }
 
-            const pure @safe nothrow @property
-            bool empty(){
-                return input.length == 0;
-            }
+        /+ const +/ pure @safe nothrow
+        equals_t opEquals(Context rhs){
+            return input == rhs.input && position == rhs.position && line == rhs.line && state == rhs.state;
+        }
+    }
 
-            /+ const +/ pure @safe nothrow
-            equals_t opEquals(Context rhs){
-                return input == rhs.input && position == rhs.position && line == rhs.line && state == rhs.state;
-            }
-        }else static if(isCharRange!R){
-            size_t line = 1;
+    struct Context(Range, T = None) if(!isSomeString!Range && isCharRange!Range){
+        Range input;
+        size_t position;
+        size_t line = 1;
+        T state;
 
-            invariant(){
-                assert(line >= 1);
-            }
-
-            static if(isForwardRange!R){
-                //cannot apply some qualifiers due to unclearness of R
-                @property
-                Context save(){
-                    return Context(input.save, position, line);
-                }
-
-            }
-
+        static if(isForwardRange!Range){
+            //cannot apply some qualifiers due to unclearness of R
             @property
-            bool empty(){
-                return input.empty;
-            }
-
-            /+ const +/ pure @safe nothrow
-            equals_t opEquals(Context rhs){
-                return input == rhs.input && position == rhs.position && line == rhs.line && state == rhs.state;
-            }
-        }else{
-            /+ const +/ pure @safe nothrow
-            equals_t opEquals(Context rhs){
-                return input == rhs.input && position == rhs.position && state == rhs.state;
+            Context save(){
+                return Context(input.save, position, line, state);
             }
         }
 
+        const pure @safe nothrow @property
+        bool empty(){
+            return input.empty;
+        }
+
+        /+ const +/ pure @safe nothrow
+        equals_t opEquals(Context rhs){
+            return input == rhs.input && position == rhs.position && line == rhs.line && state == rhs.state;
+        }
+    }
+
+    struct Context(Range, T = None) if(!isCharRange!Range && isInputRange!Range){
+        Range input;
+        size_t position;
         T state;
+
+        static if(isForwardRange!Range){
+            //cannot apply some qualifiers due to unclearness of R
+            @property
+            Context save(){
+                return Context(input.save, position, state);
+            }
+        }
+
+        const pure @safe nothrow @property
+        bool empty(){
+            return input.empty;
+        }
+
+        /+ const +/ pure @safe nothrow
+        equals_t opEquals(Context rhs){
+            return input == rhs.input && position == rhs.position && state == rhs.state;
+        }
     }
 
     Context!R makeContext(R)(R range){
@@ -440,7 +455,7 @@ final class CallerInfo{
 
                 try{
                     scope(success) assert(false);
-                    auto result = getResult!(parseString!"hello")(6);
+                    auto result = getResult!(parseString!"hello")([0, 0][]);
                 }catch(Exception ex){}
                 return true;
             };
@@ -596,7 +611,7 @@ final class CallerInfo{
 
                 try{
                     scope(success) assert(false);
-                    auto result = getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(6);
+                    auto result = getResult!(parseCharRange!('\u0100', '\U0010FFFF'))([0, 0][]);
                 }catch(Exception ex){}
                 return true;
             };
@@ -737,7 +752,7 @@ final class CallerInfo{
 
                 try{
                     scope(success) assert(false);
-                    auto result = getResult!(parseEscapeSequence!())(6);
+                    auto result = getResult!(parseEscapeSequence!())([0, 0][]);
                 }catch(Exception ex){}
                 return true;
             };
@@ -799,7 +814,7 @@ final class CallerInfo{
 
                 try{
                     scope(success) assert(false);
-                    auto result = getResult!(parseSpace!())(6);
+                    auto result = getResult!(parseSpace!())([0, 0][]);
                 }catch(Exception ex){}
                 return true;
             };
@@ -870,7 +885,7 @@ final class CallerInfo{
 
                 try{
                     scope(failure) assert(true);
-                    auto result = getResult!(combinateSequence!(parseSpaces!(), getLine!()))(6);
+                    auto result = getResult!(combinateSequence!(parseSpaces!(), getLine!()))([0, 0][]);
                 }catch(Exception ex){}
                 return true;
             };
