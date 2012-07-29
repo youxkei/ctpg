@@ -133,9 +133,8 @@ final class CallerInfo{
     }
 
 // struct Context
-    struct Context(Range, T = None) if(isSomeString!Range){
+    struct Context(Range, T = None) if(isCharRange!Range){
         Range input;
-        size_t position;
         size_t line = 1;
         T state;
 
@@ -143,33 +142,11 @@ final class CallerInfo{
             assert(line >= 1);
         }
 
-        pure @safe nothrow @property
-        Context save(){
-            return this;
-        }
-
-        const pure @safe nothrow @property
-        bool empty(){
-            return input.length == 0;
-        }
-
-        /+ const +/ pure @safe nothrow
-        equals_t opEquals(Context rhs){
-            return input == rhs.input && position == rhs.position && line == rhs.line && state == rhs.state;
-        }
-    }
-
-    struct Context(Range, T = None) if(!isSomeString!Range && isCharRange!Range){
-        Range input;
-        size_t position;
-        size_t line = 1;
-        T state;
-
         static if(isForwardRange!Range){
             //cannot apply some qualifiers due to unclearness of R
             @property
             Context save(){
-                return Context(input.save, position, line, state);
+                return Context(input.save, line, state);
             }
         }
 
@@ -180,20 +157,19 @@ final class CallerInfo{
 
         /+ const +/ pure @safe nothrow
         equals_t opEquals(Context rhs){
-            return input == rhs.input && position == rhs.position && line == rhs.line && state == rhs.state;
+            return input == rhs.input && line == rhs.line && state == rhs.state;
         }
     }
 
     struct Context(Range, T = None) if(!isCharRange!Range && isInputRange!Range){
         Range input;
-        size_t position;
         T state;
 
         static if(isForwardRange!Range){
             //cannot apply some qualifiers due to unclearness of R
             @property
             Context save(){
-                return Context(input.save, position, state);
+                return Context(input.save, state);
             }
         }
 
@@ -204,16 +180,12 @@ final class CallerInfo{
 
         /+ const +/ pure @safe nothrow
         equals_t opEquals(Context rhs){
-            return input == rhs.input && position == rhs.position && state == rhs.state;
+            return input == rhs.input && state == rhs.state;
         }
     }
 
-    Context!R makeContext(R)(R range){
-        return Context!R(range);
-    }
-
-    Context!R makeContext(R)(R range, size_t position, size_t line = 1){
-        return Context!R(range, position, line);
+    Context!(Range, None) makeContext(Range)(Range range, size_t line = 1){
+        return Context!(Range, None)(range, line);
     }
 
 // struct Result
@@ -238,7 +210,7 @@ final class CallerInfo{
         }
     }
 
-    Result!(R, T) result(R, T)(bool match, T value, Context!R rest, Error error){
+    Result!(R, T) result(R, T)(bool match, T value, Context!(R, None) rest, Error error = Error.init){
         return Result!(R, T)(match, value, rest, error);
     }
 
@@ -392,7 +364,6 @@ final class CallerInfo{
                         result.match = true;
                         result.value = str;
                         result.rest.input = input.input[convertedString.length..$];
-                        result.rest.position = input.position + breadth.width;
                         result.rest.line = input.line + breadth.line;
                         return result;
                     }
@@ -409,7 +380,6 @@ final class CallerInfo{
                     result.match = true;
                     result.value = str;
                     result.rest.input = input.input;
-                    result.rest.position = input.position + breadth.width;
                     result.rest.line = input.line + breadth.line;
                     return result;
 
@@ -425,26 +395,26 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(parseString!"hello")("hello world" ) == result(true, "hello", makeContext(" world" , 5), Error.init));
-                assert(getResult!(parseString!"hello")("hello world"w) == result(true, "hello", makeContext(" world"w, 5), Error.init));
-                assert(getResult!(parseString!"hello")("hello world"d) == result(true, "hello", makeContext(" world"d, 5), Error.init));
-                assert(getResult!(parseString!"hello")(testRange("hello world" )) == result(true, "hello", makeContext(testRange(" world" ), 5), Error.init));
-                assert(getResult!(parseString!"hello")(testRange("hello world"w)) == result(true, "hello", makeContext(testRange(" world"w), 5), Error.init));
-                assert(getResult!(parseString!"hello")(testRange("hello world"d)) == result(true, "hello", makeContext(testRange(" world"d), 5), Error.init));
+                assert(getResult!(parseString!"hello")("hello world" ) == result(true, "hello", makeContext(" world" ), Error.init));
+                assert(getResult!(parseString!"hello")("hello world"w) == result(true, "hello", makeContext(" world"w), Error.init));
+                assert(getResult!(parseString!"hello")("hello world"d) == result(true, "hello", makeContext(" world"d), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello world" )) == result(true, "hello", makeContext(testRange(" world" )), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello world"w)) == result(true, "hello", makeContext(testRange(" world"w)), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello world"d)) == result(true, "hello", makeContext(testRange(" world"d)), Error.init));
 
-                assert(getResult!(parseString!"hello")("hello" ) == result(true, "hello", makeContext("" , 5), Error.init));
-                assert(getResult!(parseString!"hello")("hello"w) == result(true, "hello", makeContext(""w, 5), Error.init));
-                assert(getResult!(parseString!"hello")("hello"d) == result(true, "hello", makeContext(""d, 5), Error.init));
-                assert(getResult!(parseString!"hello")(testRange("hello" )) == result(true, "hello", makeContext(testRange("" ), 5), Error.init));
-                assert(getResult!(parseString!"hello")(testRange("hello"w)) == result(true, "hello", makeContext(testRange(""w), 5), Error.init));
-                assert(getResult!(parseString!"hello")(testRange("hello"d)) == result(true, "hello", makeContext(testRange(""d), 5), Error.init));
+                assert(getResult!(parseString!"hello")("hello" ) == result(true, "hello", makeContext("" ), Error.init));
+                assert(getResult!(parseString!"hello")("hello"w) == result(true, "hello", makeContext(""w), Error.init));
+                assert(getResult!(parseString!"hello")("hello"d) == result(true, "hello", makeContext(""d), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello" )) == result(true, "hello", makeContext(testRange("" )), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello"w)) == result(true, "hello", makeContext(testRange(""w)), Error.init));
+                assert(getResult!(parseString!"hello")(testRange("hello"d)) == result(true, "hello", makeContext(testRange(""d)), Error.init));
 
-                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト" ) == result(true, "表が怖い", makeContext("噂のソフト" , 4), Error.init));
-                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト"w) == result(true, "表が怖い", makeContext("噂のソフト"w, 4), Error.init));
-                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト"d) == result(true, "表が怖い", makeContext("噂のソフト"d, 4), Error.init));
-                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト" )) == result(true, "表が怖い", makeContext(testRange("噂のソフト" ), 4), Error.init));
-                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト"w)) == result(true, "表が怖い", makeContext(testRange("噂のソフト"w), 4), Error.init));
-                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト"d)) == result(true, "表が怖い", makeContext(testRange("噂のソフト"d), 4), Error.init));
+                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト" ) == result(true, "表が怖い", makeContext("噂のソフト" ), Error.init));
+                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト"w) == result(true, "表が怖い", makeContext("噂のソフト"w), Error.init));
+                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト"d) == result(true, "表が怖い", makeContext("噂のソフト"d), Error.init));
+                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト" )) == result(true, "表が怖い", makeContext(testRange("噂のソフト" )), Error.init));
+                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト"w)) == result(true, "表が怖い", makeContext(testRange("噂のソフト"w)), Error.init));
+                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト"d)) == result(true, "表が怖い", makeContext(testRange("噂のソフト"d)), Error.init));
 
                 assert(getResult!(parseString!"hello")("hllo world" ) == result(false, "", makeContext("" ), Error("\"hello\"")));
                 assert(getResult!(parseString!"hello")("hllo world"w) == result(false, "", makeContext(""w), Error("\"hello\"")));
@@ -552,7 +522,6 @@ final class CallerInfo{
                             result.match = true;
                             result.value = c.to!string();
                             result.rest.input = input.input[idx..$];
-                            result.rest.position = input.position + 1;
                             result.rest.line = c == '\n' ? input.line + 1 : input.line;
                             return result;
                         }
@@ -569,7 +538,6 @@ final class CallerInfo{
                             result.match = true;
                             result.value = c.to!string();
                             result.rest.input = input.input;
-                            result.rest.position = input.position + 1;
                             result.rest.line = c == '\n' ? input.line + 1 : input.line;
                             return result;
                         }
@@ -588,19 +556,19 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(parseCharRange!('a', 'z'))("hoge" ) == result(true, "h", makeContext("oge" , 1), Error.init));
-                assert(getResult!(parseCharRange!('a', 'z'))("hoge"w) == result(true, "h", makeContext("oge"w, 1), Error.init));
-                assert(getResult!(parseCharRange!('a', 'z'))("hoge"d) == result(true, "h", makeContext("oge"d, 1), Error.init));
-                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge" )) == result(true, "h", makeContext(testRange("oge" ), 1), Error.init));
-                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge"w)) == result(true, "h", makeContext(testRange("oge"w), 1), Error.init));
-                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge"d)) == result(true, "h", makeContext(testRange("oge"d), 1), Error.init));
+                assert(getResult!(parseCharRange!('a', 'z'))("hoge" ) == result(true, "h", makeContext("oge" ), Error.init));
+                assert(getResult!(parseCharRange!('a', 'z'))("hoge"w) == result(true, "h", makeContext("oge"w), Error.init));
+                assert(getResult!(parseCharRange!('a', 'z'))("hoge"d) == result(true, "h", makeContext("oge"d), Error.init));
+                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge" )) == result(true, "h", makeContext(testRange("oge" )), Error.init));
+                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge"w)) == result(true, "h", makeContext(testRange("oge"w)), Error.init));
+                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge"d)) == result(true, "h", makeContext(testRange("oge"d)), Error.init));
 
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge" ) == result(true, "\U00012345", makeContext("hoge" , 1), Error.init));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge"w) == result(true, "\U00012345", makeContext("hoge"w, 1), Error.init));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge"d) == result(true, "\U00012345", makeContext("hoge"d, 1), Error.init));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge" )) == result(true, "\U00012345", makeContext(testRange("hoge" ), 1), Error.init));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge"w)) == result(true, "\U00012345", makeContext(testRange("hoge"w), 1), Error.init));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge"d)) == result(true, "\U00012345", makeContext(testRange("hoge"d), 1), Error.init));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge" ) == result(true, "\U00012345", makeContext("hoge" ), Error.init));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge"w) == result(true, "\U00012345", makeContext("hoge"w), Error.init));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge"d) == result(true, "\U00012345", makeContext("hoge"d), Error.init));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge" )) == result(true, "\U00012345", makeContext(testRange("hoge" )), Error.init));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge"w)) == result(true, "\U00012345", makeContext(testRange("hoge"w)), Error.init));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge"d)) == result(true, "\U00012345", makeContext(testRange("hoge"d)), Error.init));
 
                 assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("hello world" ) == result(false, "", makeContext("" ), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
                 assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("hello world"w) == result(false, "", makeContext(""w), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
@@ -631,7 +599,6 @@ final class CallerInfo{
                                 result.match = true;
                                 result.value = input.input[0..6].to!string();
                                 result.rest.input = input.input[6..$];
-                                result.rest.position = input.position + 6;
                                 result.rest.line = input.line;
                                 return result;
                             }
@@ -639,7 +606,6 @@ final class CallerInfo{
                                 result.match = true;
                                 result.value = input.input[0..10].to!string();
                                 result.rest.input = input.input[10..$];
-                                result.rest.position = input.position + 10;
                                 result.rest.line = input.line;
                                 return result;
                             }
@@ -647,7 +613,6 @@ final class CallerInfo{
                                 result.match = true;
                                 result.value = input.input[0..2].to!string();
                                 result.rest.input = input.input[2..$];
-                                result.rest.position = input.position + 2;
                                 result.rest.line = input.line;
                                 return result;
                             }
@@ -673,7 +638,6 @@ final class CallerInfo{
                                 }
                                 result.value = to!string(data);
                                 result.rest.input = input.input;
-                                result.rest.position = input.position + 6;
                                 result.rest.line = input.line;
                                 return result;
                             }
@@ -688,7 +652,6 @@ final class CallerInfo{
                                 }
                                 result.value = to!string(data);
                                 result.rest.input = input.input;
-                                result.rest.position = input.position + 10;
                                 result.rest.line = input.line;
                                 return result;
                             }
@@ -696,7 +659,6 @@ final class CallerInfo{
                                 result.match = true;
                                 input.input.popFront;
                                 result.value = "\\" ~ to!string(c2);
-                                result.rest.position = input.position + 2;
                                 result.rest.input = input.input;
                                 result.rest.line = input.line;
                                 return result;
@@ -715,33 +677,33 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(parseEscapeSequence!())(`\"hoge` ) == result(true, `\"`, makeContext("hoge" , 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(`\"hoge`w) == result(true, `\"`, makeContext("hoge"w, 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(`\"hoge`d) == result(true, `\"`, makeContext("hoge"d, 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge` )) == result(true, `\"`, makeContext(testRange("hoge" ), 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge`w)) == result(true, `\"`, makeContext(testRange("hoge"w), 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge`d)) == result(true, `\"`, makeContext(testRange("hoge"d), 2), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\"hoge` ) == result(true, `\"`, makeContext("hoge" ), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\"hoge`w) == result(true, `\"`, makeContext("hoge"w), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\"hoge`d) == result(true, `\"`, makeContext("hoge"d), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge` )) == result(true, `\"`, makeContext(testRange("hoge" )), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge`w)) == result(true, `\"`, makeContext(testRange("hoge"w)), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge`d)) == result(true, `\"`, makeContext(testRange("hoge"d)), Error.init));
 
-                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge` ) == result(true, `\U0010FFFF`, makeContext("hoge" , 10), Error.init));
-                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge`w) == result(true, `\U0010FFFF`, makeContext("hoge"w, 10), Error.init));
-                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge`d) == result(true, `\U0010FFFF`, makeContext("hoge"d, 10), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge` )) == result(true, `\U0010FFFF`, makeContext(testRange("hoge" ), 10), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge`w)) == result(true, `\U0010FFFF`, makeContext(testRange("hoge"w), 10), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge`d)) == result(true, `\U0010FFFF`, makeContext(testRange("hoge"d), 10), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge` ) == result(true, `\U0010FFFF`, makeContext("hoge" ), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge`w) == result(true, `\U0010FFFF`, makeContext("hoge"w), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge`d) == result(true, `\U0010FFFF`, makeContext("hoge"d), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge` )) == result(true, `\U0010FFFF`, makeContext(testRange("hoge" )), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge`w)) == result(true, `\U0010FFFF`, makeContext(testRange("hoge"w)), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge`d)) == result(true, `\U0010FFFF`, makeContext(testRange("hoge"d)), Error.init));
 
-                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge` ) == result(true, `\u10FF`, makeContext("hoge" , 6), Error.init));
-                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge`w) == result(true, `\u10FF`, makeContext("hoge"w, 6), Error.init));
-                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge`d) == result(true, `\u10FF`, makeContext("hoge"d, 6), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge` )) == result(true, `\u10FF`, makeContext(testRange("hoge" ), 6), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge`w)) == result(true, `\u10FF`, makeContext(testRange("hoge"w), 6), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge`d)) == result(true, `\u10FF`, makeContext(testRange("hoge"d), 6), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge` ) == result(true, `\u10FF`, makeContext("hoge" ), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge`w) == result(true, `\u10FF`, makeContext("hoge"w), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge`d) == result(true, `\u10FF`, makeContext("hoge"d), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge` )) == result(true, `\u10FF`, makeContext(testRange("hoge" )), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge`w)) == result(true, `\u10FF`, makeContext(testRange("hoge"w)), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge`d)) == result(true, `\u10FF`, makeContext(testRange("hoge"d)), Error.init));
 
-                assert(getResult!(parseEscapeSequence!())(`\nhoge` ) == result(true, `\n`, makeContext("hoge" , 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(`\nhoge`w) == result(true, `\n`, makeContext("hoge"w, 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(`\nhoge`d) == result(true, `\n`, makeContext("hoge"d, 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge` )) == result(true, `\n`, makeContext(testRange("hoge" ), 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge`w)) == result(true, `\n`, makeContext(testRange("hoge"w), 2), Error.init));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge`d)) == result(true, `\n`, makeContext(testRange("hoge"d), 2), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\nhoge` ) == result(true, `\n`, makeContext("hoge" ), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\nhoge`w) == result(true, `\n`, makeContext("hoge"w), Error.init));
+                assert(getResult!(parseEscapeSequence!())(`\nhoge`d) == result(true, `\n`, makeContext("hoge"d), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge` )) == result(true, `\n`, makeContext(testRange("hoge" )), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge`w)) == result(true, `\n`, makeContext(testRange("hoge"w)), Error.init));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge`d)) == result(true, `\n`, makeContext(testRange("hoge"d)), Error.init));
 
                 assert(getResult!(parseEscapeSequence!())("鬱hoge" ) == result(false, "", makeContext("" ), Error("escape sequence")));
                 assert(getResult!(parseEscapeSequence!())("鬱hoge"w) == result(false, "", makeContext(""w), Error("escape sequence")));
@@ -770,7 +732,6 @@ final class CallerInfo{
                         result.match = true;
                         result.value = input.input[0..1].to!string();
                         result.rest.input = input.input[1..$];
-                        result.rest.position = input.position + 1;
                         result.rest.line = (input.input[0] == '\n' ? input.line + 1 : input.line);
                         return result;
                     }
@@ -783,7 +744,6 @@ final class CallerInfo{
                             result.value = c.to!string();
                             input.input.popFront;
                             result.rest.input = input.input;
-                            result.rest.position = input.position + 1;
                             result.rest.line = (c == '\n' ? input.line + 1 : input.line);
                             return result;
                         }
@@ -798,12 +758,12 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(parseSpace!())("\thoge" ) == result(true, "\t", makeContext("hoge" , 1), Error.init));
-                assert(getResult!(parseSpace!())("\thoge"w) == result(true, "\t", makeContext("hoge"w, 1), Error.init));
-                assert(getResult!(parseSpace!())("\thoge"d) == result(true, "\t", makeContext("hoge"d, 1), Error.init));
-                assert(getResult!(parseSpace!())(testRange("\thoge"))  == result(true, "\t", makeContext(testRange("hoge"),  1), Error.init));
-                assert(getResult!(parseSpace!())(testRange("\thoge"w)) == result(true, "\t", makeContext(testRange("hoge"w), 1), Error.init));
-                assert(getResult!(parseSpace!())(testRange("\thoge"d)) == result(true, "\t", makeContext(testRange("hoge"d), 1), Error.init));
+                assert(getResult!(parseSpace!())("\thoge" ) == result(true, "\t", makeContext("hoge" ), Error.init));
+                assert(getResult!(parseSpace!())("\thoge"w) == result(true, "\t", makeContext("hoge"w), Error.init));
+                assert(getResult!(parseSpace!())("\thoge"d) == result(true, "\t", makeContext("hoge"d), Error.init));
+                assert(getResult!(parseSpace!())(testRange("\thoge"))  == result(true, "\t", makeContext(testRange("hoge" )), Error.init));
+                assert(getResult!(parseSpace!())(testRange("\thoge"w)) == result(true, "\t", makeContext(testRange("hoge"w)), Error.init));
+                assert(getResult!(parseSpace!())(testRange("\thoge"d)) == result(true, "\t", makeContext(testRange("hoge"d)), Error.init));
 
                 assert(getResult!(parseSpace!())("hoge" ) == result(false, "", makeContext("" ), Error("space")));
                 assert(getResult!(parseSpace!())("hoge"w) == result(false, "", makeContext(""w), Error("space")));
@@ -842,12 +802,12 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(parseEOF!())("" ) == result(true, None.init, makeContext("" , 0), Error.init));
-                assert(getResult!(parseEOF!())(""w) == result(true, None.init, makeContext(""w, 0), Error.init));
-                assert(getResult!(parseEOF!())(""d) == result(true, None.init, makeContext(""d, 0), Error.init));
-                assert(getResult!(parseEOF!())(testRange("" )) == result(true, None.init, makeContext(testRange("" ), 0), Error.init));
-                assert(getResult!(parseEOF!())(testRange(""w)) == result(true, None.init, makeContext(testRange(""w), 0), Error.init));
-                assert(getResult!(parseEOF!())(testRange(""d)) == result(true, None.init, makeContext(testRange(""d), 0), Error.init));
+                assert(getResult!(parseEOF!())("" ) == result(true, None.init, makeContext("" ), Error.init));
+                assert(getResult!(parseEOF!())(""w) == result(true, None.init, makeContext(""w), Error.init));
+                assert(getResult!(parseEOF!())(""d) == result(true, None.init, makeContext(""d), Error.init));
+                assert(getResult!(parseEOF!())(testRange("" )) == result(true, None.init, makeContext(testRange("" )), Error.init));
+                assert(getResult!(parseEOF!())(testRange(""w)) == result(true, None.init, makeContext(testRange(""w)), Error.init));
+                assert(getResult!(parseEOF!())(testRange(""d)) == result(true, None.init, makeContext(testRange(""d)), Error.init));
 
                 assert(getResult!(parseEOF!())("hoge" ) == result(false, None.init, makeContext("" ), Error("EOF")));
                 assert(getResult!(parseEOF!())("hoge"w) == result(false, None.init, makeContext(""w), Error("EOF")));
@@ -876,12 +836,12 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n" ) == result(true, 3LU, makeContext("" , 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n"w) == result(true, 3LU, makeContext(""w, 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n"d) == result(true, 3LU, makeContext(""d, 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n" )) == result(true, 3LU, makeContext(testRange("" ), 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"w)) == result(true, 3LU, makeContext(testRange(""w), 2, 3), Error.init));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"d)) == result(true, 3LU, makeContext(testRange(""d), 2, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n" ) == result(true, 3LU, makeContext("" , 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n"w) == result(true, 3LU, makeContext(""w, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n"d) == result(true, 3LU, makeContext(""d, 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n" )) == result(true, 3LU, makeContext(testRange("" ), 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"w)) == result(true, 3LU, makeContext(testRange(""w), 3), Error.init));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"d)) == result(true, 3LU, makeContext(testRange(""d), 3), Error.init));
 
                 try{
                     scope(failure) assert(true);
@@ -903,12 +863,12 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(getCallerLine!())("" ) == result(true, cast(size_t)__LINE__, makeContext("" , 0), Error.init));
-                assert(getResult!(getCallerLine!())(""w) == result(true, cast(size_t)__LINE__, makeContext(""w, 0), Error.init));
-                assert(getResult!(getCallerLine!())(""d) == result(true, cast(size_t)__LINE__, makeContext(""d, 0), Error.init));
-                assert(getResult!(getCallerLine!())(testRange("" )) == result(true, cast(size_t)__LINE__, makeContext(testRange("" ), 0), Error.init));
-                assert(getResult!(getCallerLine!())(testRange(""w)) == result(true, cast(size_t)__LINE__, makeContext(testRange(""w), 0), Error.init));
-                assert(getResult!(getCallerLine!())(testRange(""d)) == result(true, cast(size_t)__LINE__, makeContext(testRange(""d), 0), Error.init));
+                assert(getResult!(getCallerLine!())("" ) == result(true, cast(size_t)__LINE__, makeContext("" ), Error.init));
+                assert(getResult!(getCallerLine!())(""w) == result(true, cast(size_t)__LINE__, makeContext(""w), Error.init));
+                assert(getResult!(getCallerLine!())(""d) == result(true, cast(size_t)__LINE__, makeContext(""d), Error.init));
+                assert(getResult!(getCallerLine!())(testRange("" )) == result(true, cast(size_t)__LINE__, makeContext(testRange("" )), Error.init));
+                assert(getResult!(getCallerLine!())(testRange(""w)) == result(true, cast(size_t)__LINE__, makeContext(testRange(""w)), Error.init));
+                assert(getResult!(getCallerLine!())(testRange(""d)) == result(true, cast(size_t)__LINE__, makeContext(testRange(""d)), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -952,7 +912,7 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateSkip!(parseString!"foo", parseString!" "))(" foo") == result(true, "foo", makeContext("" , 4), Error.init));
+                assert(getResult!(combinateSkip!(parseString!"foo", parseString!" "))(" foo") == result(true, "foo", makeContext(""), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1127,19 +1087,19 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld" ) == result(true, tuple("hello", "world"), makeContext("" , 10), Error.init));
-                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld"w) == result(true, tuple("hello", "world"), makeContext(""w, 10), Error.init));
-                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld"d) == result(true, tuple("hello", "world"), makeContext(""d, 10), Error.init));
-                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("helloworld" )) == result(true, tuple("hello", "world"), makeContext(testRange("" ), 10), Error.init));
-                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("helloworld"w)) == result(true, tuple("hello", "world"), makeContext(testRange(""w), 10), Error.init));
-                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("helloworld"d)) == result(true, tuple("hello", "world"), makeContext(testRange(""d), 10), Error.init));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld" ) == result(true, tuple("hello", "world"), makeContext("" ), Error.init));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld"w) == result(true, tuple("hello", "world"), makeContext(""w), Error.init));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld"d) == result(true, tuple("hello", "world"), makeContext(""d), Error.init));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("helloworld" )) == result(true, tuple("hello", "world"), makeContext(testRange("" )), Error.init));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("helloworld"w)) == result(true, tuple("hello", "world"), makeContext(testRange(""w)), Error.init));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))(testRange("helloworld"d)) == result(true, tuple("hello", "world"), makeContext(testRange(""d)), Error.init));
 
-                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))("helloworld!" ) == result(true, tuple("hello", "world", "!"), makeContext("" , 11), Error.init));
-                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))("helloworld!"w) == result(true, tuple("hello", "world", "!"), makeContext(""w, 11), Error.init));
-                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))("helloworld!"d) == result(true, tuple("hello", "world", "!"), makeContext(""d, 11), Error.init));
-                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))(testRange("helloworld!" )) == result(true, tuple("hello", "world", "!"), makeContext(testRange("" ), 11), Error.init));
-                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))(testRange("helloworld!"w)) == result(true, tuple("hello", "world", "!"), makeContext(testRange(""w), 11), Error.init));
-                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))(testRange("helloworld!"d)) == result(true, tuple("hello", "world", "!"), makeContext(testRange(""d), 11), Error.init));
+                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))("helloworld!" ) == result(true, tuple("hello", "world", "!"), makeContext("" ), Error.init));
+                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))("helloworld!"w) == result(true, tuple("hello", "world", "!"), makeContext(""w), Error.init));
+                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))("helloworld!"d) == result(true, tuple("hello", "world", "!"), makeContext(""d), Error.init));
+                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))(testRange("helloworld!" )) == result(true, tuple("hello", "world", "!"), makeContext(testRange("" )), Error.init));
+                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))(testRange("helloworld!"w)) == result(true, tuple("hello", "world", "!"), makeContext(testRange(""w)), Error.init));
+                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))(testRange("helloworld!"d)) == result(true, tuple("hello", "world", "!"), makeContext(testRange(""d)), Error.init));
 
                 assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("hellovvorld" ) == result(false, tuple("", ""), makeContext("" ), Error(q{"world"})));
                 assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("hellovvorld"w) == result(false, tuple("", ""), makeContext(""w), Error(q{"world"})));
@@ -1194,19 +1154,19 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw" ) == result(true, "h", makeContext("w" , 1), Error.init)); 
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw"w) == result(true, "h", makeContext("w"w, 1), Error.init)); 
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw"d) == result(true, "h", makeContext("w"d, 1), Error.init)); 
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("hw" )) == result(true, "h", makeContext(testRange("w" ), 1), Error.init)); 
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("hw"w)) == result(true, "h", makeContext(testRange("w"w), 1), Error.init)); 
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("hw"d)) == result(true, "h", makeContext(testRange("w"d), 1), Error.init)); 
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw" ) == result(true, "h", makeContext("w" ), Error.init)); 
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw"w) == result(true, "h", makeContext("w"w), Error.init)); 
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw"d) == result(true, "h", makeContext("w"d), Error.init)); 
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("hw" )) == result(true, "h", makeContext(testRange("w" )), Error.init)); 
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("hw"w)) == result(true, "h", makeContext(testRange("w"w)), Error.init)); 
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("hw"d)) == result(true, "h", makeContext(testRange("w"d)), Error.init)); 
 
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("w" ) == result(true, "w", makeContext("" , 1), Error.init));
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("w"w) == result(true, "w", makeContext(""w, 1), Error.init));
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("w"d) == result(true, "w", makeContext(""d, 1), Error.init));
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("w" )) == result(true, "w", makeContext(testRange("" ), 1), Error.init));
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("w"w)) == result(true, "w", makeContext(testRange(""w), 1), Error.init));
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("w"d)) == result(true, "w", makeContext(testRange(""d), 1), Error.init));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("w" ) == result(true, "w", makeContext("" ), Error.init));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("w"w) == result(true, "w", makeContext(""w), Error.init));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("w"d) == result(true, "w", makeContext(""d), Error.init));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("w" )) == result(true, "w", makeContext(testRange("" )), Error.init));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("w"w)) == result(true, "w", makeContext(testRange(""w)), Error.init));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("w"d)) == result(true, "w", makeContext(testRange(""d)), Error.init));
 
                 assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("" ) == result(false, "", makeContext("" ), Error(q{"w"})));
                 assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(""w) == result(false, "", makeContext(""w), Error(q{"w"})));
@@ -1268,26 +1228,26 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))("www w" ) == result(true, "www", makeContext(" w" , 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))("www w"w) == result(true, "www", makeContext(" w"w, 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))("www w"d) == result(true, "www", makeContext(" w"d, 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange("www w" )) == result(true, "www", makeContext(testRange(" w" ), 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange("www w"w)) == result(true, "www", makeContext(testRange(" w"w), 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange("www w"d)) == result(true, "www", makeContext(testRange(" w"d), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))("www w" ) == result(true, "www", makeContext(" w" ), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))("www w"w) == result(true, "www", makeContext(" w"w), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))("www w"d) == result(true, "www", makeContext(" w"d), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange("www w" )) == result(true, "www", makeContext(testRange(" w" )), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange("www w"w)) == result(true, "www", makeContext(testRange(" w"w)), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange("www w"d)) == result(true, "www", makeContext(testRange(" w"d)), Error.init));
 
-                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(" w" ) == result(true, "", makeContext(" w" , 0), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(" w"w) == result(true, "", makeContext(" w"w, 0), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(" w"d) == result(true, "", makeContext(" w"d, 0), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange(" w" )) == result(true, "", makeContext(testRange(" w" ), 0), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange(" w"w)) == result(true, "", makeContext(testRange(" w"w), 0), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange(" w"d)) == result(true, "", makeContext(testRange(" w"d), 0), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(" w" ) == result(true, "", makeContext(" w" ), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(" w"w) == result(true, "", makeContext(" w"w), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(" w"d) == result(true, "", makeContext(" w"d), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange(" w" )) == result(true, "", makeContext(testRange(" w" )), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange(" w"w)) == result(true, "", makeContext(testRange(" w"w)), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore0!(parseString!"w"), flat))(testRange(" w"d)) == result(true, "", makeContext(testRange(" w"d)), Error.init));
 
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))("www w" ) == result(true, "www", makeContext(" w" , 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))("www w"w) == result(true, "www", makeContext(" w"w, 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))("www w"d) == result(true, "www", makeContext(" w"d, 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange("www w" )) == result(true, "www", makeContext(testRange(" w" ), 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange("www w"w)) == result(true, "www", makeContext(testRange(" w"w), 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange("www w"d)) == result(true, "www", makeContext(testRange(" w"d), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))("www w" ) == result(true, "www", makeContext(" w" ), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))("www w"w) == result(true, "www", makeContext(" w"w), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))("www w"d) == result(true, "www", makeContext(" w"d), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange("www w" )) == result(true, "www", makeContext(testRange(" w" )), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange("www w"w)) == result(true, "www", makeContext(testRange(" w"w)), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(testRange("www w"d)) == result(true, "www", makeContext(testRange(" w"d)), Error.init));
 
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(" w" ) == result(false, "", makeContext("" ), Error(q{"w"})));
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), flat))(" w"w) == result(false, "", makeContext(""w), Error(q{"w"})));
@@ -1325,19 +1285,19 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateOption!(parseString!"w"))("w" ) == result(true, makeOption(true, "w"), makeContext("" , 1), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))("w"w) == result(true, makeOption(true, "w"), makeContext(""w, 1), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))("w"d) == result(true, makeOption(true, "w"), makeContext(""d, 1), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))(testRange("w" )) == result(true, makeOption(true, "w"), makeContext(testRange("" ), 1), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))(testRange("w"w)) == result(true, makeOption(true, "w"), makeContext(testRange(""w), 1), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))(testRange("w"d)) == result(true, makeOption(true, "w"), makeContext(testRange(""d), 1), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))("w" ) == result(true, makeOption(true, "w"), makeContext("" ), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))("w"w) == result(true, makeOption(true, "w"), makeContext(""w), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))("w"d) == result(true, makeOption(true, "w"), makeContext(""d), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("w" )) == result(true, makeOption(true, "w"), makeContext(testRange("" )), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("w"w)) == result(true, makeOption(true, "w"), makeContext(testRange(""w)), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("w"d)) == result(true, makeOption(true, "w"), makeContext(testRange(""d)), Error.init));
 
-                assert(getResult!(combinateOption!(parseString!"w"))("hoge" ) == result(true, makeOption(false, ""), makeContext("hoge" , 0), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))("hoge"w) == result(true, makeOption(false, ""), makeContext("hoge"w, 0), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))("hoge"d) == result(true, makeOption(false, ""), makeContext("hoge"d, 0), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))(testRange("hoge" )) == result(true, makeOption(false, ""), makeContext(testRange("hoge" ), 0), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))(testRange("hoge"w)) == result(true, makeOption(false, ""), makeContext(testRange("hoge"w), 0), Error.init));
-                assert(getResult!(combinateOption!(parseString!"w"))(testRange("hoge"d)) == result(true, makeOption(false, ""), makeContext(testRange("hoge"d), 0), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))("hoge" ) == result(true, makeOption(false, ""), makeContext("hoge" ), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))("hoge"w) == result(true, makeOption(false, ""), makeContext("hoge"w), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))("hoge"d) == result(true, makeOption(false, ""), makeContext("hoge"d), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("hoge" )) == result(true, makeOption(false, ""), makeContext(testRange("hoge" )), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("hoge"w)) == result(true, makeOption(false, ""), makeContext(testRange("hoge"w)), Error.init));
+                assert(getResult!(combinateOption!(parseString!"w"))(testRange("hoge"d)) == result(true, makeOption(false, ""), makeContext(testRange("hoge"d)), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1362,12 +1322,12 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)" ) == result(true, "w", makeContext("" , 3), Error.init));
-                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)"w) == result(true, "w", makeContext(""w, 3), Error.init));
-                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)"d) == result(true, "w", makeContext(""d, 3), Error.init));
-                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w)" )) == result(true, "w", makeContext(testRange("" ), 3), Error.init));
-                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w)"w)) == result(true, "w", makeContext(testRange(""w), 3), Error.init));
-                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w)"d)) == result(true, "w", makeContext(testRange(""d), 3), Error.init));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)" ) == result(true, "w", makeContext("" ), Error.init));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)"w) == result(true, "w", makeContext(""w), Error.init));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)"d) == result(true, "w", makeContext(""d), Error.init));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w)" )) == result(true, "w", makeContext(testRange("" )), Error.init));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w)"w)) == result(true, "w", makeContext(testRange(""w)), Error.init));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))(testRange("(w)"d)) == result(true, "w", makeContext(testRange(""d)), Error.init));
 
                 assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w}" ) == result(false, "", makeContext("" ), Error(q{")"})));
                 assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w}"w) == result(false, "", makeContext(""w), Error(q{")"})));
@@ -1403,26 +1363,26 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateAndPred!(parseString!"w"))("www" ) == result(true, None.init, makeContext("www" , 0), Error.init));
-                assert(getResult!(combinateAndPred!(parseString!"w"))("www"w) == result(true, None.init, makeContext("www"w, 0), Error.init));
-                assert(getResult!(combinateAndPred!(parseString!"w"))("www"d) == result(true, None.init, makeContext("www"d, 0), Error.init));
-                assert(getResult!(combinateAndPred!(parseString!"w"))(testRange("www" )) == result(true, None.init, makeContext(testRange("www" ), 0), Error.init));
-                assert(getResult!(combinateAndPred!(parseString!"w"))(testRange("www"w)) == result(true, None.init, makeContext(testRange("www"w), 0), Error.init));
-                assert(getResult!(combinateAndPred!(parseString!"w"))(testRange("www"d)) == result(true, None.init, makeContext(testRange("www"d), 0), Error.init));
+                assert(getResult!(combinateAndPred!(parseString!"w"))("www" ) == result(true, None.init, makeContext("www" ), Error.init));
+                assert(getResult!(combinateAndPred!(parseString!"w"))("www"w) == result(true, None.init, makeContext("www"w), Error.init));
+                assert(getResult!(combinateAndPred!(parseString!"w"))("www"d) == result(true, None.init, makeContext("www"d), Error.init));
+                assert(getResult!(combinateAndPred!(parseString!"w"))(testRange("www" )) == result(true, None.init, makeContext(testRange("www" )), Error.init));
+                assert(getResult!(combinateAndPred!(parseString!"w"))(testRange("www"w)) == result(true, None.init, makeContext(testRange("www"w)), Error.init));
+                assert(getResult!(combinateAndPred!(parseString!"w"))(testRange("www"d)) == result(true, None.init, makeContext(testRange("www"d)), Error.init));
 
-                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))("www" ) == result(true, "w", makeContext("ww" , 1), Error.init));
-                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))("www"w) == result(true, "w", makeContext("ww"w, 1), Error.init));
-                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))("www"d) == result(true, "w", makeContext("ww"d, 1), Error.init));
-                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))(testRange("www" )) == result(true, "w", makeContext(testRange("ww" ), 1), Error.init));
-                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))(testRange("www"w)) == result(true, "w", makeContext(testRange("ww"w), 1), Error.init));
-                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))(testRange("www"d)) == result(true, "w", makeContext(testRange("ww"d), 1), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))("www" ) == result(true, "w", makeContext("ww" ), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))("www"w) == result(true, "w", makeContext("ww"w), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))("www"d) == result(true, "w", makeContext("ww"d), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))(testRange("www" )) == result(true, "w", makeContext(testRange("ww" )), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))(testRange("www"w)) == result(true, "w", makeContext(testRange("ww"w)), Error.init));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))(testRange("www"d)) == result(true, "w", makeContext(testRange("ww"d)), Error.init));
 
-                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))("www" ) == result(true, "ww", makeContext("w" , 2), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))("www"w) == result(true, "ww", makeContext("w"w, 2), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))("www"d) == result(true, "ww", makeContext("w"d, 2), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))(testRange("www" )) == result(true, "ww", makeContext(testRange("w" ), 2), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))(testRange("www"w)) == result(true, "ww", makeContext(testRange("w"w), 2), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))(testRange("www"d)) == result(true, "ww", makeContext(testRange("w"d), 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))("www" ) == result(true, "ww", makeContext("w" ), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))("www"w) == result(true, "ww", makeContext("w"w), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))("www"d) == result(true, "ww", makeContext("w"d), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))(testRange("www" )) == result(true, "ww", makeContext(testRange("w" )), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))(testRange("www"w)) == result(true, "ww", makeContext(testRange("w"w)), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))(testRange("www"d)) == result(true, "ww", makeContext(testRange("w"d)), Error.init));
 
                 assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))("w" ) == result(false, "", makeContext("" ), Error(q{"w"})));
                 assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))), flat))("w"w) == result(false, "", makeContext(""w), Error(q{"w"})));
@@ -1449,12 +1409,12 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))("wwws" ) == result(true, "ww", makeContext("ws" , 2), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))("wwws"w) == result(true, "ww", makeContext("ws"w, 2), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))("wwws"d) == result(true, "ww", makeContext("ws"d, 2), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))(testRange("wwws" )) == result(true, "ww", makeContext(testRange("ws" ), 2), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))(testRange("wwws"w)) == result(true, "ww", makeContext(testRange("ws"w), 2), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))(testRange("wwws"d)) == result(true, "ww", makeContext(testRange("ws"d), 2), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))("wwws" ) == result(true, "ww", makeContext("ws" ), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))("wwws"w) == result(true, "ww", makeContext("ws"w), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))("wwws"d) == result(true, "ww", makeContext("ws"d), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))(testRange("wwws" )) == result(true, "ww", makeContext(testRange("ws" )), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))(testRange("wwws"w)) == result(true, "ww", makeContext(testRange("ws"w)), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))), flat))(testRange("wwws"d)) == result(true, "ww", makeContext(testRange("ws"d)), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1511,12 +1471,12 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www" ) == result(true, 3LU, makeContext("" , 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www"w) == result(true, 3LU, makeContext(""w, 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www"d) == result(true, 3LU, makeContext(""d, 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www" )) == result(true, 3LU, makeContext(testRange("" ), 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www"w)) == result(true, 3LU, makeContext(testRange(""w), 3), Error.init));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www"d)) == result(true, 3LU, makeContext(testRange(""d), 3), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www" ) == result(true, 3LU, makeContext("" ), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www"w) == result(true, 3LU, makeContext(""w), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www"d) == result(true, 3LU, makeContext(""d), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www" )) == result(true, 3LU, makeContext(testRange("" )), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www"w)) == result(true, 3LU, makeContext(testRange(""w)), Error.init));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www"d)) == result(true, 3LU, makeContext(testRange(""d)), Error.init));
 
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a" ) == result(false, 0LU, makeContext("" ), Error(q{"w"})));
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a"w) == result(false, 0LU, makeContext(""w), Error(q{"w"})));
@@ -1551,12 +1511,12 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwwww" ) == result(true, "wwwww", makeContext("" , 5), Error.init));
-                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwwww"w) == result(true, "wwwww", makeContext(""w, 5), Error.init));
-                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwwww"d) == result(true, "wwwww", makeContext(""d, 5), Error.init));
-                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwwww" )) == result(true, "wwwww", makeContext(testRange("" ), 5), Error.init));
-                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwwww"w)) == result(true, "wwwww", makeContext(testRange(""w), 5), Error.init));
-                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwwww"d)) == result(true, "wwwww", makeContext(testRange(""d), 5), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwwww" ) == result(true, "wwwww", makeContext("" ), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwwww"w) == result(true, "wwwww", makeContext(""w), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwwww"d) == result(true, "wwwww", makeContext(""d), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwwww" )) == result(true, "wwwww", makeContext(testRange("" )), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwwww"w)) == result(true, "wwwww", makeContext(testRange(""w)), Error.init));
+                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwwww"d)) == result(true, "wwwww", makeContext(testRange(""d)), Error.init));
 
                 assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwww" ) == result(false, "", makeContext("" ), Error("passing check")));
                 assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwww"w) == result(false, "", makeContext(""w), Error("passing check")));
@@ -1580,26 +1540,26 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(parseAnyChar!())("hoge" ) == result(true, "h", makeContext("oge" , 1), Error.init));
-                assert(getResult!(parseAnyChar!())("hoge"w) == result(true, "h", makeContext("oge"w, 1), Error.init));
-                assert(getResult!(parseAnyChar!())("hoge"d) == result(true, "h", makeContext("oge"d, 1), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("hoge" )) == result(true, "h", makeContext(testRange("oge" ), 1), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("hoge"w)) == result(true, "h", makeContext(testRange("oge"w), 1), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("hoge"d)) == result(true, "h", makeContext(testRange("oge"d), 1), Error.init));
+                assert(getResult!(parseAnyChar!())("hoge" ) == result(true, "h", makeContext("oge" ), Error.init));
+                assert(getResult!(parseAnyChar!())("hoge"w) == result(true, "h", makeContext("oge"w), Error.init));
+                assert(getResult!(parseAnyChar!())("hoge"d) == result(true, "h", makeContext("oge"d), Error.init));
+                assert(getResult!(parseAnyChar!())(testRange("hoge" )) == result(true, "h", makeContext(testRange("oge" )), Error.init));
+                assert(getResult!(parseAnyChar!())(testRange("hoge"w)) == result(true, "h", makeContext(testRange("oge"w)), Error.init));
+                assert(getResult!(parseAnyChar!())(testRange("hoge"d)) == result(true, "h", makeContext(testRange("oge"d)), Error.init));
 
-                assert(getResult!(parseAnyChar!())("\U00012345" ) == result(true, "\U00012345", makeContext("" , 1), Error.init));
-                assert(getResult!(parseAnyChar!())("\U00012345"w) == result(true, "\U00012345", makeContext(""w, 1), Error.init));
-                assert(getResult!(parseAnyChar!())("\U00012345"d) == result(true, "\U00012345", makeContext(""d, 1), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("\U00012345" )) == result(true, "\U00012345", makeContext(testRange("" ), 1), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("\U00012345"w)) == result(true, "\U00012345", makeContext(testRange(""w), 1), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("\U00012345"d)) == result(true, "\U00012345", makeContext(testRange(""d), 1), Error.init));
+                assert(getResult!(parseAnyChar!())("\U00012345" ) == result(true, "\U00012345", makeContext("" ), Error.init));
+                assert(getResult!(parseAnyChar!())("\U00012345"w) == result(true, "\U00012345", makeContext(""w), Error.init));
+                assert(getResult!(parseAnyChar!())("\U00012345"d) == result(true, "\U00012345", makeContext(""d), Error.init));
+                assert(getResult!(parseAnyChar!())(testRange("\U00012345" )) == result(true, "\U00012345", makeContext(testRange("" )), Error.init));
+                assert(getResult!(parseAnyChar!())(testRange("\U00012345"w)) == result(true, "\U00012345", makeContext(testRange(""w)), Error.init));
+                assert(getResult!(parseAnyChar!())(testRange("\U00012345"d)) == result(true, "\U00012345", makeContext(testRange(""d)), Error.init));
 
-                assert(getResult!(parseAnyChar!())("\nhoge" ) == result(true, "\n", makeContext("hoge" , 1, 2), Error.init));
-                assert(getResult!(parseAnyChar!())("\nhoge"w) == result(true, "\n", makeContext("hoge"w, 1, 2), Error.init));
-                assert(getResult!(parseAnyChar!())("\nhoge"d) == result(true, "\n", makeContext("hoge"d, 1, 2), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("\nhoge" )) == result(true, "\n", makeContext(testRange("hoge" ), 1, 2), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("\nhoge"w)) == result(true, "\n", makeContext(testRange("hoge"w), 1, 2), Error.init));
-                assert(getResult!(parseAnyChar!())(testRange("\nhoge"d)) == result(true, "\n", makeContext(testRange("hoge"d), 1, 2), Error.init));
+                assert(getResult!(parseAnyChar!())("\nhoge" ) == result(true, "\n", makeContext("hoge" , 2), Error.init));
+                assert(getResult!(parseAnyChar!())("\nhoge"w) == result(true, "\n", makeContext("hoge"w, 2), Error.init));
+                assert(getResult!(parseAnyChar!())("\nhoge"d) == result(true, "\n", makeContext("hoge"d, 2), Error.init));
+                assert(getResult!(parseAnyChar!())(testRange("\nhoge" )) == result(true, "\n", makeContext(testRange("hoge" ), 2), Error.init));
+                assert(getResult!(parseAnyChar!())(testRange("\nhoge"w)) == result(true, "\n", makeContext(testRange("hoge"w), 2), Error.init));
+                assert(getResult!(parseAnyChar!())(testRange("\nhoge"d)) == result(true, "\n", makeContext(testRange("hoge"d), 2), Error.init));
 
                 assert(getResult!(parseAnyChar!())("" ) == result(false, "", makeContext("" ), Error("any char")));
                 assert(getResult!(parseAnyChar!())(""w) == result(false, "", makeContext(""w), Error("any char")));
@@ -1623,19 +1583,19 @@ final class CallerInfo{
         unittest{
             static assert(is(parseSpaces!().ResultType));
             enum dg = {
-                assert(getResult!(parseSpaces!())("\t \rhoge" ) == result(true, None.init, makeContext("hoge" , 3), Error.init));
-                assert(getResult!(parseSpaces!())("\t \rhoge"w) == result(true, None.init, makeContext("hoge"w, 3), Error.init));
-                assert(getResult!(parseSpaces!())("\t \rhoge"d) == result(true, None.init, makeContext("hoge"d, 3), Error.init));
-                assert(getResult!(parseSpaces!())(testRange("\t \rhoge" )) == result(true, None.init, makeContext(testRange("hoge" ), 3), Error.init));
-                assert(getResult!(parseSpaces!())(testRange("\t \rhoge"w)) == result(true, None.init, makeContext(testRange("hoge"w), 3), Error.init));
-                assert(getResult!(parseSpaces!())(testRange("\t \rhoge"d)) == result(true, None.init, makeContext(testRange("hoge"d), 3), Error.init));
+                assert(getResult!(parseSpaces!())("\t \rhoge" ) == result(true, None.init, makeContext("hoge" ), Error.init));
+                assert(getResult!(parseSpaces!())("\t \rhoge"w) == result(true, None.init, makeContext("hoge"w), Error.init));
+                assert(getResult!(parseSpaces!())("\t \rhoge"d) == result(true, None.init, makeContext("hoge"d), Error.init));
+                assert(getResult!(parseSpaces!())(testRange("\t \rhoge" )) == result(true, None.init, makeContext(testRange("hoge" )), Error.init));
+                assert(getResult!(parseSpaces!())(testRange("\t \rhoge"w)) == result(true, None.init, makeContext(testRange("hoge"w)), Error.init));
+                assert(getResult!(parseSpaces!())(testRange("\t \rhoge"d)) == result(true, None.init, makeContext(testRange("hoge"d)), Error.init));
 
-                assert(getResult!(parseSpaces!())("hoge" ) == result(true, None.init, makeContext("hoge" , 0), Error.init));
-                assert(getResult!(parseSpaces!())("hoge"w) == result(true, None.init, makeContext("hoge"w, 0), Error.init));
-                assert(getResult!(parseSpaces!())("hoge"d) == result(true, None.init, makeContext("hoge"d, 0), Error.init));
-                assert(getResult!(parseSpaces!())(testRange("hoge" )) == result(true, None.init, makeContext(testRange("hoge" ), 0), Error.init));
-                assert(getResult!(parseSpaces!())(testRange("hoge"w)) == result(true, None.init, makeContext(testRange("hoge"w), 0), Error.init));
-                assert(getResult!(parseSpaces!())(testRange("hoge"d)) == result(true, None.init, makeContext(testRange("hoge"d), 0), Error.init));
+                assert(getResult!(parseSpaces!())("hoge" ) == result(true, None.init, makeContext("hoge" ), Error.init));
+                assert(getResult!(parseSpaces!())("hoge"w) == result(true, None.init, makeContext("hoge"w), Error.init));
+                assert(getResult!(parseSpaces!())("hoge"d) == result(true, None.init, makeContext("hoge"d), Error.init));
+                assert(getResult!(parseSpaces!())(testRange("hoge" )) == result(true, None.init, makeContext(testRange("hoge" )), Error.init));
+                assert(getResult!(parseSpaces!())(testRange("hoge"w)) == result(true, None.init, makeContext(testRange("hoge"w)), Error.init));
+                assert(getResult!(parseSpaces!())(testRange("hoge"d)) == result(true, None.init, makeContext(testRange("hoge"d)), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1670,19 +1630,19 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(parseIdent!())("hoge" ) == result(true, "hoge", makeContext("" , 4), Error.init));
-                assert(getResult!(parseIdent!())("hoge"w) == result(true, "hoge", makeContext(""w, 4), Error.init));
-                assert(getResult!(parseIdent!())("hoge"d) == result(true, "hoge", makeContext(""d, 4), Error.init));
-                assert(getResult!(parseIdent!())(testRange("hoge" )) == result(true, "hoge", makeContext(testRange("" ), 4), Error.init));
-                assert(getResult!(parseIdent!())(testRange("hoge"w)) == result(true, "hoge", makeContext(testRange(""w), 4), Error.init));
-                assert(getResult!(parseIdent!())(testRange("hoge"d)) == result(true, "hoge", makeContext(testRange(""d), 4), Error.init));
+                assert(getResult!(parseIdent!())("hoge" ) == result(true, "hoge", makeContext("" ), Error.init));
+                assert(getResult!(parseIdent!())("hoge"w) == result(true, "hoge", makeContext(""w), Error.init));
+                assert(getResult!(parseIdent!())("hoge"d) == result(true, "hoge", makeContext(""d), Error.init));
+                assert(getResult!(parseIdent!())(testRange("hoge" )) == result(true, "hoge", makeContext(testRange("" )), Error.init));
+                assert(getResult!(parseIdent!())(testRange("hoge"w)) == result(true, "hoge", makeContext(testRange(""w)), Error.init));
+                assert(getResult!(parseIdent!())(testRange("hoge"d)) == result(true, "hoge", makeContext(testRange(""d)), Error.init));
 
-                assert(getResult!(parseIdent!())("_0" ) == result(true, "_0", makeContext("" , 2), Error.init));
-                assert(getResult!(parseIdent!())("_0"w) == result(true, "_0", makeContext(""w, 2), Error.init));
-                assert(getResult!(parseIdent!())("_0"d) == result(true, "_0", makeContext(""d, 2), Error.init));
-                assert(getResult!(parseIdent!())(testRange("_0" )) == result(true, "_0", makeContext(testRange("" ), 2), Error.init));
-                assert(getResult!(parseIdent!())(testRange("_0"w)) == result(true, "_0", makeContext(testRange(""w), 2), Error.init));
-                assert(getResult!(parseIdent!())(testRange("_0"d)) == result(true, "_0", makeContext(testRange(""d), 2), Error.init));
+                assert(getResult!(parseIdent!())("_0" ) == result(true, "_0", makeContext("" ), Error.init));
+                assert(getResult!(parseIdent!())("_0"w) == result(true, "_0", makeContext(""w), Error.init));
+                assert(getResult!(parseIdent!())("_0"d) == result(true, "_0", makeContext(""d), Error.init));
+                assert(getResult!(parseIdent!())(testRange("_0" )) == result(true, "_0", makeContext(testRange("" )), Error.init));
+                assert(getResult!(parseIdent!())(testRange("_0"w)) == result(true, "_0", makeContext(testRange(""w)), Error.init));
+                assert(getResult!(parseIdent!())(testRange("_0"d)) == result(true, "_0", makeContext(testRange(""d)), Error.init));
 
                 assert(getResult!(parseIdent!())("0" ) == result(false, "", makeContext("" ), Error("c: 'A' <= c <= 'Z'")));
                 assert(getResult!(parseIdent!())("0"w) == result(false, "", makeContext(""w), Error("c: 'A' <= c <= 'Z'")));
@@ -1755,26 +1715,26 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(parseStringLiteral!())(`"表が怖い噂のソフト"` ) == result(true, `"表が怖い噂のソフト"`, makeContext("" , 11), Error.init));
-                assert(getResult!(parseStringLiteral!())(`"表が怖い噂のソフト"`w) == result(true, `"表が怖い噂のソフト"`, makeContext(""w, 11), Error.init));
-                assert(getResult!(parseStringLiteral!())(`"表が怖い噂のソフト"`d) == result(true, `"表が怖い噂のソフト"`, makeContext(""d, 11), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange(`"表が怖い噂のソフト"` )) == result(true, `"表が怖い噂のソフト"`, makeContext(testRange("" ), 11), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange(`"表が怖い噂のソフト"`w)) == result(true, `"表が怖い噂のソフト"`, makeContext(testRange(""w), 11), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange(`"表が怖い噂のソフト"`d)) == result(true, `"表が怖い噂のソフト"`, makeContext(testRange(""d), 11), Error.init));
+                assert(getResult!(parseStringLiteral!())(`"表が怖い噂のソフト"` ) == result(true, `"表が怖い噂のソフト"`, makeContext("" ), Error.init));
+                assert(getResult!(parseStringLiteral!())(`"表が怖い噂のソフト"`w) == result(true, `"表が怖い噂のソフト"`, makeContext(""w), Error.init));
+                assert(getResult!(parseStringLiteral!())(`"表が怖い噂のソフト"`d) == result(true, `"表が怖い噂のソフト"`, makeContext(""d), Error.init));
+                assert(getResult!(parseStringLiteral!())(testRange(`"表が怖い噂のソフト"` )) == result(true, `"表が怖い噂のソフト"`, makeContext(testRange("" )), Error.init));
+                assert(getResult!(parseStringLiteral!())(testRange(`"表が怖い噂のソフト"`w)) == result(true, `"表が怖い噂のソフト"`, makeContext(testRange(""w)), Error.init));
+                assert(getResult!(parseStringLiteral!())(testRange(`"表が怖い噂のソフト"`d)) == result(true, `"表が怖い噂のソフト"`, makeContext(testRange(""d)), Error.init));
 
-                assert(getResult!(parseStringLiteral!())(`r"表が怖い噂のソフト"` ) == result(true, `r"表が怖い噂のソフト"`, makeContext("" , 12), Error.init));
-                assert(getResult!(parseStringLiteral!())(`r"表が怖い噂のソフト"`w) == result(true, `r"表が怖い噂のソフト"`, makeContext(""w, 12), Error.init));
-                assert(getResult!(parseStringLiteral!())(`r"表が怖い噂のソフト"`d) == result(true, `r"表が怖い噂のソフト"`, makeContext(""d, 12), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange(`r"表が怖い噂のソフト"` )) == result(true, `r"表が怖い噂のソフト"`, makeContext(testRange("" ), 12), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange(`r"表が怖い噂のソフト"`w)) == result(true, `r"表が怖い噂のソフト"`, makeContext(testRange(""w), 12), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange(`r"表が怖い噂のソフト"`d)) == result(true, `r"表が怖い噂のソフト"`, makeContext(testRange(""d), 12), Error.init));
+                assert(getResult!(parseStringLiteral!())(`r"表が怖い噂のソフト"` ) == result(true, `r"表が怖い噂のソフト"`, makeContext("" ), Error.init));
+                assert(getResult!(parseStringLiteral!())(`r"表が怖い噂のソフト"`w) == result(true, `r"表が怖い噂のソフト"`, makeContext(""w), Error.init));
+                assert(getResult!(parseStringLiteral!())(`r"表が怖い噂のソフト"`d) == result(true, `r"表が怖い噂のソフト"`, makeContext(""d), Error.init));
+                assert(getResult!(parseStringLiteral!())(testRange(`r"表が怖い噂のソフト"` )) == result(true, `r"表が怖い噂のソフト"`, makeContext(testRange("" )), Error.init));
+                assert(getResult!(parseStringLiteral!())(testRange(`r"表が怖い噂のソフト"`w)) == result(true, `r"表が怖い噂のソフト"`, makeContext(testRange(""w)), Error.init));
+                assert(getResult!(parseStringLiteral!())(testRange(`r"表が怖い噂のソフト"`d)) == result(true, `r"表が怖い噂のソフト"`, makeContext(testRange(""d)), Error.init));
 
-                assert(getResult!(parseStringLiteral!())("`表が怖い噂のソフト`" ) == result(true, q{`表が怖い噂のソフト`}, makeContext("" , 11), Error.init));
-                assert(getResult!(parseStringLiteral!())("`表が怖い噂のソフト`"w) == result(true, q{`表が怖い噂のソフト`}, makeContext(""w, 11), Error.init));
-                assert(getResult!(parseStringLiteral!())("`表が怖い噂のソフト`"d) == result(true, q{`表が怖い噂のソフト`}, makeContext(""d, 11), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange("`表が怖い噂のソフト`" )) == result(true, q{`表が怖い噂のソフト`}, makeContext(testRange("" ), 11), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange("`表が怖い噂のソフト`"w)) == result(true, q{`表が怖い噂のソフト`}, makeContext(testRange(""w), 11), Error.init));
-                assert(getResult!(parseStringLiteral!())(testRange("`表が怖い噂のソフト`"d)) == result(true, q{`表が怖い噂のソフト`}, makeContext(testRange(""d), 11), Error.init));
+                assert(getResult!(parseStringLiteral!())("`表が怖い噂のソフト`" ) == result(true, q{`表が怖い噂のソフト`}, makeContext("" ), Error.init));
+                assert(getResult!(parseStringLiteral!())("`表が怖い噂のソフト`"w) == result(true, q{`表が怖い噂のソフト`}, makeContext(""w), Error.init));
+                assert(getResult!(parseStringLiteral!())("`表が怖い噂のソフト`"d) == result(true, q{`表が怖い噂のソフト`}, makeContext(""d), Error.init));
+                assert(getResult!(parseStringLiteral!())(testRange("`表が怖い噂のソフト`" )) == result(true, q{`表が怖い噂のソフト`}, makeContext(testRange("" )), Error.init));
+                assert(getResult!(parseStringLiteral!())(testRange("`表が怖い噂のソフト`"w)) == result(true, q{`表が怖い噂のソフト`}, makeContext(testRange(""w)), Error.init));
+                assert(getResult!(parseStringLiteral!())(testRange("`表が怖い噂のソフト`"d)) == result(true, q{`表が怖い噂のソフト`}, makeContext(testRange(""d)), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1808,26 +1768,26 @@ final class CallerInfo{
 
         unittest{
             enum dg = {
-                assert(getResult!(parseIntLiteral!())("3141" ) == result(true, 3141, makeContext("" , 4), Error.init));
-                assert(getResult!(parseIntLiteral!())("3141"w) == result(true, 3141, makeContext(""w, 4), Error.init));
-                assert(getResult!(parseIntLiteral!())("3141"d) == result(true, 3141, makeContext(""d, 4), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("3141" )) == result(true, 3141, makeContext(testRange("" ), 4), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("3141"w)) == result(true, 3141, makeContext(testRange(""w), 4), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("3141"d)) == result(true, 3141, makeContext(testRange(""d), 4), Error.init));
+                assert(getResult!(parseIntLiteral!())("3141" ) == result(true, 3141, makeContext("" ), Error.init));
+                assert(getResult!(parseIntLiteral!())("3141"w) == result(true, 3141, makeContext(""w), Error.init));
+                assert(getResult!(parseIntLiteral!())("3141"d) == result(true, 3141, makeContext(""d), Error.init));
+                assert(getResult!(parseIntLiteral!())(testRange("3141" )) == result(true, 3141, makeContext(testRange("" )), Error.init));
+                assert(getResult!(parseIntLiteral!())(testRange("3141"w)) == result(true, 3141, makeContext(testRange(""w)), Error.init));
+                assert(getResult!(parseIntLiteral!())(testRange("3141"d)) == result(true, 3141, makeContext(testRange(""d)), Error.init));
 
-                assert(getResult!(parseIntLiteral!())("0" ) == result(true, 0, makeContext("" , 1), Error.init));
-                assert(getResult!(parseIntLiteral!())("0"w) == result(true, 0, makeContext(""w, 1), Error.init));
-                assert(getResult!(parseIntLiteral!())("0"d) == result(true, 0, makeContext(""d, 1), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("0" )) == result(true, 0, makeContext(testRange("" ), 1), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("0"w)) == result(true, 0, makeContext(testRange(""w), 1), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("0"d)) == result(true, 0, makeContext(testRange(""d), 1), Error.init));
+                assert(getResult!(parseIntLiteral!())("0" ) == result(true, 0, makeContext("" ), Error.init));
+                assert(getResult!(parseIntLiteral!())("0"w) == result(true, 0, makeContext(""w), Error.init));
+                assert(getResult!(parseIntLiteral!())("0"d) == result(true, 0, makeContext(""d), Error.init));
+                assert(getResult!(parseIntLiteral!())(testRange("0" )) == result(true, 0, makeContext(testRange("" )), Error.init));
+                assert(getResult!(parseIntLiteral!())(testRange("0"w)) == result(true, 0, makeContext(testRange(""w)), Error.init));
+                assert(getResult!(parseIntLiteral!())(testRange("0"d)) == result(true, 0, makeContext(testRange(""d)), Error.init));
 
-                assert(getResult!(parseIntLiteral!())("0123" ) == result(true, 0, makeContext("123" , 1), Error.init));
-                assert(getResult!(parseIntLiteral!())("0123"w) == result(true, 0, makeContext("123"w, 1), Error.init));
-                assert(getResult!(parseIntLiteral!())("0123"d) == result(true, 0, makeContext("123"d, 1), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("0123" )) == result(true, 0, makeContext(testRange("123" ), 1), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("0123"w)) == result(true, 0, makeContext(testRange("123"w), 1), Error.init));
-                assert(getResult!(parseIntLiteral!())(testRange("0123"d)) == result(true, 0, makeContext(testRange("123"d), 1), Error.init));
+                assert(getResult!(parseIntLiteral!())("0123" ) == result(true, 0, makeContext("123" ), Error.init));
+                assert(getResult!(parseIntLiteral!())("0123"w) == result(true, 0, makeContext("123"w), Error.init));
+                assert(getResult!(parseIntLiteral!())("0123"d) == result(true, 0, makeContext("123"d), Error.init));
+                assert(getResult!(parseIntLiteral!())(testRange("0123" )) == result(true, 0, makeContext(testRange("123" )), Error.init));
+                assert(getResult!(parseIntLiteral!())(testRange("0123"w)) == result(true, 0, makeContext(testRange("123"w)), Error.init));
+                assert(getResult!(parseIntLiteral!())(testRange("0123"d)) == result(true, 0, makeContext(testRange("123"d)), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1842,11 +1802,11 @@ string getSource(size_t callerLine = __LINE__, string callerFile = __FILE__)(str
     return src.getResult!(defs!(), callerLine, callerFile).value;
 }
 
-auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, R)(R input){
-    static if(isSomeString!R || isCharRange!R){
-        return fun.parse(Context!R(input, 0, 1), new CallerInfo(callerLine, callerFile));
+auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range input){
+    static if(isCharRange!Range){
+        return fun.parse(Context!Range(input, 1), new CallerInfo(callerLine, callerFile));
     }else{
-        return fun.parse(Context!R(input, 0), new CallerInfo(callerLine, callerFile));
+        return fun.parse(Context!Range(input), new CallerInfo(callerLine, callerFile));
     }
 }
 
@@ -1894,9 +1854,9 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                assert(getResult!(arch!("(", ")"))("(a(i(u)e)o())") == result(true, "(a(i(u)e)o())", makeContext("", 13), Error.init));
-                assert(getResult!(arch!("[", "]"))("[a[i[u]e]o[]]") == result(true, "[a[i[u]e]o[]]", makeContext("", 13), Error.init));
-                assert(getResult!(arch!("{", "}"))("{a{i{u}e}o{}}") == result(true, "{a{i{u}e}o{}}", makeContext("", 13), Error.init));
+                assert(getResult!(arch!("(", ")"))("(a(i(u)e)o())") == result(true, "(a(i(u)e)o())", makeContext(""), Error.init));
+                assert(getResult!(arch!("[", "]"))("[a[i[u]e]o[]]") == result(true, "[a[i[u]e]o[]]", makeContext(""), Error.init));
+                assert(getResult!(arch!("{", "}"))("{a{i{u}e}o{}}") == result(true, "{a{i{u}e}o{}}", makeContext(""), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
