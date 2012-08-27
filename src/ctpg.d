@@ -23,8 +23,8 @@ public import std.typecons: Tuple, isTuple, tuple;
 alias Tuple!() None;
 
 //version = Issue_8038_Fixed
-//debug = ctpg_compile_time;
 //debug = ctpg;
+//debug = ctpg_compile_time;
 
 private:
 
@@ -133,10 +133,10 @@ final class CallerInfo{
     }
 
 // struct Context
-    struct Context(Range, T = None) if(isCharRange!Range){
+    struct Context(Range) if(isCharRange!Range){
         Range input;
         size_t line = 1;
-        T state;
+        string state;
 
         invariant(){
             assert(line >= 1);
@@ -161,9 +161,9 @@ final class CallerInfo{
         }
     }
 
-    struct Context(Range, T = None) if(!isCharRange!Range && isInputRange!Range){
+    struct Context(Range) if(!isCharRange!Range && isInputRange!Range){
         Range input;
-        T state;
+        string state;
 
         static if(isForwardRange!Range){
             //cannot apply some qualifiers due to unclearness of R
@@ -184,8 +184,8 @@ final class CallerInfo{
         }
     }
 
-    Context!(Range, None) makeContext(Range)(Range range, size_t line = 1){
-        return Context!(Range, None)(range, line);
+    Context!Range makeContext(Range)(Range range, size_t line = 1){
+        return Context!Range(range, line);
     }
 
 // struct Result
@@ -210,7 +210,7 @@ final class CallerInfo{
         }
     }
 
-    Result!(Range, T) result(Range, T)(bool match, T value, Context!(Range, None) rest, Error error = Error.init){
+    Result!(Range, T) result(Range, T)(bool match, T value, Context!Range rest, Error error = Error.init){
         return Result!(Range, T)(match, value, rest, error);
     }
 
