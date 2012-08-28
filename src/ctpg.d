@@ -132,11 +132,13 @@ final class CallerInfo{
         return Option!T(some, value);
     }
 
+alias string StateType;
+
 // struct Context
     struct Context(Range) if(isCharRange!Range){
         Range input;
         size_t line = 1;
-        string state;
+        StateType state;
 
         invariant(){
             assert(line >= 1);
@@ -163,7 +165,7 @@ final class CallerInfo{
 
     struct Context(Range) if(!isCharRange!Range && isInputRange!Range){
         Range input;
-        string state;
+        StateType state;
 
         static if(isForwardRange!Range){
             //cannot apply some qualifiers due to unclearness of R
@@ -1484,6 +1486,84 @@ final class CallerInfo{
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a" )) == result(false, 0LU, makeContext(testRange("" )), Error(q{"w"})));
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a"w)) == result(false, 0LU, makeContext(testRange(""w)), Error(q{"w"})));
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a"d)) == result(false, 0LU, makeContext(testRange(""d)), Error(q{"w"})));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
+    // combinateConvertWithState
+        template CombinateConvertWithStateType(alias converter, T){
+            static if(__traits(compiles, new converter(T.init.field, StateType.init))){
+                alias converter CombinateConvertWithStateType;
+            }else static if(__traits(compiles, new converter(T.init, StateType.init))){
+                alias converter CombinateConvertWithStateType;
+            }else static if(__traits(compiles, converter(T.init.field, StateType.init))){
+                alias typeof(converter(T.init.field, StateType.init)) CombinateConvertWithStateType;
+            }else static if(__traits(compiles, converter(T.init, StateType.init))){
+                alias typeof(converter(T.init, StateType.init)) CombinateConvertWithStateType;
+            }else{
+                static assert(false);
+            }
+        }
+
+        unittest{
+            static class C1{ this(string, StateType){} }
+            static class C2{ this(string, int, StateType){} }
+            static struct S1{ string str; StateType state; }
+            static struct S2{ string str; int i; StateType state; }
+            static int f1(string, StateType){ return 0; }
+            static int f2(string, int, StateType){ return 0; }
+            static int t1(T)(T, StateType){ static assert(false); }
+            static int t2(T, U)(T, U, StateType){ static assert(false); }
+
+            static assert( is(CombinateConvertWithStateType!(C1, string) == C1));
+            static assert( is(CombinateConvertWithStateType!(C2, Tuple!(string, int)) == C2));
+            static assert(!is(CombinateConvertWithStateType!(C2, Tuple!(string, double))));
+            static assert( is(CombinateConvertWithStateType!(S1, string) == S1));
+            static assert( is(CombinateConvertWithStateType!(S2, Tuple!(string, int)) == S2));
+            static assert(!is(CombinateConvertWithStateType!(S2, Tuple!(string, double))));
+            static assert( is(CombinateConvertWithStateType!(f1, string) == int));
+            static assert( is(CombinateConvertWithStateType!(f2, Tuple!(string, int)) == int));
+            static assert(!is(CombinateConvertWithStateType!(f2, Tuple!(string, double))));
+            static assert( is(CombinateConvertWithStateType!(t1, string) == int));
+            static assert( is(CombinateConvertWithStateType!(t2, Tuple!(string, int)) == int));
+            static assert(!is(CombinateConvertWithStateType!(t2, Tuple!(string, int, int))));
+        }
+
+        template combinateConvertWithState(alias parser, alias converter){
+            alias CombinateConvertWithStateType!(converter, ParserType!parser) ResultType;
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
+                typeof(return) result;
+                auto r = parser.parse(input, info);
+                if(r.match){
+                    result.match = true;
+                    static if(__traits(compiles, converter(r.value.field, input.state))){
+                        result.value = converter(r.value.field, input.state);
+                    }else static if(__traits(compiles, new converter(r.value.field, input.state))){
+                        result.value = new converter(r.value.field, input.state);
+                    }else static if(__traits(compiles, converter(r.value, input.state))){
+                        result.value = converter(r.value, input.state);
+                    }else static if(__traits(compiles, new converter(r.value, input.state))){
+                        result.value = new converter(r.value, input.state);
+                    }else{
+                        static assert(false, converter.mangleof ~ " cannot call with argument type " ~ typeof(r.value).stringof);
+                    }
+                    result.rest = r.rest;
+                }else{
+                    result.error = r.error;
+                }
+                return result;
+            }
+        }
+
+        unittest{
+            enum dg = {
+                assert(getResult!(combinateConvertWithState!(combinateMore1!(parseString!"w"), function(string[] ws, StateType state){ return ws.length; }))("www" ) == result(true, 3LU, makeContext("" )));
+                assert(getResult!(combinateConvertWithState!(combinateMore1!(parseString!"w"), function(string[] ws, StateType state){ return ws.length; }))(testRange("www" )) == result(true, 3LU, makeContext(testRange("" ))));
+
+                assert(getResult!(combinateConvertWithState!(combinateMore1!(parseString!"w"), function(string[] ws, StateType state){ return ws.length; }))("a" ) == result(false, 0LU, makeContext("" ), Error(q{"w"})));
+                assert(getResult!(combinateConvertWithState!(combinateMore1!(parseString!"w"), function(string[] ws, StateType state){ return ws.length; }))(testRange("a" )) == result(false, 0LU, makeContext(testRange("" )), Error(q{"w"})));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
