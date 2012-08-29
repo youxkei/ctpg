@@ -1425,24 +1425,37 @@ alias string StateType;
 
     // combinateConvert
         template CombinateConvertType(alias converter, T){
-            static if(is(converter == struct) || is(converter == class)){
+            static if(__traits(compiles, new converter(T.init.field))){
                 alias converter CombinateConvertType;
-            }else static if(isCallable!converter){
-                alias ReturnType!converter CombinateConvertType;
-            }else static if(__traits(compiles, converter(T.init))){
-                alias typeof(converter(T.init)) CombinateConvertType;
+            }else static if(__traits(compiles, new converter(T.init))){
+                alias converter CombinateConvertType;
             }else static if(__traits(compiles, converter(T.init.field))){
                 alias typeof(converter(T.init.field)) CombinateConvertType;
+            }else static if(__traits(compiles, converter(T.init))){
+                alias typeof(converter(T.init)) CombinateConvertType;
             }else{
                 static assert(false);
             }
         }
 
         unittest{
-            static assert(is(CombinateConvertType!(to!int, string) == int));
-            static assert(is(CombinateConvertType!(to!string, int) == string));
-            static const(real)[] func(T)(T t){ static assert(false); }
-            static assert(is(CombinateConvertType!(func, float) == const(real)[]));
+            static class C1{ this(string){} }
+            static class C2{ this(string, int){} }
+            static struct S1{ string str;}
+            static struct S2{ string str; int i;}
+            static int f1(string){ return 0; }
+            static int f2(string, int){ return 0; }
+            static int t1(T)(T){ static assert(false); }
+            static int t2(T, U)(T, U){ static assert(false); }
+
+            static assert(is(CombinateConvertType!(C1, string) == C1));
+            static assert(is(CombinateConvertType!(C2, Tuple!(string, int)) == C2));
+            static assert(is(CombinateConvertType!(S1, string) == S1));
+            static assert(is(CombinateConvertType!(S2, Tuple!(string, int)) == S2));
+            static assert(is(CombinateConvertType!(f1, string) == int));
+            static assert(is(CombinateConvertType!(f2, Tuple!(string, int)) == int));
+            static assert(is(CombinateConvertType!(t1, string) == int));
+            static assert(is(CombinateConvertType!(t2, Tuple!(string, int)) == int));
         }
 
         template combinateConvert(alias parser, alias converter){
@@ -1474,18 +1487,10 @@ alias string StateType;
         unittest{
             enum dg = {
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www" ) == result(true, 3LU, makeContext("" )));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www"w) == result(true, 3LU, makeContext(""w)));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www"d) == result(true, 3LU, makeContext(""d)));
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www" )) == result(true, 3LU, makeContext(testRange("" ))));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www"w)) == result(true, 3LU, makeContext(testRange(""w))));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("www"d)) == result(true, 3LU, makeContext(testRange(""d))));
 
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a" ) == result(false, 0LU, makeContext("" ), Error(q{"w"})));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a"w) == result(false, 0LU, makeContext(""w), Error(q{"w"})));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a"d) == result(false, 0LU, makeContext(""d), Error(q{"w"})));
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a" )) == result(false, 0LU, makeContext(testRange("" )), Error(q{"w"})));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a"w)) == result(false, 0LU, makeContext(testRange(""w)), Error(q{"w"})));
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a"d)) == result(false, 0LU, makeContext(testRange(""d)), Error(q{"w"})));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
