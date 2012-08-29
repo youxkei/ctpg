@@ -1615,6 +1615,40 @@ alias string StateType;
             dg();
         }
 
+    // combinateChangeState
+        template combinateChangeState(alias parser){
+            alias None ResultType;
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
+                typeof(return) result;
+                auto r = parser.parse(input, info);
+                if(r.match){
+                    result.match = true;
+                    result.rest.input = r.rest.input;
+                    result.rest.line = r.rest.line;
+                    result.rest.state = r.value;
+                }
+                return result;
+            }
+        }
+
+        unittest{
+            enum dg = {
+                {
+                    auto r = getResult!(combinateChangeState!(parseString!"hoge"))("hoge");
+                    assert(r.rest.input == "");
+                    assert(r.rest.state == "hoge");
+                }
+                {
+                    auto r = getResult!(combinateSequence!(combinateChangeState!(parseString!"hoge"), combinateChangeState!(parseString!"piyo")))("hogepiyo");
+                    assert(r.rest.input == "");
+                    assert(r.rest.state == "piyo");
+                }
+                return true;
+            };
+            dg();
+            debug(ctpg_compile_time) static assert(dg());
+        }
+
 // useful parser
     // parseAnyChar
         template parseAnyChar(){
