@@ -22,7 +22,7 @@ public import std.typecons: Tuple, isTuple, tuple;
 
 alias Tuple!() None;
 
-//version = Issue_8038_Fixed
+version = Issue_8038_Fixed;
 //debug = ctpg;
 //debug = ctpg_compile_time;
 
@@ -2460,7 +2460,7 @@ bool isMatch(alias fun)(string src){
                     assert(result.match);
                     assert(result.rest.empty);
                     version(Issue_8038_Fixed){
-                        assert(result.value == " #line " ~ (__LINE__ - 3).to!string() ~ "\nint!()");
+                        assert(result.value == " #line " ~ (__LINE__ - 4).to!string() ~ "\nint!()");
                     }else{
                         assert(result.value == "int!()");
                     }
@@ -2910,7 +2910,7 @@ bool isMatch(alias fun)(string src){
                                 "alias None ResultType;"
                                 "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){"
                                     "return combinateSequence!("
-                                        " #line " ~ (__LINE__ - 9).to!string() ~ "\nA!(),"
+                                        " #line " ~ (__LINE__ - 10).to!string() ~ "\nA!(),"
                                         "parseEOF!()"
                                     ").parse(input, info);"
                                 "}"
@@ -2989,7 +2989,7 @@ bool isMatch(alias fun)(string src){
                             "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){"
                                 "return combinateConvert!("
                                     "combinateMore0!("
-                                        " #line " ~ (__LINE__ - 27).to!string() ~ "\nhoge!()"
+                                        " #line " ~ (__LINE__ - 28).to!string() ~ "\nhoge!()"
                                     "),"
                                     "function(){"
                                         "return tuple(\"foo\");"
