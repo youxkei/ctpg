@@ -908,13 +908,20 @@ alias string StateType;
         template combinateSkip(alias parser, alias skip){
             alias ParserType!parser ResultType;
             static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
-                return parser.parse(skip.parse(input, info).rest, info);
+                auto r = parser.parse(input, info);
+                if(!r.match){
+                    return parser.parse(skip.parse(input, info).rest, info);
+                }else{
+                    return r;
+                }
             }
         }
 
         unittest{
             enum dg = {
                 assert(getResult!(combinateSkip!(parseString!"foo", parseString!" "))(" foo") == result(true, "foo", makeContext("")));
+                assert(getResult!(combinateSkip!(parseString!"foo", parseString!" "))("foo") == result(true, "foo", makeContext("")));
+                assert(getResult!(combinateSkip!(parseString!"foo", parseString!"foo"))("foo") == result(true, "foo", makeContext("")));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
