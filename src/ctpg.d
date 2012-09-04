@@ -10,11 +10,12 @@ This module implements a compile time parser generator.
 
 module ctpg;
 
-import std.array:     save, empty, join;
-import std.conv:      to;
-import std.range:     isInputRange, isForwardRange, ElementType;
-import std.traits:    CommonType, isCallable, ReturnType, isSomeChar, isSomeString, Unqual, isAssignable, isArray;
-import std.typetuple: staticMap, TypeTuple;
+import std.array:       save, empty, join;
+import std.conv:        to;
+import std.range:       isInputRange, isForwardRange, ElementType;
+import std.traits:      CommonType, isCallable, ReturnType, isSomeChar, isSomeString, Unqual, isAssignable, isArray;
+import std.typetuple:   staticMap, TypeTuple;
+import std.metastrings: toStringNow;
 
 import std.utf: decode;
 
@@ -24,7 +25,9 @@ alias Tuple!() None;
 
 version = Issue_8038_Fixed;
 //debug = ctpg;
-//debug = ctpg_compile_time;
+debug(ctpg){
+    debug = ctpg_compile_time;
+}
 
 private:
 
@@ -1141,8 +1144,21 @@ alias string StateType;
             static assert(is(CommonParserType!(TestParser!string, TestParser!int) == void));
         }
 
-        template combinateChoice(string file, size_t line, parsers...){
+        template combinateChoice(parsers...) if(!is(typeof(parsers[0]) == size_t) && !is(typeof(parsers[1]) == string)) {
+            alias combinateChoice!(0, "", parsers) combinateChoice;
+        }
+
+        template combinateChoice(size_t line, string file, parsers...){
             alias CommonParserType!(parsers) ResultType;
+            static if(is(ResultType == void)){
+                static if(line){
+                    mixin("#line " ~ toStringNow!line ~ " \"" ~ file ~ "\"" q{
+                        static assert(false, "types of parsers connected with \"/\" should have a common convertible type");
+                    });
+                }else{
+                    static assert(false, "types of parsers connected with \"/\" should have a common convertible type");
+                }
+            }
             static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
                 static assert(parsers.length > 0);
                 static if(isForwardRange!R){
@@ -1183,6 +1199,9 @@ alias string StateType;
                 assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange("" )) == result(false, "", makeContext(testRange("" )), Error(q{"w"})));
                 assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange(""w)) == result(false, "", makeContext(testRange(""w)), Error(q{"w"})));
                 assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))(testRange(""d)) == result(false, "", makeContext(testRange(""d)), Error(q{"w"})));
+
+                //assert(getResult!(combinateChoice!(parseString!"h", combinateSequence!(parseString!"w", parseString!"w")))(testRange("w"d)) == result(true, "w", makeContext(testRange(""d))));
+                //assert(getResult!(combinateChoice!(__LINE__, "foo/bar.d", parseString!"h", combinateSequence!(parseString!"w", parseString!"w")))(testRange("w"d)) == result(true, "w", makeContext(testRange(""d))));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -2083,13 +2102,13 @@ bool isMatch(alias fun)(string src){
                         auto result = getResult!(nonterminal!())("A");
                         assert(result.match);
                         assert(result.rest.empty);
-                        assert(result.value == " #line " ~ (__LINE__ - 3).to!string() ~ "\nA!()");
+                        assert(result.value == " #line " ~ toStringNow!(__LINE__ - 3) ~ "\nA!()");
                     }
                     {
                         auto result = getResult!(nonterminal!())("int");
                         assert(result.match);
                         assert(result.rest.empty);
-                        assert(result.value == " #line " ~ (__LINE__ - 3).to!string() ~ "\nint!()");
+                        assert(result.value == " #line " ~ toStringNow!(__LINE__ - 3) ~ "\nint!()");
                     }
                 }else{
                     {
@@ -2467,7 +2486,7 @@ bool isMatch(alias fun)(string src){
                     assert(result.match);
                     assert(result.rest.empty);
                     version(Issue_8038_Fixed){
-                        assert(result.value == " #line " ~ (__LINE__ - 4).to!string() ~ "\nint!()");
+                        assert(result.value == " #line " ~ toStringNow!(__LINE__ - 4) ~ "\nint!()");
                     }else{
                         assert(result.value == "int!()");
                     }
@@ -2801,6 +2820,9 @@ bool isMatch(alias fun)(string src){
             Result!(string, ResultType) parse()(Context!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
+                        getLine!(),
+                        getCallerLine!(),
+                        getCallerFile!(),
                         convExp!(),
                         combinateMore0!(
                             combinateSequence!(
@@ -2813,7 +2835,7 @@ bool isMatch(alias fun)(string src){
                             )
                         )
                     ),
-                    function(string convExp, string[] convExps) => convExps.length ? "combinateChoice!(" ~ convExp ~ "," ~ convExps.join(",") ~ ")" : convExp
+                    function(size_t line, size_t callerLine, string callerFile, string convExp, string[] convExps) => convExps.length ? "combinateChoice!(" ~ (callerLine + line - 1).to!string() ~ ",`" ~ callerFile ~ "`," ~ convExp ~ "," ~ convExps.join(",") ~ ")" : convExp
                 ).parse(input, info);
             }
         }
@@ -2821,12 +2843,12 @@ bool isMatch(alias fun)(string src){
         unittest{
             enum dg = {
                 {
-                    auto result = getResult!(choiceExp!())(`!$* / (&(^"a"))?`);
+                    auto result = getResult!(choiceExp!(), __LINE__, `src\ctpg.d`)(`!$* / (&(^"a"))?`);
                     assert(result.match);
                     assert(result.rest.empty);
                     assert(
                         result.value ==
-                        "combinateChoice!("
+                        "combinateChoice!(" ~ toStringNow!(__LINE__ - 5) ~ ",`src\\ctpg.d`,"
                             "combinateMore0!("
                                 "combinateNone!("
                                     "parseEOF!()"
@@ -2932,7 +2954,7 @@ bool isMatch(alias fun)(string src){
                                 "alias None ResultType;"
                                 "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){"
                                     "return combinateSequence!("
-                                        " #line " ~ (__LINE__ - 10).to!string() ~ "\nA!(),"
+                                        " #line " ~ toStringNow!(__LINE__ - 10) ~ "\nA!(),"
                                         "parseEOF!()"
                                     ").parse(input, info);"
                                 "}"
@@ -3011,7 +3033,7 @@ bool isMatch(alias fun)(string src){
                             "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){"
                                 "return combinateConvert!("
                                     "combinateMore0!("
-                                        " #line " ~ (__LINE__ - 28).to!string() ~ "\nhoge!()"
+                                        " #line " ~ toStringNow!(__LINE__ - 28) ~ "\nhoge!()"
                                     "),"
                                     "function(){"
                                         "return tuple(\"foo\");"
