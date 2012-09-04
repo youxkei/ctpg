@@ -1141,7 +1141,7 @@ alias string StateType;
             static assert(is(CommonParserType!(TestParser!string, TestParser!int) == void));
         }
 
-        template combinateChoice(parsers...){
+        template combinateChoice(string file, size_t line, parsers...){
             alias CommonParserType!(parsers) ResultType;
             static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
                 static assert(parsers.length > 0);
@@ -2713,11 +2713,12 @@ bool isMatch(alias fun)(string src){
                         combinateMore0!(
                             combinateSequence!(
                                 parseSpaces!(),
-                                combinateNone!(
-                                    combinateChoice!(
-                                        parseString!"|",
-                                        parseString!">>"
-                                    )
+                                combinateChoice!(
+                                    parseString!"|",
+                                    parseString!">>",
+                                    parseString!"||",
+                                    parseString!"|!",
+                                    parseString!"|?"
                                 ),
                                 parseSpaces!(),
                                 combinateChoice!(
@@ -2727,10 +2728,24 @@ bool isMatch(alias fun)(string src){
                             )
                         )
                     ),
-                    function(string seqExp, string[] funcs){
+                    function(string seqExp, Tuple!(string, string)[] funcs){
                         string result = seqExp;
                         foreach(func; funcs){
-                            result = "combinateConvert!(" ~ result ~ "," ~ func ~ ")";
+                            final switch(func[0]){
+                                case "|":
+                                case ">>":
+                                    result = "combinateConvert!(" ~ result ~ "," ~ func[1] ~ ")";
+                                    break;
+                                case "||":
+                                    result = "combinateConvertWithState!(" ~ result ~ "," ~ func[1] ~ ")";
+                                    break;
+                                case "|!":
+                                    result = "combinateChangeState!(" ~ result ~ "," ~ func[1] ~ ")";
+                                    break;
+                                case "|?":
+                                    result = "combinateCheck!(" ~ result ~ "," ~ func[1] ~ ")";
+                                    break;
+                            }
                         }
                         return result;
                     }
