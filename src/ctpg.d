@@ -1153,10 +1153,10 @@ alias string StateType;
             static if(is(ResultType == void)){
                 static if(line){
                     mixin("#line " ~ toStringNow!line ~ " \"" ~ file ~ "\"" q{
-                        static assert(false, "types of parsers connected with \"/\" should have a common convertible type");
+                        static assert(false, "types of parsers: \"" ~ staticMap!(ParserType, parsers).stringof[1..$-1] ~ "\" should have a common convertible type");
                     });
                 }else{
-                    static assert(false, "types of parsers connected with \"/\" should have a common convertible type");
+                    static assert(false, "types of parsers: \"" ~ staticMap!(ParserType, parsers).stringof[1..$-1] ~ "\" should have a common convertible type");
                 }
             }
             static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
@@ -1460,7 +1460,7 @@ alias string StateType;
             }else static if(__traits(compiles, converter(T.init))){
                 alias typeof(converter(T.init)) CombinateConvertType;
             }else{
-                static assert(false);
+                alias void CombinateConvertType;
             }
         }
 
@@ -1482,10 +1482,25 @@ alias string StateType;
             static assert(is(CombinateConvertType!(f2, Tuple!(string, int)) == int));
             static assert(is(CombinateConvertType!(t1, string) == int));
             static assert(is(CombinateConvertType!(t2, Tuple!(string, int)) == int));
+
+            static assert(is(CombinateConvertType!(f1, Tuple!(string, string)) == void));
         }
 
         template combinateConvert(alias parser, alias converter){
+            alias combinateConvert!(0, "", parser, converter) combinateConvert;
+        }
+
+        template combinateConvert(size_t line, string file, alias parser, alias converter){
             alias CombinateConvertType!(converter, ParserType!parser) ResultType;
+            static if(is(ResultType == void)){
+                static if(line){
+                    mixin("#line " ~ toStringNow!line ~ " \"" ~ file ~ "\"" q{
+                        static assert(false, "cannot call " ~ converter.stringof ~ " with types: " ~ ParserType!parser.stringof);
+                    });
+                }else{
+                        static assert(false, "cannot pipe with type: " ~ ParserType!parser.stringof);
+                }
+            }
             static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
                 typeof(return) result;
                 auto r = parser.parse(input, info);
@@ -1500,7 +1515,7 @@ alias string StateType;
                     }else static if(__traits(compiles, new converter(r.value))){
                         result.value = new converter(r.value);
                     }else{
-                            static assert(false, converter.mangleof ~ " cannot call with argument type " ~ typeof(r.value).stringof);
+                            static assert(false);
                     }
                     result.rest = r.rest;
                 }else{
@@ -1517,6 +1532,8 @@ alias string StateType;
 
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a" ) == result(false, 0LU, makeContext("" ), Error(q{"w"})));
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a" )) == result(false, 0LU, makeContext(testRange("" )), Error(q{"w"})));
+
+                assert(getResult!(combinateConvert!(10, "hoge/fuga.d", combinateMore1!(parseString!"w"), function(string ws){ return ws.length; }))(testRange("a" )) == result(false, 0LU, makeContext(testRange("" )), Error(q{"w"})));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1955,7 +1972,7 @@ auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FI
     }
 }
 
-auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
+auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range src){
     auto result = src.getResult!(fun!(), callerLine, callerFile)();
     if(result.match){
         return result.value;
@@ -2728,6 +2745,9 @@ bool isMatch(alias fun)(string src){
             Result!(string, ResultType) parse()(Context!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
+                        getLine!(),
+                        getCallerLine!(),
+                        getCallerFile!(),
                         seqExp!(),
                         combinateMore0!(
                             combinateSequence!(
@@ -2747,13 +2767,13 @@ bool isMatch(alias fun)(string src){
                             )
                         )
                     ),
-                    function(string seqExp, Tuple!(string, string)[] funcs){
+                    function(size_t line, size_t callerLine, string callerFile, string seqExp, Tuple!(string, string)[] funcs){
                         string result = seqExp;
                         foreach(func; funcs){
                             final switch(func[0]){
                                 case "|":
                                 case ">>":
-                                    result = "combinateConvert!(" ~ result ~ "," ~ func[1] ~ ")";
+                                    result = "combinateConvert!(" ~ (callerLine + line).to!string() ~ ",`" ~ callerFile ~ "`," ~ result ~ "," ~ func[1] ~ ")";
                                     break;
                                 case "||":
                                     result = "combinateConvertWithState!(" ~ result ~ "," ~ func[1] ~ ")";
