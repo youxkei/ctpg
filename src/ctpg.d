@@ -1475,15 +1475,21 @@ alias string StateType;
             static int t2(T, U)(T, U){ static assert(false); }
 
             static assert(is(CombinateConvertType!(C1, string) == C1));
+            static assert(is(CombinateConvertType!(C1, double) == void));
             static assert(is(CombinateConvertType!(C2, Tuple!(string, int)) == C2));
+            static assert(is(CombinateConvertType!(C2, Tuple!(string, double)) == void));
             static assert(is(CombinateConvertType!(S1, string) == S1));
+            static assert(is(CombinateConvertType!(S1, int) == void));
             static assert(is(CombinateConvertType!(S2, Tuple!(string, int)) == S2));
+            static assert(is(CombinateConvertType!(S2, Tuple!(string, double)) == void));
             static assert(is(CombinateConvertType!(f1, string) == int));
-            static assert(is(CombinateConvertType!(f2, Tuple!(string, int)) == int));
-            static assert(is(CombinateConvertType!(t1, string) == int));
-            static assert(is(CombinateConvertType!(t2, Tuple!(string, int)) == int));
-
             static assert(is(CombinateConvertType!(f1, Tuple!(string, string)) == void));
+            static assert(is(CombinateConvertType!(f2, Tuple!(string, int)) == int));
+            static assert(is(CombinateConvertType!(f2, Tuple!(string, double)) == void));
+            static assert(is(CombinateConvertType!(t1, string) == int));
+            static assert(is(CombinateConvertType!(t1, void) == void));
+            static assert(is(CombinateConvertType!(t2, Tuple!(string, int)) == int));
+            static assert(is(CombinateConvertType!(t2, Tuple!(string, int, int)) == void));
         }
 
         template combinateConvert(alias parser, alias converter){
@@ -1495,10 +1501,10 @@ alias string StateType;
             static if(is(ResultType == void)){
                 static if(line){
                     mixin("#line " ~ toStringNow!line ~ " \"" ~ file ~ "\"" q{
-                        static assert(false, "cannot call " ~ converter.stringof ~ " with types: " ~ ParserType!parser.stringof);
+                        static assert(false, "cannot call " ~ converter.stringof ~ " using `>>` with types: " ~ ParserType!parser.stringof);
                     });
                 }else{
-                        static assert(false, "cannot pipe with type: " ~ ParserType!parser.stringof);
+                    static assert(false, "cannot call " ~ converter.stringof ~ " using `>>` with type: " ~ ParserType!parser.stringof);
                 }
             }
             static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
@@ -1533,7 +1539,7 @@ alias string StateType;
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a" ) == result(false, 0LU, makeContext("" ), Error(q{"w"})));
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))(testRange("a" )) == result(false, 0LU, makeContext(testRange("" )), Error(q{"w"})));
 
-                assert(getResult!(combinateConvert!(10, "hoge/fuga.d", combinateMore1!(parseString!"w"), function(string ws){ return ws.length; }))(testRange("a" )) == result(false, 0LU, makeContext(testRange("" )), Error(q{"w"})));
+                //assert(getResult!(combinateConvert!(10, "hoge/fuga.d", combinateMore1!(parseString!"w"), function(string ws){ return ws.length; }))(testRange("a" )) == result(false, 0LU, makeContext(testRange("" )), Error(q{"w"})));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1551,7 +1557,7 @@ alias string StateType;
             }else static if(__traits(compiles, converter(T.init, StateType.init))){
                 alias typeof(converter(T.init, StateType.init)) CombinateConvertWithStateType;
             }else{
-                static assert(false);
+                alias void CombinateConvertWithStateType;
             }
         }
 
@@ -1565,22 +1571,37 @@ alias string StateType;
             static int t1(T)(T, StateType){ static assert(false); }
             static int t2(T, U)(T, U, StateType){ static assert(false); }
 
-            static assert( is(CombinateConvertWithStateType!(C1, string) == C1));
-            static assert( is(CombinateConvertWithStateType!(C2, Tuple!(string, int)) == C2));
-            static assert(!is(CombinateConvertWithStateType!(C2, Tuple!(string, double))));
-            static assert( is(CombinateConvertWithStateType!(S1, string) == S1));
-            static assert( is(CombinateConvertWithStateType!(S2, Tuple!(string, int)) == S2));
-            static assert(!is(CombinateConvertWithStateType!(S2, Tuple!(string, double))));
-            static assert( is(CombinateConvertWithStateType!(f1, string) == int));
-            static assert( is(CombinateConvertWithStateType!(f2, Tuple!(string, int)) == int));
-            static assert(!is(CombinateConvertWithStateType!(f2, Tuple!(string, double))));
-            static assert( is(CombinateConvertWithStateType!(t1, string) == int));
-            static assert( is(CombinateConvertWithStateType!(t2, Tuple!(string, int)) == int));
-            static assert(!is(CombinateConvertWithStateType!(t2, Tuple!(string, int, int))));
+            static assert(is(CombinateConvertWithStateType!(C1, string) == C1));
+            static assert(is(CombinateConvertWithStateType!(C1, int) == void));
+            static assert(is(CombinateConvertWithStateType!(C2, Tuple!(string, int)) == C2));
+            static assert(is(CombinateConvertWithStateType!(C2, Tuple!(string, double)) == void));
+            static assert(is(CombinateConvertWithStateType!(S1, string) == S1));
+            static assert(is(CombinateConvertWithStateType!(S2, Tuple!(string, int)) == S2));
+            static assert(is(CombinateConvertWithStateType!(S2, Tuple!(string, double)) == void));
+            static assert(is(CombinateConvertWithStateType!(f1, string) == int));
+            static assert(is(CombinateConvertWithStateType!(f2, Tuple!(string, int)) == int));
+            static assert(is(CombinateConvertWithStateType!(f2, Tuple!(string, double)) == void));
+            static assert(is(CombinateConvertWithStateType!(t1, string) == int));
+            static assert(is(CombinateConvertWithStateType!(t1, void) == void));
+            static assert(is(CombinateConvertWithStateType!(t2, Tuple!(string, int)) == int));
+            static assert(is(CombinateConvertWithStateType!(t2, Tuple!(string, int, int)) == void));
         }
 
         template combinateConvertWithState(alias parser, alias converter){
+            alias combinateConvertWithState!(0, "", parser, converter) combinateConvertWithState;
+        }
+
+        template combinateConvertWithState(size_t line, string file, alias parser, alias converter){
             alias CombinateConvertWithStateType!(converter, ParserType!parser) ResultType;
+            static if(is(ResultType == void)){
+                static if(line){
+                    mixin("#line " ~ toStringNow!line ~ " \"" ~ file ~ "\"" q{
+                        static assert(false, "cannot call " ~ converter.stringof ~ " using `>>>` with types: " ~ ParserType!parser.stringof);
+                    });
+                }else{
+                    static assert(false, "cannot call " ~ converter.stringof ~ " using `>>>` with type: " ~ ParserType!parser.stringof);
+                }
+            }
             static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
                 typeof(return) result;
                 auto r = parser.parse(input, info);
@@ -1619,8 +1640,51 @@ alias string StateType;
         }
 
     // combinateCheck
+        template isValidChecker(alias checker, T){
+            static if(is(typeof(checker(T.init.field)) == bool)){
+                immutable isValidChecker = true;
+            }else static if(is(typeof(checker(T.init)) == bool)){
+                immutable isValidChecker = true;
+            }else{
+                immutable isValidChecker = false;
+            }
+        }
+
+        unittest{
+            static bool f1(string){ return true; }
+            static bool f2(string, int){ return true; }
+            static string f3(string){ return ""; }
+            static bool t1(T)(T){ static assert(false); }
+            static bool t2(T, U)(T, U){ static assert(false); }
+            static string t3(T)(T){ static assert(false); }
+
+            static assert( isValidChecker!(f1, string));
+            static assert(!isValidChecker!(f1, int));
+            static assert( isValidChecker!(f2, Tuple!(string, int)));
+            static assert(!isValidChecker!(f2, Tuple!(string, string)));
+            static assert(!isValidChecker!(f3,  string));
+            static assert(!isValidChecker!(f3,  int));
+            static assert( isValidChecker!(t1, int));
+            static assert( isValidChecker!(t2, Tuple!(string, int)));
+            static assert(!isValidChecker!(t2, Tuple!(string, int, int)));
+            static assert(!isValidChecker!(t3, int));
+        }
+
         template combinateCheck(alias parser, alias checker){
+            alias combinateCheck!(0, "", parser, checker) combinateCheck;
+        }
+
+        template combinateCheck(size_t line, string file, alias parser, alias checker){
             alias ParserType!parser ResultType;
+            static if(!isValidChecker!(checker, ResultType)){
+                static if(line){
+                    mixin("#line " ~ toStringNow!line ~ " \"" ~ file ~ "\"" q{
+                        static assert(false, "cannot call " ~ checker.stringof ~ " using `>>?` with types: " ~ ParserType!parser.stringof);
+                    });
+                }else{
+                    static assert(false, "cannot call " ~ checker.stringof ~ " using `>>?` with type: " ~ ParserType!parser.stringof);
+                }
+            }
             static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
                 typeof(return) result;
                 auto r = parser.parse(input, info);
@@ -1640,18 +1704,10 @@ alias string StateType;
         unittest{
             enum dg = {
                 assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwwww" ) == result(true, "wwwww", makeContext("" )));
-                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwwww"w) == result(true, "wwwww", makeContext(""w)));
-                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwwww"d) == result(true, "wwwww", makeContext(""d)));
                 assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwwww" )) == result(true, "wwwww", makeContext(testRange("" ))));
-                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwwww"w)) == result(true, "wwwww", makeContext(testRange(""w))));
-                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwwww"d)) == result(true, "wwwww", makeContext(testRange(""d))));
 
                 assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwww" ) == result(false, "", makeContext("" ), Error("passing check")));
-                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwww"w) == result(false, "", makeContext(""w), Error("passing check")));
-                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))("wwww"d) == result(false, "", makeContext(""d), Error("passing check")));
                 assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwww" )) == result(false, "", makeContext(testRange("" )), Error("passing check")));
-                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwww"w)) == result(false, "", makeContext(testRange(""w)), Error("passing check")));
-                assert(getResult!(combinateConvert!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }), flat))(testRange("wwww"d)) == result(false, "", makeContext(testRange(""d)), Error("passing check")));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -2528,6 +2584,7 @@ bool isMatch(alias fun)(string src){
                             combinateChoice!(
                                 parseString!"&",
                                 parseString!"^",
+                                parseString!"!!",
                                 parseString!"!"
                             )
                         ),
@@ -2535,18 +2592,16 @@ bool isMatch(alias fun)(string src){
                     ),
                     function(Option!string op, string primaryExp){
                         final switch(op.value){
-                            case "&":{
+                            case "&":
                                 return "combinateAndPred!(" ~ primaryExp ~ ")";
-                            }
-                            case "!":{
-                                return "combinateNone!(" ~ primaryExp ~ ")";
-                            }
-                            case "^":{
+                            case "^":
                                 return "combinateNotPred!(" ~ primaryExp ~ ")";
-                            }
-                            case "":{
+                            case "!!":
+                                return "combinateChangeState!(" ~ primaryExp ~ ")";
+                            case "!":
+                                return "combinateNone!(" ~ primaryExp ~ ")";
+                            case "":
                                 return primaryExp;
-                            }
                         }
                     }
                 ).parse(input, info);
@@ -2561,6 +2616,15 @@ bool isMatch(alias fun)(string src){
                 assert(
                     result.value ==
                     "combinateNone!("
+                        "parseEOF!()"
+                    ")"
+                );
+                result = getResult!(preExp!())("!!$");
+                assert(result.match);
+                assert(result.rest.empty);
+                assert(
+                    result.value ==
+                    "combinateChangeState!("
                         "parseEOF!()"
                     ")"
                 );
@@ -2745,7 +2809,6 @@ bool isMatch(alias fun)(string src){
             Result!(string, ResultType) parse()(Context!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
-                        getLine!(),
                         getCallerLine!(),
                         getCallerFile!(),
                         seqExp!(),
@@ -2753,12 +2816,11 @@ bool isMatch(alias fun)(string src){
                             combinateSequence!(
                                 parseSpaces!(),
                                 combinateChoice!(
-                                    parseString!"|",
-                                    parseString!">>",
-                                    parseString!"||",
-                                    parseString!"|!",
-                                    parseString!"|?"
+                                    parseString!">>>",
+                                    parseString!">>?",
+                                    parseString!">>"
                                 ),
+                                getLine!(),
                                 parseSpaces!(),
                                 combinateChoice!(
                                     func!(),
@@ -2767,22 +2829,18 @@ bool isMatch(alias fun)(string src){
                             )
                         )
                     ),
-                    function(size_t line, size_t callerLine, string callerFile, string seqExp, Tuple!(string, string)[] funcs){
+                    function(size_t callerLine, string callerFile, string seqExp, Tuple!(string, size_t, string)[] funcs){
                         string result = seqExp;
                         foreach(func; funcs){
                             final switch(func[0]){
-                                case "|":
                                 case ">>":
-                                    result = "combinateConvert!(" ~ (callerLine + line).to!string() ~ ",`" ~ callerFile ~ "`," ~ result ~ "," ~ func[1] ~ ")";
+                                    result = "combinateConvert!(" ~ (callerLine + func[1] - 1).to!string() ~ ",`" ~ callerFile ~ "`," ~ result ~ "," ~ func[2] ~ ")";
                                     break;
-                                case "||":
-                                    result = "combinateConvertWithState!(" ~ result ~ "," ~ func[1] ~ ")";
+                                case ">>>":
+                                    result = "combinateConvertWithState!(" ~ (callerLine + func[1] - 1).to!string() ~ ",`" ~ callerFile ~ "`," ~ result ~ "," ~ func[2] ~ ")";
                                     break;
-                                case "|!":
-                                    result = "combinateChangeState!(" ~ result ~ "," ~ func[1] ~ ")";
-                                    break;
-                                case "|?":
-                                    result = "combinateCheck!(" ~ result ~ "," ~ func[1] ~ ")";
+                                case ">>?":
+                                    result = "combinateCheck!(" ~ (callerLine + func[1] - 1).to!string() ~ ",`" ~ callerFile ~ "`," ~ result ~ "," ~ func[2] ~ ")";
                                     break;
                             }
                         }
@@ -2795,12 +2853,12 @@ bool isMatch(alias fun)(string src){
         unittest{
             enum dg = {
                 {
-                    auto result = getResult!(convExp!())(q{!"hello" $ >> {return false;}});
+                    auto result = getResult!(convExp!(), __LINE__, `src\ctpg.d`)(q{!"hello" $ >> {return false;}});
                     assert(result.match);
                     assert(result.rest.empty);
                     assert(
                         result.value ==
-                        "combinateConvert!("
+                        "combinateConvert!(" ~ toStringNow!(__LINE__ - 5) ~ ",`src\\ctpg.d`,"
                             "combinateSequence!("
                                 "combinateNone!("
                                     "parseString!\"hello\""
@@ -2814,17 +2872,32 @@ bool isMatch(alias fun)(string src){
                     );
                 }
                 {
-                    auto result = getResult!(convExp!())(q{"hello" >> flat >> to!int});
+                    auto result = getResult!(convExp!(), __LINE__, `src/ctpg.d`)(q{"hello" >> flat >> to!int});
                     assert(result.match);
                     assert(result.rest.empty);
                     assert(
                         result.value ==
-                        "combinateConvert!("
-                            "combinateConvert!("
+                        "combinateConvert!(" ~ toStringNow!(__LINE__ - 5) ~ ",`src/ctpg.d`,"
+                            "combinateConvert!(" ~ toStringNow!(__LINE__ - 6) ~ ",`src/ctpg.d`,"
                                 "parseString!\"hello\","
                                 "flat"
                             "),"
                             "to!int"
+                        ")"
+                    );
+                }
+                {
+                    auto result = getResult!(convExp!(), __LINE__, `src\ctpg.d`)(q{$ >>> to!string >>? isValid});
+                    assert(result.match);
+                    assert(result.rest.empty);
+                    assert(
+                        result.value == 
+                        "combinateCheck!(" ~ toStringNow!(__LINE__ - 5) ~ r",`src\ctpg.d`,"
+                            "combinateConvertWithState!(" ~ toStringNow!(__LINE__ - 6) ~ r",`src\ctpg.d`,"
+                                "parseEOF!(),"
+                                "to!string"
+                            "),"
+                            "isValid"
                         ")"
                     );
                 }
@@ -2940,7 +3013,7 @@ bool isMatch(alias fun)(string src){
             enum dg = {
                 cast(void)__LINE__;
                 {
-                    auto result = getResult!(def!())(`bool hoge = !"hello" $ >> {return false;};`);
+                    auto result = getResult!(def!(), __LINE__, `src\ctpg.d`)(`bool hoge = !"hello" $ >> {return false;};`);
                     assert(result.match);
                     assert(result.rest.empty);
                     assert(
@@ -2948,7 +3021,7 @@ bool isMatch(alias fun)(string src){
                         "template hoge(){"
                             "alias bool ResultType;"
                             "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){"
-                                "return combinateConvert!("
+                                "return combinateConvert!(" ~ toStringNow!(__LINE__ - 8) ~ r",`src\ctpg.d`,"
                                     "combinateSequence!("
                                         "combinateNone!("
                                             "parseString!\"hello\""
@@ -2967,33 +3040,18 @@ bool isMatch(alias fun)(string src){
                     auto result = getResult!(def!())(`None recursive = A $;`);
                     assert(result.match);
                     assert(result.rest.empty);
-                    version(Issue_8038_Fixed){
-                        assert(
-                            result.value ==
-                            "template recursive(){"
-                                "alias None ResultType;"
-                                "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){"
-                                    "return combinateSequence!("
-                                        " #line " ~ toStringNow!(__LINE__ - 10) ~ "\nA!(),"
-                                        "parseEOF!()"
-                                    ").parse(input, info);"
-                                "}"
+                    assert(
+                        result.value ==
+                        "template recursive(){"
+                            "alias None ResultType;"
+                            "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){"
+                                "return combinateSequence!("
+                                    " #line " ~ toStringNow!(__LINE__ - 9) ~ "\nA!(),"
+                                    "parseEOF!()"
+                                ").parse(input, info);"
                             "}"
-                        );
-                    }else{
-                        assert(
-                            result.value ==
-                            "template recursive(){"
-                                "alias None ResultType;"
-                                "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){"
-                                    "return combinateSequence!("
-                                        "A!(),"
-                                        "parseEOF!()"
-                                    ").parse(input, info);"
-                                "}"
-                            "}"
-                        );
-                    }
+                        "}"
+                    );
                 }
                 return true;
             };
@@ -3022,80 +3080,45 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                cast(void)__LINE__;
-                auto result = getResult!(defs!())(q{
+                cast(void)__LINE__; 
+                auto result = getResult!(defs!(), __LINE__, r"src\ctpg.d")(q{
                     bool hoge = !"hello" $ >> {return false;};
                     Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
                 });
                 assert(result.match);
                 assert(result.rest.empty);
-                version(Issue_8038_Fixed){
-                    assert(
-                        result.value ==
-                        "template hoge(){"
-                            "alias bool ResultType;"
-                            "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){"
-                                "return combinateConvert!("
-                                    "combinateSequence!("
-                                        "combinateNone!("
-                                            "parseString!\"hello\""
-                                        "),"
-                                        "parseEOF!()"
+                assert(
+                    result.value ==
+                    "template hoge(){"
+                        "alias bool ResultType;"
+                        "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){"
+                            "return combinateConvert!(" ~ toStringNow!(__LINE__ - 10) ~ r",`src\ctpg.d`,"
+                                "combinateSequence!("
+                                    "combinateNone!("
+                                        "parseString!\"hello\""
                                     "),"
-                                    "function(){"
-                                        "return false;"
-                                    "}"
-                                ").parse(input, info);"
-                            "}"
+                                    "parseEOF!()"
+                                "),"
+                                "function(){"
+                                    "return false;"
+                                "}"
+                            ").parse(input, info);"
                         "}"
-                        "template hoge2(){"
-                            "alias Tuple!piyo ResultType;"
-                            "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){"
-                                "return combinateConvert!("
-                                    "combinateMore0!("
-                                        " #line " ~ toStringNow!(__LINE__ - 28) ~ "\nhoge!()"
-                                    "),"
-                                    "function(){"
-                                        "return tuple(\"foo\");"
-                                    "}"
-                                ").parse(input, info);"
-                            "}"
+                    "}"
+                    "template hoge2(){"
+                        "alias Tuple!piyo ResultType;"
+                        "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){"
+                            "return combinateConvert!(" ~ toStringNow!(__LINE__ - 25) ~ r",`src\ctpg.d`,"
+                                "combinateMore0!("
+                                    " #line " ~ toStringNow!(__LINE__ - 27) ~ "\nhoge!()"
+                                "),"
+                                "function(){"
+                                    "return tuple(\"foo\");"
+                                "}"
+                            ").parse(input, info);"
                         "}"
-                    );
-                }else{
-                    assert(
-                        result.value ==
-                        "template hoge(){"
-                            "alias bool ResultType;"
-                            "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){"
-                                "return combinateConvert!("
-                                    "combinateSequence!("
-                                        "combinateNone!("
-                                            "parseString!\"hello\""
-                                        "),"
-                                        "parseEOF!()"
-                                    "),"
-                                    "function(){"
-                                        "return false;"
-                                    "}"
-                                ").parse(input, info);"
-                            "}"
-                        "}"
-                        "template hoge2(){"
-                            "alias Tuple!piyo ResultType;"
-                            "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){"
-                                "return combinateConvert!("
-                                    "combinateMore0!("
-                                        "hoge!()"
-                                    "),"
-                                    "function(){"
-                                        "return tuple(\"foo\");"
-                                    "}"
-                                ").parse(input, info);"
-                            "}"
-                        "}"
-                    );
-                }
+                    "}"
+                );
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
