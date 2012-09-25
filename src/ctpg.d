@@ -136,7 +136,7 @@ final class CallerInfo{
         return Option!T(some, value);
     }
 
-alias string StateType;
+alias Tuple!(string, string) StateType;
 
 // struct Context
     struct Context(Range) if(isCharRange!Range){
@@ -190,8 +190,8 @@ alias string StateType;
         }
     }
 
-    Context!Range makeContext(Range)(Range range, size_t line = 1){
-        return Context!Range(range, line);
+    Context!Range makeContext(Range)(Range range, size_t line = 1, StateType state = StateType.init){
+        return Context!Range(range, line, state);
     }
 
 // struct Result
@@ -360,6 +360,7 @@ alias string StateType;
                         result.value = str;
                         result.rest.input = input.input[convertedString.length..$];
                         result.rest.line = input.line + breadth.line;
+                        result.rest.state = input.state;
                         return result;
                     }
                     result.error = Error('"' ~ str ~ '"', input.line);
@@ -376,6 +377,7 @@ alias string StateType;
                     result.value = str;
                     result.rest.input = input.input;
                     result.rest.line = input.line + breadth.line;
+                    result.rest.state = input.state;
                     return result;
 
                     Lerror:
@@ -518,6 +520,7 @@ alias string StateType;
                             result.value = c.to!string();
                             result.rest.input = input.input[idx..$];
                             result.rest.line = c == '\n' ? input.line + 1 : input.line;
+                            result.rest.state = input.state;
                             return result;
                         }
                     }
@@ -534,6 +537,7 @@ alias string StateType;
                             result.value = c.to!string();
                             result.rest.input = input.input;
                             result.rest.line = c == '\n' ? input.line + 1 : input.line;
+                            result.rest.state = input.state;
                             return result;
                         }
                     }
@@ -595,6 +599,7 @@ alias string StateType;
                                 result.value = input.input[0..6].to!string();
                                 result.rest.input = input.input[6..$];
                                 result.rest.line = input.line;
+                                result.rest.state = input.state;
                                 return result;
                             }
                             case 'U':{
@@ -602,6 +607,7 @@ alias string StateType;
                                 result.value = input.input[0..10].to!string();
                                 result.rest.input = input.input[10..$];
                                 result.rest.line = input.line;
+                                result.rest.state = input.state;
                                 return result;
                             }
                             case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
@@ -609,6 +615,7 @@ alias string StateType;
                                 result.value = input.input[0..2].to!string();
                                 result.rest.input = input.input[2..$];
                                 result.rest.line = input.line;
+                                result.rest.state = input.state;
                                 return result;
                             }
                             default:{
@@ -634,6 +641,7 @@ alias string StateType;
                                 result.value = to!string(data);
                                 result.rest.input = input.input;
                                 result.rest.line = input.line;
+                                result.rest.state = input.state;
                                 return result;
                             }
                             case 'U':{
@@ -648,6 +656,7 @@ alias string StateType;
                                 result.value = to!string(data);
                                 result.rest.input = input.input;
                                 result.rest.line = input.line;
+                                result.rest.state = input.state;
                                 return result;
                             }
                             case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
@@ -656,6 +665,7 @@ alias string StateType;
                                 result.value = "\\" ~ to!string(c2);
                                 result.rest.input = input.input;
                                 result.rest.line = input.line;
+                                result.rest.state = input.state;
                                 return result;
                             }
                             default:{
@@ -728,6 +738,7 @@ alias string StateType;
                         result.value = input.input[0..1].to!string();
                         result.rest.input = input.input[1..$];
                         result.rest.line = (input.input[0] == '\n' ? input.line + 1 : input.line);
+                        result.rest.state = input.state;
                         return result;
                     }
                     result.error = Error("space", input.line);
@@ -740,6 +751,7 @@ alias string StateType;
                             input.input.popFront;
                             result.rest.input = input.input;
                             result.rest.line = (c == '\n' ? input.line + 1 : input.line);
+                            result.rest.state = input.state;
                             return result;
                         }
                     }
@@ -784,6 +796,9 @@ alias string StateType;
                 typeof(return) result;
                 if(input.input.empty){
                     result.match = true;
+                    result.rest.input = input.input;
+                    result.rest.line = input.line;
+                    result.rest.state = input.state;
                 }else{
                     static if(isSomeString!R || isCharRange!R){
                         result.error = Error("EOF", input.line);
@@ -1451,7 +1466,7 @@ alias string StateType;
             }
         }
 
-        unittest{
+        version(none) unittest{
             enum dg = {
                 {
                     auto r = getResult!(combinateChangeState!(parseString!"hoge"))("hoge");
@@ -1751,11 +1766,11 @@ string getSource(size_t callerLine = __LINE__, string callerFile = __FILE__)(str
     return src.getResult!(defs!(), callerLine, callerFile).value;
 }
 
-auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range input){
+auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range input, StateType state = StateType.init){
     static if(isCharRange!Range){
-        return fun.parse(Context!Range(input, 1), new CallerInfo(callerLine, callerFile));
+        return fun.parse(Context!Range(input, 1, state), new CallerInfo(callerLine, callerFile));
     }else{
-        return fun.parse(Context!Range(input), new CallerInfo(callerLine, callerFile));
+        return fun.parse(Context!Range(input, state), new CallerInfo(callerLine, callerFile));
     }
 }
 
@@ -1876,13 +1891,15 @@ bool isMatch(alias fun)(string src){
             alias string ResultType;
             version(Issue_8038_Fixed){
                 Result!(string, ResultType) parse()(Context!string input, in CallerInfo info){
-                    return combinateConvert!(
+                    return combinateConvertWithState!(
                         combinateSequence!(
                             getCallerLine!(),
                             getLine!(),
                             id!()
                         ),
-                        function(size_t callerLine, size_t line, string id) => " #line " ~ (callerLine + line - 1).to!string() ~ "\n" ~ id ~ "!()"
+                        function(size_t callerLine, size_t line, string id, StateType state)
+                        =>
+                        state[1].length ? " #line " ~ (callerLine + line - 1).to!string() ~ "\ncombinateSkip!(combinateMemoize!(" ~ id ~ "!())," ~ state[1] ~ ")" : " #line " ~ (callerLine + line - 1).to!string() ~ "\ncombinateMemoize!(" ~ id ~ "!())"
                     ).parse(input, info);
                 }
             }else{
@@ -1901,8 +1918,8 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                assert(getResult!(nonterminal!())("A") == result(true, " #line " ~ toStringNow!__LINE__ ~ "\nA!()", makeContext(""), Error.init));
-                assert(getResult!(nonterminal!())("int") == result(true, " #line " ~ toStringNow!__LINE__ ~ "\nint!()", makeContext(""), Error.init));
+                assert(getResult!(nonterminal!())("A") == result(true, " #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(A!())", makeContext(""), Error.init));
+                assert(getResult!(nonterminal!())("int") == result(true, " #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(int!())", makeContext(""), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -2126,19 +2143,25 @@ bool isMatch(alias fun)(string src){
         template literal(){
             alias string ResultType;
             Result!(string, ResultType) parse()(Context!string input, in CallerInfo info){
-                return combinateChoice!(
-                    rangeLit!(),
-                    stringLit!(),
-                    eofLit!(),
+                return combinateConvertWithState!(
+                    combinateChoice!(
+                        rangeLit!(),
+                        stringLit!(),
+                        eofLit!()
+                    ),
+                    function(string literal, StateType state)
+                    =>
+                    state[1].length ? "combinateSkip!(combinateMemoize!(" ~ literal ~ ")," ~ state[1] ~ ")" : "combinateMemoize!(" ~ literal ~ ")"
                 ).parse(input, info);
             }
         }
 
         unittest{
             enum dg = {
-                assert(getResult!(literal!())("\"hello\nworld\"") == result(true, "parseString!\"hello\nworld\"", makeContext("", 2), Error.init));
-                assert(getResult!(literal!())("[a-z]") == result(true, "parseCharRange!('a','z')", makeContext(""), Error.init));
-                assert(getResult!(literal!())("$") == result(true, "parseEOF!()", makeContext(""), Error.init));
+                assert(getResult!(literal!())("\"hello\nworld\"") == result(true, "combinateMemoize!(parseString!\"hello\nworld\")", makeContext("", 2), Error.init));
+                assert(getResult!(literal!())("[a-z]") == result(true, "combinateMemoize!(parseCharRange!('a','z'))", makeContext(""), Error.init));
+                assert(getResult!(literal!())("$") == result(true, "combinateMemoize!(parseEOF!())", makeContext(""), Error.init));
+                assert(getResult!(literal!())("$", tuple("", "skip!()")) == result(true, "combinateSkip!(combinateMemoize!(parseEOF!()),skip!())", makeContext("", 1, tuple("", "skip!()")), Error.init));
                 assert(getResult!(literal!())("表が怖い噂のソフト") == result(false, "", makeContext(""), Error(`"$"`)));
                 return true;
             };
@@ -2179,13 +2202,13 @@ bool isMatch(alias fun)(string src){
                         "combinateOption!("
                             "combinateAndPred!("
                                 "combinateNotPred!("
-                                    "parseEOF!()"
+                                    "combinateMemoize!(parseEOF!())"
                                 ")"
                             ")"
                         ")"
                     );
                 }
-                assert(getResult!(primaryExp!())("int") == result(true, " #line " ~ toStringNow!__LINE__ ~ "\nint!()", makeContext(""), Error.init));
+                assert(getResult!(primaryExp!())("int") == result(true, " #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(int!())", makeContext(""), Error.init));
                 assert(getResult!(primaryExp!())("###このコメントは表示されません###") == result(false, "", makeContext(""), Error(`"("`)));
                 return true;
             };
@@ -2235,7 +2258,7 @@ bool isMatch(alias fun)(string src){
                 assert(
                     result.value ==
                     "combinateNone!("
-                        "parseEOF!()"
+                        "combinateMemoize!(parseEOF!())"
                     ")"
                 );
                 result = getResult!(preExp!())("!!$");
@@ -2244,7 +2267,7 @@ bool isMatch(alias fun)(string src){
                 assert(
                     result.value ==
                     "combinateChangeState!("
-                        "parseEOF!()"
+                        "combinateMemoize!(parseEOF!())"
                     ")"
                 );
                 return true;
@@ -2314,7 +2337,7 @@ bool isMatch(alias fun)(string src){
                     result.value ==
                     "combinateMore0!("
                         "combinateNone!("
-                            "parseEOF!()"
+                            "combinateMemoize!(parseEOF!())"
                         ")"
                     ")"
                 );
@@ -2353,7 +2376,7 @@ bool isMatch(alias fun)(string src){
                     "combinateOption!("
                         "combinateAndPred!("
                             "combinateNotPred!("
-                                "parseString!\"hello\""
+                                "combinateMemoize!(parseString!\"hello\")"
                             ")"
                         ")"
                     ")"
@@ -2389,13 +2412,13 @@ bool isMatch(alias fun)(string src){
                         "combinateSequence!("
                             "combinateMore0!("
                                 "combinateNone!("
-                                    "parseEOF!()"
+                                    "combinateMemoize!(parseEOF!())"
                                 ")"
                             "),"
                             "combinateOption!("
                                 "combinateAndPred!("
                                     "combinateNotPred!("
-                                        "parseEOF!()"
+                                        "combinateMemoize!(parseEOF!())"
                                     ")"
                                 ")"
                             ")"
@@ -2410,9 +2433,9 @@ bool isMatch(alias fun)(string src){
                         result.value ==
                         "combinateSequence!("
                             "combinateNone!("
-                                "parseString!\"hello\""
+                                "combinateMemoize!(parseString!\"hello\")"
                             "),"
-                            "parseEOF!()"
+                            "combinateMemoize!(parseEOF!())"
                         ")"
                     );
                 }
@@ -2480,9 +2503,9 @@ bool isMatch(alias fun)(string src){
                         "combinateConvert!(" ~ toStringNow!(__LINE__ - 5) ~ ",`src\\ctpg.d`,"
                             "combinateSequence!("
                                 "combinateNone!("
-                                    "parseString!\"hello\""
+                                    "combinateMemoize!(parseString!\"hello\")"
                                 "),"
-                                "parseEOF!()"
+                                "combinateMemoize!(parseEOF!())"
                             "),"
                             "function(){"
                                 "return false;"
@@ -2498,7 +2521,7 @@ bool isMatch(alias fun)(string src){
                         result.value ==
                         "combinateConvert!(" ~ toStringNow!(__LINE__ - 5) ~ ",`src/ctpg.d`,"
                             "combinateConvert!(" ~ toStringNow!(__LINE__ - 6) ~ ",`src/ctpg.d`,"
-                                "parseString!\"hello\","
+                                "combinateMemoize!(parseString!\"hello\"),"
                                 "flat"
                             "),"
                             "to!int"
@@ -2506,14 +2529,15 @@ bool isMatch(alias fun)(string src){
                     );
                 }
                 {
-                    auto result = getResult!(convExp!(), __LINE__, `src\ctpg.d`)(q{$ >>> to!string >>? isValid});
+                    auto result = getResult!(convExp!(), __LINE__, `src\ctpg.d`)(q{$ >>> to!string >>? isValid}, tuple("", "skip!()"));
                     assert(result.match);
                     assert(result.rest.empty);
+                    assert(result.rest.state == tuple("", "skip!()"));
                     assert(
                         result.value == 
-                        "combinateCheck!(" ~ toStringNow!(__LINE__ - 5) ~ r",`src\ctpg.d`,"
-                            "combinateConvertWithState!(" ~ toStringNow!(__LINE__ - 6) ~ r",`src\ctpg.d`,"
-                                "parseEOF!(),"
+                        "combinateCheck!(" ~ toStringNow!(__LINE__ - 6) ~ r",`src\ctpg.d`,"
+                            "combinateConvertWithState!(" ~ toStringNow!(__LINE__ - 7) ~ r",`src\ctpg.d`,"
+                                "combinateSkip!(combinateMemoize!(parseEOF!()),skip!()),"
                                 "to!string"
                             "),"
                             "isValid"
@@ -2563,13 +2587,13 @@ bool isMatch(alias fun)(string src){
                         "combinateChoice!(" ~ toStringNow!(__LINE__ - 5) ~ ",`src\\ctpg.d`,"
                             "combinateMore0!("
                                 "combinateNone!("
-                                    "parseEOF!()"
+                                    "combinateMemoize!(parseEOF!())"
                                 ")"
                             "),"
                             "combinateOption!("
                                 "combinateAndPred!("
                                     "combinateNotPred!("
-                                        "parseString!\"a\""
+                                        "combinateMemoize!(parseString!\"a\")"
                                     ")"
                                 ")"
                             ")"
@@ -2577,16 +2601,17 @@ bool isMatch(alias fun)(string src){
                     );
                 }
                 {
-                    auto result = getResult!(choiceExp!())(`!"hello" $`);
+                    auto result = getResult!(choiceExp!())(`!"hello" $`, tuple("", "skip!()"));
                     assert(result.match);
                     assert(result.rest.empty);
+                    assert(result.rest.state == tuple("", "skip!()"));
                     assert(
                         result.value ==
                         "combinateSequence!("
                             "combinateNone!("
-                                "parseString!\"hello\""
+                                "combinateSkip!(combinateMemoize!(parseString!\"hello\"),skip!())"
                             "),"
-                            "parseEOF!()"
+                            "combinateSkip!(combinateMemoize!(parseEOF!()),skip!())"
                         ")"
                     );
                 }
@@ -2602,6 +2627,27 @@ bool isMatch(alias fun)(string src){
             Result!(string, ResultType) parse()(Context!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
+                        combinateChangeState!(
+                            combinateConvertWithState!(
+                                combinateOption!(
+                                    combinateSequence!(
+                                        combinateNone!(parseString!"skip("),
+                                        combinateChangeState!(
+                                            combinateConvertWithState!(
+                                                success!(),
+                                                function(StateType state) => tuple(state[0], "")
+                                            )
+                                        ),
+                                        choiceExp!(),
+                                        combinateNone!(parseString!")")
+                                    )
+                                ),
+                                function(Option!string skip, StateType state)
+                                =>
+                                skip.some ? tuple(state[0], skip.value) : tuple(state[0], state[0])
+                            )
+                        ),
+                        parseSpaces!(),
                         typeName!(),
                         parseSpaces!(),
                         id!(),
@@ -2632,7 +2678,7 @@ bool isMatch(alias fun)(string src){
             enum dg = {
                 cast(void)__LINE__;
                 {
-                    auto result = getResult!(def!(), __LINE__, `src\ctpg.d`)(`bool hoge = !"hello" $ >> {return false;};`);
+                    auto result = getResult!(def!(), __LINE__, `src\ctpg.d`)(`skip(" ") bool hoge = !"hello" $ >> {return false;};`);
                     assert(result.match);
                     assert(result.rest.empty);
                     assert(
@@ -2643,9 +2689,9 @@ bool isMatch(alias fun)(string src){
                                 "return combinateConvert!(" ~ toStringNow!(__LINE__ - 8) ~ r",`src\ctpg.d`,"
                                     "combinateSequence!("
                                         "combinateNone!("
-                                            "parseString!\"hello\""
+                                            "combinateSkip!(combinateMemoize!(parseString!\"hello\"),combinateMemoize!(parseString!\" \"))"
                                         "),"
-                                        "parseEOF!()"
+                                        "combinateSkip!(combinateMemoize!(parseEOF!()),combinateMemoize!(parseString!\" \"))"
                                     "),"
                                     "function(){"
                                         "return false;"
@@ -2665,8 +2711,8 @@ bool isMatch(alias fun)(string src){
                             "alias None ResultType;"
                             "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){"
                                 "return combinateSequence!("
-                                    " #line " ~ toStringNow!(__LINE__ - 9) ~ "\nA!(),"
-                                    "parseEOF!()"
+                                    " #line " ~ toStringNow!(__LINE__ - 9) ~ "\ncombinateMemoize!(A!()),"
+                                    "combinateMemoize!(parseEOF!())"
                                 ").parse(input, info);"
                             "}"
                         "}"
@@ -2686,7 +2732,22 @@ bool isMatch(alias fun)(string src){
                     combinateSequence!(
                         parseSpaces!(),
                         combinateMore1!(
-                            def!(),
+                            combinateChoice!(
+                                combinateConvert!(
+                                    combinateChangeState!(
+                                        combinateConvert!(
+                                            combinateSequence!(
+                                                combinateNone!(parseString!"@skip("),
+                                                choiceExp!(),
+                                                combinateNone!(parseString!")")
+                                            ),
+                                            function(string skip) => tuple(skip, "")
+                                        )
+                                    ),
+                                    function() => ""
+                                ),
+                                def!(),
+                            ),
                             parseSpaces!()
                         ),
                         parseSpaces!(),
@@ -2700,9 +2761,15 @@ bool isMatch(alias fun)(string src){
         unittest{
             enum dg = {
                 cast(void)__LINE__; 
-                auto result = getResult!(defs!(), __LINE__, r"src\ctpg.d")(q{
+                pragma(msg, getResult!(defs!(), __LINE__, r"src\ctpg.d")(q{
+                    @skip(" " / "\t" / "\n")
                     bool hoge = !"hello" $ >> {return false;};
-                    Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
+                    skip(" ") Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
+                }).value);
+                auto result = getResult!(defs!(), __LINE__, r"src\ctpg.d")(q{
+                    @skip(" " / "\t" / "\n")
+                    bool hoge = !"hello" $ >> {return false;};
+                    skip(" ") Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
                 });
                 assert(result.match);
                 assert(result.rest.empty);
@@ -2714,9 +2781,23 @@ bool isMatch(alias fun)(string src){
                             "return combinateConvert!(" ~ toStringNow!(__LINE__ - 10) ~ r",`src\ctpg.d`,"
                                 "combinateSequence!("
                                     "combinateNone!("
-                                        "parseString!\"hello\""
+                                        "combinateSkip!("
+                                            "combinateMemoize!(parseString!\"hello\"),"
+                                            "combinateChoice!(" ~ toStringNow!(__LINE__ - 16) ~ r",`src\ctpg.d`,"
+                                                "combinateMemoize!(parseString!\" \"),"
+                                                "combinateMemoize!(parseString!\"\\t\"),"
+                                                "combinateMemoize!(parseString!\"\\n\")"
+                                            ")"
+                                        ")"
                                     "),"
-                                    "parseEOF!()"
+                                    "combinateSkip!("
+                                        "combinateMemoize!(parseEOF!()),"
+                                        "combinateChoice!(" ~ toStringNow!(__LINE__ - 25) ~ r",`src\ctpg.d`,"
+                                            "combinateMemoize!(parseString!\" \"),"
+                                            "combinateMemoize!(parseString!\"\\t\"),"
+                                            "combinateMemoize!(parseString!\"\\n\")"
+                                        ")"
+                                    ")"
                                 "),"
                                 "function(){"
                                     "return false;"
@@ -2727,9 +2808,9 @@ bool isMatch(alias fun)(string src){
                     "template hoge2(){"
                         "alias Tuple!piyo ResultType;"
                         "static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){"
-                            "return combinateConvert!(" ~ toStringNow!(__LINE__ - 25) ~ r",`src\ctpg.d`,"
+                            "return combinateConvert!(" ~ toStringNow!(__LINE__ - 39) ~ r",`src\ctpg.d`,"
                                 "combinateMore0!("
-                                    " #line " ~ toStringNow!(__LINE__ - 27) ~ "\nhoge!()"
+                                    " #line " ~ toStringNow!(__LINE__ - 41) ~ "\ncombinateSkip!(combinateMemoize!(hoge!()),combinateMemoize!(parseString!\" \"))"
                                 "),"
                                 "function(){"
                                     "return tuple(\"foo\");"
