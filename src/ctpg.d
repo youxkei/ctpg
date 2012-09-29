@@ -836,9 +836,18 @@ alias Tuple!(string, string) StateType;
         template combinateSkip(alias parser, alias skip){
             alias ParserType!parser ResultType;
             static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
-                auto r = parser.parse(input, info);
+                auto r = parser.parse(input.save, info);
                 if(!r.match){
-                    return parser.parse(skip.parse(input, info).rest, info);
+                    static if(isForwardRange!R){
+                        auto skipped = skip.parse(input, info);
+                        if(skipped.match){
+                            return parser.parse(skipped.rest, info);
+                        }else{
+                            return r;
+                        }
+                    }else{
+                        new Exception("");
+                    }
                 }else{
                     return r;
                 }
@@ -1611,6 +1620,7 @@ alias Tuple!(string, string) StateType;
         }
 
         alias parseSpaces ss;
+        alias parseSpaces defaultSkip;
 
         unittest{
             static assert(is(parseSpaces!().ResultType));
@@ -2631,7 +2641,7 @@ bool isMatch(alias fun)(string src){
                             combinateConvertWithState!(
                                 combinateOption!(
                                     combinateSequence!(
-                                        combinateNone!(parseString!"skip("),
+                                        combinateNone!(parseString!"@skip("),
                                         combinateChangeState!(
                                             combinateConvertWithState!(
                                                 success!(),
@@ -2678,7 +2688,7 @@ bool isMatch(alias fun)(string src){
             enum dg = {
                 cast(void)__LINE__;
                 {
-                    auto result = getResult!(def!(), __LINE__, `src\ctpg.d`)(`skip(" ") bool hoge = !"hello" $ >> {return false;};`);
+                    auto result = getResult!(def!(), __LINE__, `src\ctpg.d`)(`@skip(" ") bool hoge = !"hello" $ >> {return false;};`);
                     assert(result.match);
                     assert(result.rest.empty);
                     assert(
@@ -2737,7 +2747,7 @@ bool isMatch(alias fun)(string src){
                                     combinateChangeState!(
                                         combinateConvert!(
                                             combinateSequence!(
-                                                combinateNone!(parseString!"@skip("),
+                                                combinateNone!(parseString!"@default_skip("),
                                                 choiceExp!(),
                                                 combinateNone!(parseString!")")
                                             ),
@@ -2761,15 +2771,10 @@ bool isMatch(alias fun)(string src){
         unittest{
             enum dg = {
                 cast(void)__LINE__; 
-                pragma(msg, getResult!(defs!(), __LINE__, r"src\ctpg.d")(q{
-                    @skip(" " / "\t" / "\n")
-                    bool hoge = !"hello" $ >> {return false;};
-                    skip(" ") Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
-                }).value);
                 auto result = getResult!(defs!(), __LINE__, r"src\ctpg.d")(q{
-                    @skip(" " / "\t" / "\n")
+                    @default_skip(" " / "\t" / "\n")
                     bool hoge = !"hello" $ >> {return false;};
-                    skip(" ") Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
+                    @skip(" ") Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
                 });
                 assert(result.match);
                 assert(result.rest.empty);

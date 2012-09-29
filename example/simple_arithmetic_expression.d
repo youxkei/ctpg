@@ -10,6 +10,8 @@ import std.conv: to;
 import std.stdio;
 
 mixin(generateParsers(q{
+    @default_skip(defaultSkip)
+
     int root = addExp $;
 
     int addExp =
@@ -45,10 +47,10 @@ class Foo{
 
 void main(){
     enum dg ={
-        assert(parse!root("5*8+3*20") == 100);
-        assert(parse!root("5*(8+3)*20") == 1100);
+        assert(parse!root("5 * 8 + 3 * 20") == 100);
+        assert(parse!root("5 * ( 8 + 3 ) * 20") == 1100);
         try{
-            parse!root("5*(8+3)20");
+            parse!root("5 * ( 8 + 3 ) 20");
         }catch(Exception e){
             assert(e.msg == "1: error EOF is needed");
         } 
