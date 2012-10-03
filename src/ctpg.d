@@ -144,6 +144,10 @@ alias Tuple!(string, string) StateType;
         size_t line = 1;
         StateType state;
 
+        unittest{
+            static assert(isForwardRange!Range);
+        }
+
         invariant(){
             assert(line >= 1);
         }
@@ -169,28 +173,28 @@ alias Tuple!(string, string) StateType;
 
 // struct Result
     struct Result(Range, T){
-        public{
-            bool match;
-            T value;
-            Context!Range rest;
-            Error error;
+        bool match;
+        T value;
+        Context!Range rest;
+        Error error;
 
-            void opAssign(U)(Result!(Range, U) rhs)if(isAssignable!(T, U)){
-                match = rhs.match;
-                value = rhs.value;
-                rest = rhs.rest;
-                error = rhs.error;
-            }
+        void opAssign(U)(Result!(Range, U) rhs)if(isAssignable!(T, U)){
+            match = rhs.match;
+            value = rhs.value;
+            rest = rhs.rest;
+            error = rhs.error;
+        }
 
-            equals_t opEquals(Result lhs){
-                return match == lhs.match && value == lhs.value && rest == lhs.rest && error == lhs.error;
-            }
+        equals_t opEquals(Result lhs){
+            return match == lhs.match && value == lhs.value && rest == lhs.rest && error == lhs.error;
         }
     }
 
     Result!(Range, T) result(Range, T)(bool match, T value, Context!Range rest, Error error = Error.init){
         return Result!(Range, T)(match, value, rest, error);
     }
+
+    alias result makeResult;
 
 // struct Error
     struct Error{
@@ -810,15 +814,11 @@ alias Tuple!(string, string) StateType;
             static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
                 auto r = parser.parse(input.save, info);
                 if(!r.match){
-                    static if(isForwardRange!R){
-                        auto skipped = skip.parse(input, info);
-                        if(skipped.match){
-                            return parser.parse(skipped.rest, info);
-                        }else{
-                            return r;
-                        }
+                    auto skipped = skip.parse(input, info);
+                    if(skipped.match){
+                        return parser.parse(skipped.rest, info);
                     }else{
-                        new Exception("");
+                        return r;
                     }
                 }else{
                     return r;
@@ -985,18 +985,14 @@ alias Tuple!(string, string) StateType;
             }
             static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
                 static assert(parsers.length > 0);
-                static if(isForwardRange!R){
-                    static if(parsers.length == 1){
-                        return parsers[0].parse(input, info);
-                    }else{
-                        auto r = parsers[0].parse(input.save, info);
-                        if(r.match){
-                            return r;
-                        }
-                        return combinateChoice!(parsers[1..$]).parse(input, info);
-                    }
+                static if(parsers.length == 1){
+                    return parsers[0].parse(input, info);
                 }else{
-                    throw new Exception("");
+                    auto r = parsers[0].parse(input.save, info);
+                    if(r.match){
+                        return r;
+                    }
+                    return combinateChoice!(parsers[1..$]).parse(input, info);
                 }
             }
         }
@@ -1018,37 +1014,33 @@ alias Tuple!(string, string) StateType;
         template combinateMore(int n, alias parser, alias sep){
             alias ParserType!(parser)[] ResultType;
             static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
-                static if(isForwardRange!R){
-                    typeof(return) result;
-                    Context!R rest = input;
-                    while(true){
-                        auto input1 = rest.save;
-                        auto r1 = parser.parse(input1, info);
-                        if(r1.match){
-                            result.value ~= r1.value;
-                            rest = r1.rest;
-                            auto input2 = rest.save;
-                            auto r2 = sep.parse(input2, info);
-                            if(r2.match){
-                                rest = r2.rest;
-                            }else{
-                                break;
-                            }
+                typeof(return) result;
+                Context!R rest = input;
+                while(true){
+                    auto input1 = rest.save;
+                    auto r1 = parser.parse(input1, info);
+                    if(r1.match){
+                        result.value ~= r1.value;
+                        rest = r1.rest;
+                        auto input2 = rest.save;
+                        auto r2 = sep.parse(input2, info);
+                        if(r2.match){
+                            rest = r2.rest;
                         }else{
-                            if(result.value.length < n){
-                                result.error = r1.error;
-                                return result;
-                            }else{
-                                break;
-                            }
+                            break;
+                        }
+                    }else{
+                        if(result.value.length < n){
+                            result.error = r1.error;
+                            return result;
+                        }else{
+                            break;
                         }
                     }
-                    result.match = true;
-                    result.rest = rest;
-                    return result;
-                }else{
-                    throw new Exception("");
                 }
+                result.match = true;
+                result.rest = rest;
+                return result;
             }
         }
 
@@ -1076,21 +1068,17 @@ alias Tuple!(string, string) StateType;
         template combinateOption(alias parser){
             alias Option!(ParserType!parser) ResultType;
             static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
-                static if(isForwardRange!R){
-                    typeof(return) result;
-                    result.match = true;
-                    auto r = parser.parse(input.save, info);
-                    if(r.match){
-                        result.value = r.value;
-                        result.value.some = true;
-                        result.rest = r.rest;
-                    }else{
-                        result.rest = input;
-                    }
-                    return result;
+                typeof(return) result;
+                result.match = true;
+                auto r = parser.parse(input.save, info);
+                if(r.match){
+                    result.value = r.value;
+                    result.value.some = true;
+                    result.rest = r.rest;
                 }else{
-                    throw new Exception("");
+                    result.rest = input;
                 }
+                return result;
             }
         }
 
