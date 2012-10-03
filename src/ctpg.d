@@ -139,7 +139,7 @@ final class CallerInfo{
 alias Tuple!(string, string) StateType;
 
 // struct Context
-    struct Context(Range) if(isCharRange!Range){
+    struct Context(Range){
         Range input;
         size_t line = 1;
         StateType state;
@@ -148,45 +148,18 @@ alias Tuple!(string, string) StateType;
             assert(line >= 1);
         }
 
-        static if(isForwardRange!Range){
-            //cannot apply some qualifiers due to unclearness of R
-            @property
-            Context save(){
-                return Context(input.save, line, state);
-            }
+        @property
+        Context save(){
+            return Context(input.save, line, state);
         }
 
-        const pure @safe nothrow @property
+        @property
         bool empty(){
             return input.empty;
         }
 
-        /+ const +/ pure @safe nothrow
         equals_t opEquals(Context rhs){
             return input == rhs.input && line == rhs.line && state == rhs.state;
-        }
-    }
-
-    struct Context(Range) if(!isCharRange!Range && isInputRange!Range){
-        Range input;
-        StateType state;
-
-        static if(isForwardRange!Range){
-            //cannot apply some qualifiers due to unclearness of R
-            @property
-            Context save(){
-                return Context(input.save, state);
-            }
-        }
-
-        const pure @safe nothrow @property
-        bool empty(){
-            return input.empty;
-        }
-
-        /+ const +/ pure @safe nothrow
-        equals_t opEquals(Context rhs){
-            return input == rhs.input && state == rhs.state;
         }
     }
 
@@ -209,8 +182,7 @@ alias Tuple!(string, string) StateType;
                 error = rhs.error;
             }
 
-            pure @safe nothrow
-            bool opEquals(Result lhs){
+            equals_t opEquals(Result lhs){
                 return match == lhs.match && value == lhs.value && rest == lhs.rest && error == lhs.error;
             }
         }
@@ -1777,11 +1749,7 @@ string getSource(size_t callerLine = __LINE__, string callerFile = __FILE__)(str
 }
 
 auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range input, StateType state = StateType.init){
-    static if(isCharRange!Range){
-        return fun.parse(Context!Range(input, 1, state), new CallerInfo(callerLine, callerFile));
-    }else{
-        return fun.parse(Context!Range(input, state), new CallerInfo(callerLine, callerFile));
-    }
+    return fun.parse(Context!Range(input, 1, state), new CallerInfo(callerLine, callerFile));
 }
 
 auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range src){

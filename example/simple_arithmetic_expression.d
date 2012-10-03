@@ -8,6 +8,7 @@ import ctpg;
 import std.array: join;
 import std.conv: to;
 import std.stdio;
+import std.algorithm;
 
 mixin(generateParsers(q{
     @default_skip(defaultSkip)
@@ -56,6 +57,7 @@ void main(){
         } 
         return true;
     };
+    assert(parse!root("5 * 8 + 3 * 20".map!(to!wchar)()) == 100);
     static assert(dg());
     pragma(msg, parse!root("5*8+3*50"));
     writeln(parse!root("5*(8+3)*50"));
