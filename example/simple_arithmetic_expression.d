@@ -32,36 +32,40 @@ class Foo{
     int result;
 
     mixin(generateParsers(q{
-        int root = mulExp $;
+        @default_skip(defaultSkip)
+
+        int root = addExp $;
+
+        int addExp =
+              mulExp !"+" addExp >> (lhs, rhs){ return lhs + rhs; }
+            / mulExp !"-" addExp >> (lhs, rhs){ return lhs - rhs; }
+            / mulExp;
 
         int mulExp =
               primary !"*" mulExp >> (lhs, rhs){ return lhs * rhs; }
+            / primary !"/" mulExp >> (lhs, rhs){ return lhs / rhs; }
             / primary;
 
-        int primary = !"(" mulExp !")" / [0-9]+ >> join >> to!int;
+        int primary = !"(" addExp !")" / [0-9]+ >> join >> to!int;
     }));
 
     void frop(){
-        result = parse!root("5*8");
+        result = parse!root("5*8").value;
     }
 }
 
 void main(){
     enum dg ={
-        assert(parse!root("5 * 8 + 3 * 20") == 100);
-        assert(parse!root("5 * ( 8 + 3 ) * 20") == 1100);
-        try{
-            parse!root("5 * ( 8 + 3 ) 20");
-        }catch(Exception e){
-            assert(e.msg == "1: error EOF is needed");
-        } 
+        assert(parse!root("5 * 8 + 3 * 20").value == 100);
+        assert(parse!root("5 * ( 8 + 3 ) * 20").value == 1100);
+        assert(!parse!root("5 * ( 8 + 3 ) 20").match);
         return true;
     };
-    assert(parse!root("5 * 8 + 3 * 20".map!(to!wchar)()) == 100);
     static assert(dg());
-    pragma(msg, parse!root("5*8+3*50"));
-    writeln(parse!root("5*(8+3)*50"));
     dg();
+    assert(parse!root("5 * 8 + 3 * 20".map!(to!wchar)()).value == 100);
+    pragma(msg, parse!root("5 * 8 + 3 * 50").value);
+    writeln(parse!root("5 * ( 8 + 3 ) * 50").value);
     Foo foo = new Foo;
     foo.frop();
 }

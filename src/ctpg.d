@@ -1729,7 +1729,7 @@ alias Tuple!(string, string) StateType;
         }
 
 string generateParsers(size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
-    return src.parse!(defs, callerLine, callerFile)();
+    return src.parse!(defs, callerLine, callerFile)().value;
 }
 
 string getSource(size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
@@ -1741,6 +1741,10 @@ auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FI
 }
 
 auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range src){
+    return src.getResult!(fun!(), callerLine, callerFile)();
+}
+
+version(none) auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range src){
     auto result = src.getResult!(fun!(), callerLine, callerFile)();
     if(result.match){
         return result.value;
