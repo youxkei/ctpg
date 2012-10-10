@@ -141,6 +141,7 @@ alias Tuple!(string, string) StateType;
 // struct Context
     struct Context(Range){
         Range input;
+        size_t position;
         size_t line = 1;
         StateType state;
 
@@ -154,7 +155,7 @@ alias Tuple!(string, string) StateType;
 
         @property
         Context save(){
-            return Context(input.save, line, state);
+            return Context(input.save, position, line, state);
         }
 
         @property
@@ -163,12 +164,12 @@ alias Tuple!(string, string) StateType;
         }
 
         equals_t opEquals(Context rhs){
-            return input == rhs.input && line == rhs.line && state == rhs.state;
+            return input == rhs.input && position == rhs.position && line == rhs.line && state == rhs.state;
         }
     }
 
-    Context!Range makeContext(Range)(Range range, size_t line = 1, StateType state = StateType.init){
-        return Context!Range(range, line, state);
+    Context!Range makeContext(Range)(Range range, size_t position = 0, size_t line = 1, StateType state = StateType.init){
+        return Context!Range(range, position, line, state);
     }
 
 // struct Result
@@ -271,7 +272,7 @@ alias Tuple!(string, string) StateType;
                 enum staticConvertString = str.to!wstring();
             }else static if(is(T == dstring)){
                 enum staticConvertString = str.to!dstring();
-            }else static if(isForwardRange!T){
+            }else static if(isCharRange!T){
                 static if(is(Unqual!(ElementType!T) == char)){
                     alias str staticConvertString;
                 }else static if(is(Unqual!(ElementType!T) == wchar)){
@@ -295,25 +296,20 @@ alias Tuple!(string, string) StateType;
             static assert(staticConvertString!("foobar", TestRange!dchar) == "foobar"d);
         }
 
-        Tuple!(size_t, "width", size_t, "line") countBreadth(string str)in{
-            assert(str.length > 0);
-        }body{
-            typeof(return) result;
-            size_t idx;
-            while(idx < str.length){
-                auto c = decode(str, idx);
+        size_t countLines(string str){
+            typeof(return) lines;
+            foreach(c; str){
                 if(c == '\n'){
-                    ++result.line;
+                    ++lines;
                 }
-                ++result.width;
             }
-            return result;
+            return lines;
         }
 
         unittest{
             enum dg = {
-                assert(countBreadth("これ\nとこれ") == tuple(6, 1));
-                assert(countBreadth("これ\nとこれ\nとさらにこれ") == tuple(13, 2));
+                assert(countLines("これ\nとこれ") == 1);
+                assert(countLines("これ\nとこれ\nとさらにこれ") == 2);
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -325,7 +321,7 @@ alias Tuple!(string, string) StateType;
             alias string ResultType;
             static Result!(R, ResultType) parse(R)(Context!R _input, in CallerInfo info){
                 auto input = _input; // Somehow this parser doesn't work well without this line.
-                enum breadth = countBreadth(str);
+                enum lines = str.countLines();
                 typeof(return) result;
                 static if(isSomeString!R){
                     enum convertedString = staticConvertString!(str, R);
@@ -333,7 +329,8 @@ alias Tuple!(string, string) StateType;
                         result.match = true;
                         result.value = str;
                         result.rest.input = input.input[convertedString.length..$];
-                        result.rest.line = input.line + breadth.line;
+                        result.rest.line = input.line + lines;
+                        result.rest.position = input.position + convertedString.length;
                         result.rest.state = input.state;
                         return result;
                     }
@@ -350,7 +347,8 @@ alias Tuple!(string, string) StateType;
                     result.match = true;
                     result.value = str;
                     result.rest.input = input.input;
-                    result.rest.line = input.line + breadth.line;
+                    result.rest.line = input.line + lines;
+                    result.rest.position = input.position + convertedString.length;
                     result.rest.state = input.state;
                     return result;
 
@@ -366,26 +364,26 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(parseString!"hello")("hello world" ) == makeResult(true, "hello", makeContext(" world" )));
-                assert(getResult!(parseString!"hello")("hello world"w) == makeResult(true, "hello", makeContext(" world"w)));
-                assert(getResult!(parseString!"hello")("hello world"d) == makeResult(true, "hello", makeContext(" world"d)));
-                assert(getResult!(parseString!"hello")(testRange("hello world" )) == makeResult(true, "hello", makeContext(testRange(" world" ))));
-                assert(getResult!(parseString!"hello")(testRange("hello world"w)) == makeResult(true, "hello", makeContext(testRange(" world"w))));
-                assert(getResult!(parseString!"hello")(testRange("hello world"d)) == makeResult(true, "hello", makeContext(testRange(" world"d))));
+                assert(getResult!(parseString!"hello")("hello world" ) == makeResult(true, "hello", makeContext(" world" , 5)));
+                assert(getResult!(parseString!"hello")("hello world"w) == makeResult(true, "hello", makeContext(" world"w, 5)));
+                assert(getResult!(parseString!"hello")("hello world"d) == makeResult(true, "hello", makeContext(" world"d, 5)));
+                assert(getResult!(parseString!"hello")(testRange("hello world" )) == makeResult(true, "hello", makeContext(testRange(" world" ), 5)));
+                assert(getResult!(parseString!"hello")(testRange("hello world"w)) == makeResult(true, "hello", makeContext(testRange(" world"w), 5)));
+                assert(getResult!(parseString!"hello")(testRange("hello world"d)) == makeResult(true, "hello", makeContext(testRange(" world"d), 5)));
 
-                assert(getResult!(parseString!"hello")("hello" ) == makeResult(true, "hello", makeContext("" )));
-                assert(getResult!(parseString!"hello")("hello"w) == makeResult(true, "hello", makeContext(""w)));
-                assert(getResult!(parseString!"hello")("hello"d) == makeResult(true, "hello", makeContext(""d)));
-                assert(getResult!(parseString!"hello")(testRange("hello" )) == makeResult(true, "hello", makeContext(testRange("" ))));
-                assert(getResult!(parseString!"hello")(testRange("hello"w)) == makeResult(true, "hello", makeContext(testRange(""w))));
-                assert(getResult!(parseString!"hello")(testRange("hello"d)) == makeResult(true, "hello", makeContext(testRange(""d))));
+                assert(getResult!(parseString!"hello")("hello" ) == makeResult(true, "hello", makeContext("" , 5)));
+                assert(getResult!(parseString!"hello")("hello"w) == makeResult(true, "hello", makeContext(""w, 5)));
+                assert(getResult!(parseString!"hello")("hello"d) == makeResult(true, "hello", makeContext(""d, 5)));
+                assert(getResult!(parseString!"hello")(testRange("hello" )) == makeResult(true, "hello", makeContext(testRange("" ), 5)));
+                assert(getResult!(parseString!"hello")(testRange("hello"w)) == makeResult(true, "hello", makeContext(testRange(""w), 5)));
+                assert(getResult!(parseString!"hello")(testRange("hello"d)) == makeResult(true, "hello", makeContext(testRange(""d), 5)));
 
-                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト" ) == makeResult(true, "表が怖い", makeContext("噂のソフト" )));
-                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト"w) == makeResult(true, "表が怖い", makeContext("噂のソフト"w)));
-                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト"d) == makeResult(true, "表が怖い", makeContext("噂のソフト"d)));
-                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト" )) == makeResult(true, "表が怖い", makeContext(testRange("噂のソフト" ))));
-                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト"w)) == makeResult(true, "表が怖い", makeContext(testRange("噂のソフト"w))));
-                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト"d)) == makeResult(true, "表が怖い", makeContext(testRange("噂のソフト"d))));
+                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト" ) == makeResult(true, "表が怖い", makeContext("噂のソフト" , 12)));
+                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト"w) == makeResult(true, "表が怖い", makeContext("噂のソフト"w,  4)));
+                assert(getResult!(parseString!"表が怖い")("表が怖い噂のソフト"d) == makeResult(true, "表が怖い", makeContext("噂のソフト"d,  4)));
+                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト" )) == makeResult(true, "表が怖い", makeContext(testRange("噂のソフト" ), 12)));
+                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト"w)) == makeResult(true, "表が怖い", makeContext(testRange("噂のソフト"w),  4)));
+                assert(getResult!(parseString!"表が怖い")(testRange("表が怖い噂のソフト"d)) == makeResult(true, "表が怖い", makeContext(testRange("噂のソフト"d),  4)));
 
                 assert(getResult!(parseString!"hello")("hllo world" ) == makeResult(false, "", makeContext("" ), Error("\"hello\"")));
                 assert(getResult!(parseString!"hello")("hllo world"w) == makeResult(false, "", makeContext(""w), Error("\"hello\"")));
@@ -405,12 +403,13 @@ alias Tuple!(string, string) StateType;
         }
 
     // parseCharRange
-        dchar decodeRange(R)(auto ref R range){
+        dchar decodeRange(R)(auto ref R range, auto ref size_t advance){
             dchar result;
             static if(is(Unqual!(ElementType!R) == char)){
                 if(!(range.front & 0b_1000_0000)){
                     result = range.front;
                     range.popFront;
+                    advance = 1;
                     return result;
                 }else if(!(range.front & 0b_0010_0000)){
                     result = range.front & 0b_0001_1111;
@@ -418,6 +417,7 @@ alias Tuple!(string, string) StateType;
                     range.popFront;
                     result |= range.front & 0b_0011_1111;
                     range.popFront;
+                    advance = 2;
                     return result;
                 }else if(!(range.front & 0b_0001_0000)){
                     result = range.front & 0b_0000_1111;
@@ -428,6 +428,7 @@ alias Tuple!(string, string) StateType;
                     range.popFront;
                     result |= range.front & 0b_0011_1111;
                     range.popFront;
+                    advance = 3;
                     return result;
                 }else{
                     result = range.front & 0b_0000_0111;
@@ -441,37 +442,41 @@ alias Tuple!(string, string) StateType;
                     range.popFront;
                     result |= range.front & 0b_0011_1111;
                     range.popFront;
+                    advance = 4;
                     return result;
                 }
             }else static if(is(Unqual!(ElementType!R) == wchar)){
                 if(range.front <= 0xD7FF || (0xE000 <= range.front && range.front < 0xFFFF)){
                     result = range.front;
                     range.popFront;
+                    advance = 1;
                     return result;
                 }else{
                     result = (range.front & 0b_0000_0011_1111_1111) * 0x400;
                     range.popFront;
                     result += (range.front & 0b_0000_0011_1111_1111) + 0x10000;
                     range.popFront;
+                    advance = 2;
                     return result;
                 }
             }else static if(is(Unqual!(ElementType!R) == dchar)){
                 result = range.front;
                 range.popFront;
+                advance = 1;
                 return result;
             }
         }
 
         unittest{
             enum dg = {
-                assert(decodeRange(testRange("\u0001")) == '\u0001');
-                assert(decodeRange(testRange("\u0081")) == '\u0081');
-                assert(decodeRange(testRange("\u0801")) == '\u0801');
-                assert(decodeRange(testRange("\U00012345")) == '\U00012345');
-                assert(decodeRange(testRange("\u0001"w)) == '\u0001');
-                assert(decodeRange(testRange("\uE001"w)) == '\uE001');
-                assert(decodeRange(testRange("\U00012345"w)) == '\U00012345');
-                assert(decodeRange(testRange("\U0010FFFE")) == '\U0010FFFE');
+                assert(decodeRange(testRange("\u0001"), 0) == '\u0001');
+                assert(decodeRange(testRange("\u0081"), 0) == '\u0081');
+                assert(decodeRange(testRange("\u0801"), 0) == '\u0801');
+                assert(decodeRange(testRange("\U00012345"), 0) == '\U00012345');
+                assert(decodeRange(testRange("\u0001"w), 0) == '\u0001');
+                assert(decodeRange(testRange("\uE001"w), 0) == '\uE001');
+                assert(decodeRange(testRange("\U00012345"w), 0) == '\U00012345');
+                assert(decodeRange(testRange("\U0010FFFE"), 0) == '\U0010FFFE');
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -491,9 +496,14 @@ alias Tuple!(string, string) StateType;
                         dchar c = decode(input.input, idx);
                         if(low <= c && c <= high){
                             result.match = true;
-                            result.value = c.to!string();
+                            static if(is(R == string)){
+                                result.value = input.input[0..idx];
+                            }else{
+                                result.value = c.to!string();
+                            }
                             result.rest.input = input.input[idx..$];
                             result.rest.line = c == '\n' ? input.line + 1 : input.line;
+                            result.rest.position = input.position + idx;
                             result.rest.state = input.state;
                             return result;
                         }
@@ -505,12 +515,14 @@ alias Tuple!(string, string) StateType;
                     }
                 }else static if(isCharRange!R){
                     if(!input.input.empty){
-                        dchar c = decodeRange(input.input);
+                        size_t advance;
+                        dchar c = decodeRange(input.input, advance);
                         if(low <= c && c <= high){
                             result.match = true;
                             result.value = c.to!string();
                             result.rest.input = input.input;
                             result.rest.line = c == '\n' ? input.line + 1 : input.line;
+                            result.rest.position = input.position + advance;
                             result.rest.state = input.state;
                             return result;
                         }
@@ -529,19 +541,19 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(parseCharRange!('a', 'z'))("hoge" ) == makeResult(true, "h", makeContext("oge" )));
-                assert(getResult!(parseCharRange!('a', 'z'))("hoge"w) == makeResult(true, "h", makeContext("oge"w)));
-                assert(getResult!(parseCharRange!('a', 'z'))("hoge"d) == makeResult(true, "h", makeContext("oge"d)));
-                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge" )) == makeResult(true, "h", makeContext(testRange("oge" ))));
-                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge"w)) == makeResult(true, "h", makeContext(testRange("oge"w))));
-                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge"d)) == makeResult(true, "h", makeContext(testRange("oge"d))));
+                assert(getResult!(parseCharRange!('a', 'z'))("hoge" ) == makeResult(true, "h", makeContext("oge" , 1)));
+                assert(getResult!(parseCharRange!('a', 'z'))("hoge"w) == makeResult(true, "h", makeContext("oge"w, 1)));
+                assert(getResult!(parseCharRange!('a', 'z'))("hoge"d) == makeResult(true, "h", makeContext("oge"d, 1)));
+                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge" )) == makeResult(true, "h", makeContext(testRange("oge" ), 1)));
+                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge"w)) == makeResult(true, "h", makeContext(testRange("oge"w), 1)));
+                assert(getResult!(parseCharRange!('a', 'z'))(testRange("hoge"d)) == makeResult(true, "h", makeContext(testRange("oge"d), 1)));
 
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge" ) == makeResult(true, "\U00012345", makeContext("hoge" )));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge"w) == makeResult(true, "\U00012345", makeContext("hoge"w)));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge"d) == makeResult(true, "\U00012345", makeContext("hoge"d)));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge" )) == makeResult(true, "\U00012345", makeContext(testRange("hoge" ))));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge"w)) == makeResult(true, "\U00012345", makeContext(testRange("hoge"w))));
-                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge"d)) == makeResult(true, "\U00012345", makeContext(testRange("hoge"d))));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge" ) == makeResult(true, "\U00012345", makeContext("hoge" , 4)));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge"w) == makeResult(true, "\U00012345", makeContext("hoge"w, 2)));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("\U00012345hoge"d) == makeResult(true, "\U00012345", makeContext("hoge"d, 1)));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge" )) == makeResult(true, "\U00012345", makeContext(testRange("hoge" ), 4)));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge"w)) == makeResult(true, "\U00012345", makeContext(testRange("hoge"w), 2)));
+                assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))(testRange("\U00012345hoge"d)) == makeResult(true, "\U00012345", makeContext(testRange("hoge"d), 1)));
 
                 assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("hello world" ) == makeResult(false, "", makeContext("" ), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
                 assert(getResult!(parseCharRange!('\u0100', '\U0010FFFF'))("hello world"w) == makeResult(false, "", makeContext(""w), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
@@ -573,6 +585,7 @@ alias Tuple!(string, string) StateType;
                                 result.value = input.input[0..6].to!string();
                                 result.rest.input = input.input[6..$];
                                 result.rest.line = input.line;
+                                result.rest.position = input.position + 1;
                                 result.rest.state = input.state;
                                 return result;
                             }
@@ -581,6 +594,7 @@ alias Tuple!(string, string) StateType;
                                 result.value = input.input[0..10].to!string();
                                 result.rest.input = input.input[10..$];
                                 result.rest.line = input.line;
+                                result.rest.position = input.position + 1;
                                 result.rest.state = input.state;
                                 return result;
                             }
@@ -589,6 +603,7 @@ alias Tuple!(string, string) StateType;
                                 result.value = input.input[0..2].to!string();
                                 result.rest.input = input.input[2..$];
                                 result.rest.line = input.line;
+                                result.rest.position = input.position + 1;
                                 result.rest.state = input.state;
                                 return result;
                             }
@@ -615,6 +630,7 @@ alias Tuple!(string, string) StateType;
                                 result.value = to!string(data);
                                 result.rest.input = input.input;
                                 result.rest.line = input.line;
+                                result.rest.position = input.position + 1;
                                 result.rest.state = input.state;
                                 return result;
                             }
@@ -630,6 +646,7 @@ alias Tuple!(string, string) StateType;
                                 result.value = to!string(data);
                                 result.rest.input = input.input;
                                 result.rest.line = input.line;
+                                result.rest.position = input.position + 1;
                                 result.rest.state = input.state;
                                 return result;
                             }
@@ -639,6 +656,7 @@ alias Tuple!(string, string) StateType;
                                 result.value = "\\" ~ to!string(c2);
                                 result.rest.input = input.input;
                                 result.rest.line = input.line;
+                                result.rest.position = input.position + 1;
                                 result.rest.state = input.state;
                                 return result;
                             }
@@ -656,33 +674,33 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(parseEscapeSequence!())(`\"hoge` ) == makeResult(true, `\"`, makeContext("hoge" )));
-                assert(getResult!(parseEscapeSequence!())(`\"hoge`w) == makeResult(true, `\"`, makeContext("hoge"w)));
-                assert(getResult!(parseEscapeSequence!())(`\"hoge`d) == makeResult(true, `\"`, makeContext("hoge"d)));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge` )) == makeResult(true, `\"`, makeContext(testRange("hoge" ))));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge`w)) == makeResult(true, `\"`, makeContext(testRange("hoge"w))));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge`d)) == makeResult(true, `\"`, makeContext(testRange("hoge"d))));
+                assert(getResult!(parseEscapeSequence!())(`\"hoge` ) == makeResult(true, `\"`, makeContext("hoge" , 1)));
+                assert(getResult!(parseEscapeSequence!())(`\"hoge`w) == makeResult(true, `\"`, makeContext("hoge"w, 1)));
+                assert(getResult!(parseEscapeSequence!())(`\"hoge`d) == makeResult(true, `\"`, makeContext("hoge"d, 1)));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge` )) == makeResult(true, `\"`, makeContext(testRange("hoge" ), 1)));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge`w)) == makeResult(true, `\"`, makeContext(testRange("hoge"w), 1)));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\"hoge`d)) == makeResult(true, `\"`, makeContext(testRange("hoge"d), 1)));
 
-                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge` ) == makeResult(true, `\U0010FFFF`, makeContext("hoge" )));
-                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge`w) == makeResult(true, `\U0010FFFF`, makeContext("hoge"w)));
-                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge`d) == makeResult(true, `\U0010FFFF`, makeContext("hoge"d)));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge` )) == makeResult(true, `\U0010FFFF`, makeContext(testRange("hoge" ))));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge`w)) == makeResult(true, `\U0010FFFF`, makeContext(testRange("hoge"w))));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge`d)) == makeResult(true, `\U0010FFFF`, makeContext(testRange("hoge"d))));
+                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge` ) == makeResult(true, `\U0010FFFF`, makeContext("hoge" , 1)));
+                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge`w) == makeResult(true, `\U0010FFFF`, makeContext("hoge"w, 1)));
+                assert(getResult!(parseEscapeSequence!())(`\U0010FFFFhoge`d) == makeResult(true, `\U0010FFFF`, makeContext("hoge"d, 1)));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge` )) == makeResult(true, `\U0010FFFF`, makeContext(testRange("hoge" ), 1)));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge`w)) == makeResult(true, `\U0010FFFF`, makeContext(testRange("hoge"w), 1)));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\U0010FFFFhoge`d)) == makeResult(true, `\U0010FFFF`, makeContext(testRange("hoge"d), 1)));
 
-                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge` ) == makeResult(true, `\u10FF`, makeContext("hoge" )));
-                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge`w) == makeResult(true, `\u10FF`, makeContext("hoge"w)));
-                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge`d) == makeResult(true, `\u10FF`, makeContext("hoge"d)));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge` )) == makeResult(true, `\u10FF`, makeContext(testRange("hoge" ))));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge`w)) == makeResult(true, `\u10FF`, makeContext(testRange("hoge"w))));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge`d)) == makeResult(true, `\u10FF`, makeContext(testRange("hoge"d))));
+                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge` ) == makeResult(true, `\u10FF`, makeContext("hoge" , 1)));
+                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge`w) == makeResult(true, `\u10FF`, makeContext("hoge"w, 1)));
+                assert(getResult!(parseEscapeSequence!())(`\u10FFhoge`d) == makeResult(true, `\u10FF`, makeContext("hoge"d, 1)));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge` )) == makeResult(true, `\u10FF`, makeContext(testRange("hoge" ), 1)));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge`w)) == makeResult(true, `\u10FF`, makeContext(testRange("hoge"w), 1)));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\u10FFhoge`d)) == makeResult(true, `\u10FF`, makeContext(testRange("hoge"d), 1)));
 
-                assert(getResult!(parseEscapeSequence!())(`\nhoge` ) == makeResult(true, `\n`, makeContext("hoge" )));
-                assert(getResult!(parseEscapeSequence!())(`\nhoge`w) == makeResult(true, `\n`, makeContext("hoge"w)));
-                assert(getResult!(parseEscapeSequence!())(`\nhoge`d) == makeResult(true, `\n`, makeContext("hoge"d)));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge` )) == makeResult(true, `\n`, makeContext(testRange("hoge" ))));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge`w)) == makeResult(true, `\n`, makeContext(testRange("hoge"w))));
-                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge`d)) == makeResult(true, `\n`, makeContext(testRange("hoge"d))));
+                assert(getResult!(parseEscapeSequence!())(`\nhoge` ) == makeResult(true, `\n`, makeContext("hoge" , 1)));
+                assert(getResult!(parseEscapeSequence!())(`\nhoge`w) == makeResult(true, `\n`, makeContext("hoge"w, 1)));
+                assert(getResult!(parseEscapeSequence!())(`\nhoge`d) == makeResult(true, `\n`, makeContext("hoge"d, 1)));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge` )) == makeResult(true, `\n`, makeContext(testRange("hoge" ), 1)));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge`w)) == makeResult(true, `\n`, makeContext(testRange("hoge"w), 1)));
+                assert(getResult!(parseEscapeSequence!())(testRange(`\nhoge`d)) == makeResult(true, `\n`, makeContext(testRange("hoge"d), 1)));
 
                 assert(getResult!(parseEscapeSequence!())("鬱hoge" ) == makeResult(false, "", makeContext("" ), Error("escape sequence")));
                 assert(getResult!(parseEscapeSequence!())("鬱hoge"w) == makeResult(false, "", makeContext(""w), Error("escape sequence")));
@@ -712,6 +730,7 @@ alias Tuple!(string, string) StateType;
                         result.value = input.input[0..1].to!string();
                         result.rest.input = input.input[1..$];
                         result.rest.line = (input.input[0] == '\n' ? input.line + 1 : input.line);
+                        result.rest.position = input.position + 1;
                         result.rest.state = input.state;
                         return result;
                     }
@@ -725,6 +744,7 @@ alias Tuple!(string, string) StateType;
                             input.input.popFront;
                             result.rest.input = input.input;
                             result.rest.line = (c == '\n' ? input.line + 1 : input.line);
+                            result.rest.position = input.position + 1;
                             result.rest.state = input.state;
                             return result;
                         }
@@ -739,12 +759,12 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(parseSpace!())("\thoge" ) == makeResult(true, "\t", makeContext("hoge" )));
-                assert(getResult!(parseSpace!())("\thoge"w) == makeResult(true, "\t", makeContext("hoge"w)));
-                assert(getResult!(parseSpace!())("\thoge"d) == makeResult(true, "\t", makeContext("hoge"d)));
-                assert(getResult!(parseSpace!())(testRange("\thoge"))  == makeResult(true, "\t", makeContext(testRange("hoge" ))));
-                assert(getResult!(parseSpace!())(testRange("\thoge"w)) == makeResult(true, "\t", makeContext(testRange("hoge"w))));
-                assert(getResult!(parseSpace!())(testRange("\thoge"d)) == makeResult(true, "\t", makeContext(testRange("hoge"d))));
+                assert(getResult!(parseSpace!())("\thoge" ) == makeResult(true, "\t", makeContext("hoge" , 1)));
+                assert(getResult!(parseSpace!())("\thoge"w) == makeResult(true, "\t", makeContext("hoge"w, 1)));
+                assert(getResult!(parseSpace!())("\thoge"d) == makeResult(true, "\t", makeContext("hoge"d, 1)));
+                assert(getResult!(parseSpace!())(testRange("\thoge"))  == makeResult(true, "\t", makeContext(testRange("hoge" ), 1)));
+                assert(getResult!(parseSpace!())(testRange("\thoge"w)) == makeResult(true, "\t", makeContext(testRange("hoge"w), 1)));
+                assert(getResult!(parseSpace!())(testRange("\thoge"d)) == makeResult(true, "\t", makeContext(testRange("hoge"d), 1)));
 
                 assert(getResult!(parseSpace!())("hoge" ) == makeResult(false, "", makeContext("" ), Error("space")));
                 assert(getResult!(parseSpace!())("hoge"w) == makeResult(false, "", makeContext(""w), Error("space")));
@@ -772,6 +792,7 @@ alias Tuple!(string, string) StateType;
                     result.match = true;
                     result.rest.input = input.input;
                     result.rest.line = input.line;
+                    result.rest.position = input.position;
                     result.rest.state = input.state;
                 }else{
                     static if(isSomeString!R || isCharRange!R){
@@ -826,9 +847,9 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateSkip!(parseString!"foo", parseString!" "))(" foo") == makeResult(true, "foo", makeContext("")));
-                assert(getResult!(combinateSkip!(parseString!"foo", parseString!" "))("foo") == makeResult(true, "foo", makeContext("")));
-                assert(getResult!(combinateSkip!(parseString!"foo", parseString!"foo"))("foo") == makeResult(true, "foo", makeContext("")));
+                assert(getResult!(combinateSkip!(parseString!"foo", parseString!" "))(" foo") == makeResult(true, "foo", makeContext("", 4)));
+                assert(getResult!(combinateSkip!(parseString!"foo", parseString!" "))("foo") == makeResult(true, "foo", makeContext("", 3)));
+                assert(getResult!(combinateSkip!(parseString!"foo", parseString!"foo"))("foo") == makeResult(true, "foo", makeContext("", 3)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -944,8 +965,8 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld") == makeResult(true, tuple("hello", "world"), makeContext("")));
-                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))("helloworld!") == makeResult(true, tuple("hello", "world", "!"), makeContext("")));
+                assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld") == makeResult(true, tuple("hello", "world"), makeContext("", 10)));
+                assert(getResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))("helloworld!") == makeResult(true, tuple("hello", "world", "!"), makeContext("", 11)));
                 assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("hellovvorld") == makeResult(false, tuple("", ""), makeContext(""), Error(q{"world"})));
                 assert(getResult!(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")))("helloworld?") == makeResult(false, tuple("", "", ""), makeContext(""), Error(q{"!"})));
                 return true;
@@ -997,11 +1018,11 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw") == makeResult(true, "h", makeContext("w"))); 
-                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("w") == makeResult(true, "w", makeContext("")));
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw") == makeResult(true, "h", makeContext("w", 1))); 
+                assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("w") == makeResult(true, "w", makeContext("", 1)));
                 assert(getResult!(combinateChoice!(parseString!"h", parseString!"w"))("") == makeResult(false, "", makeContext(""), Error(q{"w"})));
-                //assert(getResult!(combinateChoice!(parseString!"h", combinateSequence!(parseString!"w", parseString!"w")))(testRange("w"d)) == makeResult(true, "w", makeContext(testRange(""d))));
-                //assert(getResult!(combinateChoice!(__LINE__, "foo/bar.d", parseString!"h", combinateSequence!(parseString!"w", parseString!"w")))(testRange("w"d)) == makeResult(true, "w", makeContext(testRange(""d))));
+                //assert(getResult!(combinateChoice!(parseString!"h", combinateSequence!(parseString!"w", parseString!"w")))(testRange("w"d)) == makeResult(true, "w", makeContext(testRange(""d), 1)));
+                //assert(getResult!(combinateChoice!(__LINE__, "foo/bar.d", parseString!"h", combinateSequence!(parseString!"w", parseString!"w")))(testRange("w"d)) == makeResult(true, "w", makeContext(testRange(""d), 1)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1052,9 +1073,9 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateMore0!(parseString!"w"))("www w") == makeResult(true, ["w", "w", "w"], makeContext(" w")));
+                assert(getResult!(combinateMore0!(parseString!"w"))("www w") == makeResult(true, ["w", "w", "w"], makeContext(" w", 3)));
                 assert(getResult!(combinateMore0!(parseString!"w"))(" w") == makeResult(true, [""][0..0], makeContext(" w")));
-                assert(getResult!(combinateMore1!(parseString!"w"))("www w") == makeResult(true, ["w", "w", "w"], makeContext(" w")));
+                assert(getResult!(combinateMore1!(parseString!"w"))("www w") == makeResult(true, ["w", "w", "w"], makeContext(" w", 3)));
                 assert(getResult!(combinateMore1!(parseString!"w"))(" w") == makeResult(false, [""][0..0], makeContext(""), Error(q{"w"})));
                 return true;
             };
@@ -1082,8 +1103,8 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateOption!(parseString!"w"))("w") == makeResult(true, makeOption(true, "w"), makeContext("")));
-                assert(getResult!(combinateOption!(parseString!"w"))("hoge") == makeResult(true, makeOption(false, ""), makeContext("hoge")));
+                assert(getResult!(combinateOption!(parseString!"w"))("w") == makeResult(true, makeOption(true, "w"), makeContext("", 1)));
+                assert(getResult!(combinateOption!(parseString!"w"))("hoge") == makeResult(true, makeOption(false, ""), makeContext("hoge", 0)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1108,7 +1129,7 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)") == makeResult(true, "w", makeContext("")));
+                assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)") == makeResult(true, "w", makeContext("", 3)));
                 assert(getResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w}") == makeResult(false, "", makeContext(""), Error(q{")"})));
                 assert(getResult!(combinateNone!(parseString!"w"))("a") == makeResult(false, None.init, makeContext(""), Error(q{"w"})));
                 return true;
@@ -1132,9 +1153,9 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateAndPred!(parseString!"w"))("www") == makeResult(true, None.init, makeContext("www")));
-                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))("www") == makeResult(true, "w", makeContext("ww")));
-                assert(getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))))("www") == makeResult(true, ["w", "w"], makeContext("w")));
+                assert(getResult!(combinateAndPred!(parseString!"w"))("www") == makeResult(true, None.init, makeContext("www", 0)));
+                assert(getResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))("www") == makeResult(true, "w", makeContext("ww", 1)));
+                assert(getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))))("www") == makeResult(true, ["w", "w"], makeContext("w", 2)));
                 assert(getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))))("w") == makeResult(false, [""][0..0], makeContext(""), Error(q{"w"})));
                 return true;
             };
@@ -1155,7 +1176,7 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))))("wwws") == makeResult(true, ["w", "w"], makeContext("ws")));
+                assert(getResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))))("wwws") == makeResult(true, ["w", "w"], makeContext("ws", 2)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1246,7 +1267,7 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www") == makeResult(true, cast(size_t)3, makeContext("")));
+                assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("www") == makeResult(true, cast(size_t)3, makeContext("", 3)));
                 assert(getResult!(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }))("a") == makeResult(false, cast(size_t)0, makeContext(""), Error(q{"w"})));
                 //assert(getResult!(combinateConvert!(10, "hoge/fuga.d", combinateMore1!(parseString!"w"), function(string ws){ return ws.length; }))(testRange("a")) == makeResult(false, cast(size_t)0, makeContext(testRange("")), Error(q{"w"})));
                 return true;
@@ -1337,7 +1358,7 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateConvertWithState!(combinateMore1!(parseString!"w"), function(string[] ws, StateType state){ return ws.length; }))("www") == makeResult(true, cast(size_t)3, makeContext("")));
+                assert(getResult!(combinateConvertWithState!(combinateMore1!(parseString!"w"), function(string[] ws, StateType state){ return ws.length; }))("www") == makeResult(true, cast(size_t)3, makeContext("", 3)));
                 assert(getResult!(combinateConvertWithState!(combinateMore1!(parseString!"w"), function(string[] ws, StateType state){ return ws.length; }))("a") == makeResult(false, cast(size_t)0, makeContext(""), Error(q{"w"})));
                 return true;
             };
@@ -1409,7 +1430,7 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }))("wwwww") == makeResult(true, ["w", "w", "w", "w", "w"], makeContext("")));
+                assert(getResult!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }))("wwwww") == makeResult(true, ["w", "w", "w", "w", "w"], makeContext("", 5)));
                 assert(getResult!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }))("wwww") == makeResult(false, [""][0..0], makeContext(""), Error("passing check")));
                 return true;
             };
@@ -1476,82 +1497,6 @@ alias Tuple!(string, string) StateType;
             getResult!(combinateSequence!(combinateAndPred!p, p))("str".testRange());
         }
 
-// getters
-    // getLine
-        template getLine(){
-            alias size_t ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
-                static if(isSomeString!R || isCharRange!R){
-                    return makeResult(true, input.line, input, Error.init);
-                }else{
-                    throw new Exception("");
-                }
-            }
-        }
-
-        unittest{
-            enum dg = {
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n" ) == makeResult(true, cast(size_t)3, makeContext("" , 3)));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n"w) == makeResult(true, cast(size_t)3, makeContext(""w, 3)));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n"d) == makeResult(true, cast(size_t)3, makeContext(""d, 3)));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n" )) == makeResult(true, cast(size_t)3, makeContext(testRange("" ), 3)));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"w)) == makeResult(true, cast(size_t)3, makeContext(testRange(""w), 3)));
-                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"d)) == makeResult(true, cast(size_t)3, makeContext(testRange(""d), 3)));
-
-                try{
-                    scope(failure) assert(true);
-                    auto result = getResult!(combinateSequence!(parseSpaces!(), getLine!()))([0, 0]);
-                }catch(Exception ex){}
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
-    // getCallerLine
-        template getCallerLine(){
-            alias size_t ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
-                return makeResult(true, info.line, input, Error.init);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                assert(getResult!(getCallerLine!())("" ) == makeResult(true, cast(size_t)__LINE__, makeContext("" )));
-                assert(getResult!(getCallerLine!())(""w) == makeResult(true, cast(size_t)__LINE__, makeContext(""w)));
-                assert(getResult!(getCallerLine!())(""d) == makeResult(true, cast(size_t)__LINE__, makeContext(""d)));
-                assert(getResult!(getCallerLine!())(testRange("" )) == makeResult(true, cast(size_t)__LINE__, makeContext(testRange("" ))));
-                assert(getResult!(getCallerLine!())(testRange(""w)) == makeResult(true, cast(size_t)__LINE__, makeContext(testRange(""w))));
-                assert(getResult!(getCallerLine!())(testRange(""d)) == makeResult(true, cast(size_t)__LINE__, makeContext(testRange(""d))));
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
-    // getCallerFile
-        template getCallerFile(){
-            alias string ResultType;
-            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
-                return makeResult(true, info.file, input, Error.init);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                assert(getResult!(getCallerFile!())("" ) == makeResult(true, __FILE__, makeContext("" )));
-                assert(getResult!(getCallerFile!())(""w) == makeResult(true, __FILE__, makeContext(""w)));
-                assert(getResult!(getCallerFile!())(""d) == makeResult(true, __FILE__, makeContext(""d)));
-                assert(getResult!(getCallerFile!())(testRange("" )) == makeResult(true, __FILE__, makeContext(testRange("" ))));
-                assert(getResult!(getCallerFile!())(testRange(""w)) == makeResult(true, __FILE__, makeContext(testRange(""w))));
-                assert(getResult!(getCallerFile!())(testRange(""d)) == makeResult(true, __FILE__, makeContext(testRange(""d))));
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
 // useful parser
     // parseAnyChar
         template parseAnyChar(){
@@ -1562,9 +1507,9 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(parseAnyChar!())("hoge") == makeResult(true, "h", makeContext("oge")));
-                assert(getResult!(parseAnyChar!())("\U00012345") == makeResult(true, "\U00012345", makeContext("")));
-                assert(getResult!(parseAnyChar!())("\nhoge") == makeResult(true, "\n", makeContext("hoge", 2)));
+                assert(getResult!(parseAnyChar!())("hoge") == makeResult(true, "h", makeContext("oge", 1)));
+                assert(getResult!(parseAnyChar!())("\U00012345") == makeResult(true, "\U00012345", makeContext("", 4)));
+                assert(getResult!(parseAnyChar!())("\nhoge") == makeResult(true, "\n", makeContext("hoge", 1, 2)));
                 assert(getResult!(parseAnyChar!())("") == makeResult(false, "", makeContext(""), Error("any char")));
                 return true;
             };
@@ -1583,8 +1528,8 @@ alias Tuple!(string, string) StateType;
         unittest{
             static assert(is(parseSpaces!().ResultType));
             enum dg = {
-                assert(getResult!(parseSpaces!())("\t \rhoge") == makeResult(true, None.init, makeContext("hoge")));
-                assert(getResult!(parseSpaces!())("hoge") == makeResult(true, None.init, makeContext("hoge")));
+                assert(getResult!(parseSpaces!())("\t \rhoge") == makeResult(true, None.init, makeContext("hoge", 3)));
+                assert(getResult!(parseSpaces!())("hoge") == makeResult(true, None.init, makeContext("hoge", 0)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1619,8 +1564,8 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(parseIdent!())("hoge") == makeResult(true, "hoge", makeContext("")));
-                assert(getResult!(parseIdent!())("_0") == makeResult(true, "_0", makeContext("")));
+                assert(getResult!(parseIdent!())("hoge") == makeResult(true, "hoge", makeContext("", 4)));
+                assert(getResult!(parseIdent!())("_0") == makeResult(true, "_0", makeContext("", 2)));
                 assert(getResult!(parseIdent!())("0") == makeResult(false, "", makeContext(""), Error("c: 'A' <= c <= 'Z'")));
                 assert(getResult!(parseIdent!())("あ") == makeResult(false, "", makeContext(""), Error("c: 'A' <= c <= 'Z'")));
                 return true;
@@ -1681,9 +1626,9 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(parseStringLiteral!())(`"表が怖い噂のソフト"`) == makeResult(true, `"表が怖い噂のソフト"`, makeContext("")));
-                assert(getResult!(parseStringLiteral!())(`r"表が怖い噂のソフト"`) == makeResult(true, `r"表が怖い噂のソフト"`, makeContext("")));
-                assert(getResult!(parseStringLiteral!())("`表が怖い噂のソフト`") == makeResult(true, q{`表が怖い噂のソフト`}, makeContext("")));
+                assert(getResult!(parseStringLiteral!())("\"表が怖い噂のソフト\"") == makeResult(true, "\"表が怖い噂のソフト\"", makeContext("", 29)));
+                assert(getResult!(parseStringLiteral!())(`r"表が怖い噂のソフト"`) == makeResult(true, `r"表が怖い噂のソフト"`, makeContext("", 30)));
+                assert(getResult!(parseStringLiteral!())("`表が怖い噂のソフト`") == makeResult(true, q{`表が怖い噂のソフト`}, makeContext("", 29)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1717,9 +1662,85 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getResult!(parseIntLiteral!())("3141") == makeResult(true, 3141, makeContext("")));
-                assert(getResult!(parseIntLiteral!())("0") == makeResult(true, 0, makeContext("")));
-                assert(getResult!(parseIntLiteral!())("0123") == makeResult(true, 0, makeContext("123")));
+                assert(getResult!(parseIntLiteral!())("3141") == makeResult(true, 3141, makeContext("", 4)));
+                assert(getResult!(parseIntLiteral!())("0") == makeResult(true, 0, makeContext("", 1)));
+                assert(getResult!(parseIntLiteral!())("0123") == makeResult(true, 0, makeContext("123", 1)));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
+// getters
+    // getLine
+        template getLine(){
+            alias size_t ResultType;
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
+                static if(isSomeString!R || isCharRange!R){
+                    return makeResult(true, input.line, input, Error.init);
+                }else{
+                    throw new Exception("");
+                }
+            }
+        }
+
+        unittest{
+            enum dg = {
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n" ) == makeResult(true, cast(size_t)3, makeContext("" , 2, 3)));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n"w) == makeResult(true, cast(size_t)3, makeContext(""w, 2, 3)));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))("\n\n"d) == makeResult(true, cast(size_t)3, makeContext(""d, 2, 3)));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n" )) == makeResult(true, cast(size_t)3, makeContext(testRange("" ), 2, 3)));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"w)) == makeResult(true, cast(size_t)3, makeContext(testRange(""w), 2, 3)));
+                assert(getResult!(combinateSequence!(parseSpaces!(), getLine!()))(testRange("\n\n"d)) == makeResult(true, cast(size_t)3, makeContext(testRange(""d), 2, 3)));
+
+                try{
+                    scope(failure) assert(true);
+                    auto result = getResult!(combinateSequence!(parseSpaces!(), getLine!()))([0, 0]);
+                }catch(Exception ex){}
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
+    // getCallerLine
+        template getCallerLine(){
+            alias size_t ResultType;
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
+                return makeResult(true, info.line, input, Error.init);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                assert(getResult!(getCallerLine!())("" ) == makeResult(true, cast(size_t)__LINE__, makeContext("" , 0)));
+                assert(getResult!(getCallerLine!())(""w) == makeResult(true, cast(size_t)__LINE__, makeContext(""w, 0)));
+                assert(getResult!(getCallerLine!())(""d) == makeResult(true, cast(size_t)__LINE__, makeContext(""d, 0)));
+                assert(getResult!(getCallerLine!())(testRange("" )) == makeResult(true, cast(size_t)__LINE__, makeContext(testRange("" ), 0)));
+                assert(getResult!(getCallerLine!())(testRange(""w)) == makeResult(true, cast(size_t)__LINE__, makeContext(testRange(""w), 0)));
+                assert(getResult!(getCallerLine!())(testRange(""d)) == makeResult(true, cast(size_t)__LINE__, makeContext(testRange(""d), 0)));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
+    // getCallerFile
+        template getCallerFile(){
+            alias string ResultType;
+            static Result!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
+                return makeResult(true, info.file, input, Error.init);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                assert(getResult!(getCallerFile!())("" ) == makeResult(true, __FILE__, makeContext("" , 0)));
+                assert(getResult!(getCallerFile!())(""w) == makeResult(true, __FILE__, makeContext(""w, 0)));
+                assert(getResult!(getCallerFile!())(""d) == makeResult(true, __FILE__, makeContext(""d, 0)));
+                assert(getResult!(getCallerFile!())(testRange("" )) == makeResult(true, __FILE__, makeContext(testRange("" ), 0)));
+                assert(getResult!(getCallerFile!())(testRange(""w)) == makeResult(true, __FILE__, makeContext(testRange(""w), 0)));
+                assert(getResult!(getCallerFile!())(testRange(""d)) == makeResult(true, __FILE__, makeContext(testRange(""d), 0)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1735,20 +1756,11 @@ string getSource(size_t callerLine = __LINE__, string callerFile = __FILE__)(str
 }
 
 auto getResult(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range input, StateType state = StateType.init){
-    return fun.parse(Context!Range(input, 1, state), new CallerInfo(callerLine, callerFile));
+    return fun.parse(Context!Range(input, 0, 1, state), new CallerInfo(callerLine, callerFile));
 }
 
 auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range src){
     return src.getResult!(fun!(), callerLine, callerFile)();
-}
-
-version(none) auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range src){
-    auto result = src.getResult!(fun!(), callerLine, callerFile)();
-    if(result.match){
-        return result.value;
-    }else{
-        throw new Exception(result.error.line.to!string() ~ q{: error } ~ result.error.need ~ q{ is needed});
-    }
 }
 
 bool isMatch(alias fun)(string src){
@@ -1786,9 +1798,9 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                assert(getResult!(arch!("(", ")"))("(a(i(u)e)o())") == makeResult(true, "(a(i(u)e)o())", makeContext("")));
-                assert(getResult!(arch!("[", "]"))("[a[i[u]e]o[]]") == makeResult(true, "[a[i[u]e]o[]]", makeContext("")));
-                assert(getResult!(arch!("{", "}"))("{a{i{u}e}o{}}") == makeResult(true, "{a{i{u}e}o{}}", makeContext("")));
+                assert(getResult!(arch!("(", ")"))("(a(i(u)e)o())") == makeResult(true, "(a(i(u)e)o())", makeContext("", 13)));
+                assert(getResult!(arch!("[", "]"))("[a[i[u]e]o[]]") == makeResult(true, "[a[i[u]e]o[]]", makeContext("", 13)));
+                assert(getResult!(arch!("{", "}"))("{a{i{u}e}o{}}") == makeResult(true, "{a{i{u}e}o{}}", makeContext("", 13)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1854,6 +1866,42 @@ bool isMatch(alias fun)(string src){
             dg();
         }
 
+    // id
+        template id(){
+            alias string ResultType;
+            Result!(string, ResultType) parse()(Context!string input, in CallerInfo info){
+                return combinateConvert!(
+                    combinateSequence!(
+                        combinateChoice!(
+                            parseCharRange!('A','Z'),
+                            parseCharRange!('a','z'),
+                            parseString!"_"
+                        ),
+                        combinateMore0!(
+                            combinateChoice!(
+                                parseCharRange!('0','9'),
+                                parseCharRange!('A','Z'),
+                                parseCharRange!('a','z'),
+                                parseString!"_"
+                            )
+                        )
+                    ),
+                    flat
+                ).parse(input, info);
+            }
+        }
+
+        unittest{
+            enum dg = {
+                assert(getResult!(id!())("A") == makeResult(true, "A", makeContext("", 1), Error.init));
+                assert(getResult!(id!())("int") == makeResult(true, "int", makeContext("", 3), Error.init));
+                assert(getResult!(id!())("0") == makeResult(false, "", makeContext(""), Error(`"_"`)));
+                return true;
+            };
+            debug(ctpg_compile_time) static assert(dg());
+            dg();
+        }
+
     // nonterminal
         template nonterminal(){
             alias string ResultType;
@@ -1886,8 +1934,8 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                assert(getResult!(nonterminal!())("A") == makeResult(true, " #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(A!())", makeContext(""), Error.init));
-                assert(getResult!(nonterminal!())("int") == makeResult(true, " #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(int!())", makeContext(""), Error.init));
+                assert(getResult!(nonterminal!())("A") == makeResult(true, " #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(A!())", makeContext("", 1), Error.init));
+                assert(getResult!(nonterminal!())("int") == makeResult(true, " #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(int!())", makeContext("", 3), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1926,45 +1974,9 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                assert(getResult!(typeName!())("int") == makeResult(true, "int", makeContext(""), Error.init));
-                assert(getResult!(typeName!())("Tuple!(string, int)") == makeResult(true, "Tuple!(string, int)", makeContext(""), Error.init));
-                assert(getResult!(typeName!())("int[]") == makeResult(true, "int[]", makeContext(""), Error.init));
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
-    // id
-        template id(){
-            alias string ResultType;
-            Result!(string, ResultType) parse()(Context!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        combinateChoice!(
-                            parseCharRange!('A','Z'),
-                            parseCharRange!('a','z'),
-                            parseString!"_"
-                        ),
-                        combinateMore0!(
-                            combinateChoice!(
-                                parseCharRange!('0','9'),
-                                parseCharRange!('A','Z'),
-                                parseCharRange!('a','z'),
-                                parseString!"_"
-                            )
-                        )
-                    ),
-                    flat
-                ).parse(input, info);
-            }
-        }
-
-        unittest{
-            enum dg = {
-                assert(getResult!(id!())("A") == makeResult(true, "A", makeContext(""), Error.init));
-                assert(getResult!(id!())("int") == makeResult(true, "int", makeContext(""), Error.init));
-                assert(getResult!(id!())("0") == makeResult(false, "", makeContext(""), Error(`"_"`)));
+                assert(getResult!(typeName!())("int") == makeResult(true, "int", makeContext("", 3), Error.init));
+                assert(getResult!(typeName!())("Tuple!(string, int)") == makeResult(true, "Tuple!(string, int)", makeContext("", 19), Error.init));
+                assert(getResult!(typeName!())("int[]") == makeResult(true, "int[]", makeContext("", 5), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1986,7 +1998,7 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                assert(getResult!(eofLit!())("$") == makeResult(true, "parseEOF!()", makeContext(""), Error.init));
+                assert(getResult!(eofLit!())("$") == makeResult(true, "parseEOF!()", makeContext("", 1), Error.init));
                 assert(getResult!(eofLit!())("#") == makeResult(false, "", makeContext(""), Error(`"$"`)));
                 return true;
             };
@@ -2060,8 +2072,8 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                assert(getResult!(rangeLit!())("[a-z]") == makeResult(true, "parseCharRange!('a','z')", makeContext(""), Error.init));
-                assert(getResult!(rangeLit!())("[a-zA-Z_]") == makeResult(true, "combinateChoice!(parseCharRange!('a','z'),parseCharRange!('A','Z'),parseString!\"_\"" ")", makeContext(""), Error.init));
+                assert(getResult!(rangeLit!())("[a-z]") == makeResult(true, "parseCharRange!('a','z')", makeContext("", 5), Error.init));
+                assert(getResult!(rangeLit!())("[a-zA-Z_]") == makeResult(true, "combinateChoice!(parseCharRange!('a','z'),parseCharRange!('A','Z'),parseString!\"_\"" ")", makeContext("", 9), Error.init));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -2099,7 +2111,7 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                assert(getResult!(stringLit!())("\"hello\nworld\" ") == makeResult(true, "parseString!\"hello\nworld\"", makeContext(" ", 2), Error.init));
+                assert(getResult!(stringLit!())("\"hello\nworld\" ") == makeResult(true, "parseString!\"hello\nworld\"", makeContext(" ", 13, 2), Error.init));
                 assert(getResult!(stringLit!())("aa\"") == makeResult(false, "", makeContext(""), Error(`"""`)));
                 return true;
             };
@@ -2126,10 +2138,10 @@ bool isMatch(alias fun)(string src){
 
         unittest{
             enum dg = {
-                assert(getResult!(literal!())("\"hello\nworld\"") == makeResult(true, "combinateMemoize!(parseString!\"hello\nworld\")", makeContext("", 2), Error.init));
-                assert(getResult!(literal!())("[a-z]") == makeResult(true, "combinateMemoize!(parseCharRange!('a','z'))", makeContext(""), Error.init));
-                assert(getResult!(literal!())("$") == makeResult(true, "combinateMemoize!(parseEOF!())", makeContext(""), Error.init));
-                assert(getResult!(literal!())("$", tuple("", "skip!()")) == makeResult(true, "combinateSkip!(combinateMemoize!(parseEOF!()),skip!())", makeContext("", 1, tuple("", "skip!()")), Error.init));
+                assert(getResult!(literal!())("\"hello\nworld\"") == makeResult(true, "combinateMemoize!(parseString!\"hello\nworld\")", makeContext("", 13, 2), Error.init));
+                assert(getResult!(literal!())("[a-z]") == makeResult(true, "combinateMemoize!(parseCharRange!('a','z'))", makeContext("", 5), Error.init));
+                assert(getResult!(literal!())("$") == makeResult(true, "combinateMemoize!(parseEOF!())", makeContext("", 1), Error.init));
+                assert(getResult!(literal!())("$", tuple("", "skip!()")) == makeResult(true, "combinateSkip!(combinateMemoize!(parseEOF!()),skip!())", makeContext("", 1, 1, tuple("", "skip!()")), Error.init));
                 assert(getResult!(literal!())("表が怖い噂のソフト") == makeResult(false, "", makeContext(""), Error(`"$"`)));
                 return true;
             };
@@ -2176,7 +2188,7 @@ bool isMatch(alias fun)(string src){
                         ")"
                     );
                 }
-                assert(getResult!(primaryExp!())("int") == makeResult(true, " #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(int!())", makeContext(""), Error.init));
+                assert(getResult!(primaryExp!())("int") == makeResult(true, " #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(int!())", makeContext("", 3), Error.init));
                 assert(getResult!(primaryExp!())("###このコメントは表示されません###") == makeResult(false, "", makeContext(""), Error(`"("`)));
                 return true;
             };
@@ -2787,4 +2799,3 @@ bool isMatch(alias fun)(string src){
             debug(ctpg_compile_time) static assert(dg());
             dg();
         };
-
