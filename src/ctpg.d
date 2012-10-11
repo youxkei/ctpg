@@ -11,7 +11,7 @@ This module implements a compile time parser generator.
 module ctpg;
 
 import std.array:       save, empty, join;
-import std.conv:        to;
+import std.conv:        to, text;
 import std.range:       isInputRange, isForwardRange, ElementType;
 import std.traits:      CommonType, isCallable, ReturnType, isSomeChar, isSomeString, Unqual, isAssignable, isArray;
 import std.typetuple:   staticMap, TypeTuple;
@@ -201,14 +201,13 @@ alias Tuple!(string, string) StateType;
             assert(line >= 1);
         }
 
-        public{
-            string need;
-            size_t line = 1;
+        string need;
+        size_t position;
+        size_t line = 1;
 
-            pure @safe nothrow const
-            bool opEquals(in Error rhs){
-                return need == rhs.need && line == rhs.line;
-            }
+        pure @safe nothrow const
+        bool opEquals(in Error rhs){
+            return need == rhs.need && position == rhs.position && line == rhs.line;
         }
     }
 
@@ -260,7 +259,7 @@ alias Tuple!(string, string) StateType;
         template failure(){
             alias None ResultType;
             static ParseResult!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
-                return makeParseResult(false, None.init, Context!R.init, Error.init);
+                return makeParseResult(false, None.init, Context!R.init, Error("", input.position, input.line));
             }
         }
 
@@ -334,7 +333,7 @@ alias Tuple!(string, string) StateType;
                         result.rest.state = input.state;
                         return result;
                     }
-                    result.error = Error('"' ~ str ~ '"', input.line);
+                    result.error = Error('"' ~ str ~ '"', input.position, input.line);
                 }else static if(isCharRange!R){
                     enum convertedString = staticConvertString!(str, R);
                     foreach(c; convertedString){
@@ -354,7 +353,7 @@ alias Tuple!(string, string) StateType;
 
                     Lerror:
 
-                    result.error = Error('"' ~ str ~ '"', input.line);
+                    result.error = Error('"' ~ str ~ '"', input.position, input.line);
                 }else{
                     throw new Exception("");
                 }
@@ -509,9 +508,9 @@ alias Tuple!(string, string) StateType;
                         }
                     }
                     if(low == dchar.min && high == dchar.max){
-                        result.error = Error("any char", input.line);
+                        result.error = Error("any char", input.position, input.line);
                     }else{
-                        result.error = Error("c: '" ~ low.to!string() ~ "' <= c <= '" ~ high.to!string() ~ "'", input.line);
+                        result.error = Error("c: '" ~ low.to!string() ~ "' <= c <= '" ~ high.to!string() ~ "'", input.position, input.line);
                     }
                 }else static if(isCharRange!R){
                     if(!input.input.empty){
@@ -528,9 +527,9 @@ alias Tuple!(string, string) StateType;
                         }
                     }
                     if(low == dchar.min && high == dchar.max){
-                        result.error = Error("any char", input.line);
+                        result.error = Error("any char", input.position, input.line);
                     }else{
-                        result.error = Error("c: '" ~ low.to!string() ~ "' <= c <= '" ~ high.to!string() ~ "'", input.line);
+                        result.error = Error("c: '" ~ low.to!string() ~ "' <= c <= '" ~ high.to!string() ~ "'", input.position, input.line);
                     }
                 }else{
                     throw new Exception("");
@@ -611,7 +610,7 @@ alias Tuple!(string, string) StateType;
                             }
                         }
                     }
-                    result.error = Error("escape sequence", input.line);
+                    result.error = Error("escape sequence", input.position, input.line);
                 }else static if(isCharRange!R){
                     auto c1 = input.input.front;
                     if(c1 == '\\'){
@@ -664,7 +663,7 @@ alias Tuple!(string, string) StateType;
                             }
                         }
                     }
-                    result.error = Error("escape sequence", input.line);
+                    result.error = Error("escape sequence", input.position, input.line);
                 }else{
                     throw new Exception("");
                 }
@@ -734,7 +733,7 @@ alias Tuple!(string, string) StateType;
                         result.rest.state = input.state;
                         return result;
                     }
-                    result.error = Error("space", input.line);
+                    result.error = Error("space", input.position, input.line);
                 }else static if(isCharRange!R){
                     if(!input.input.empty){
                         Unqual!(ElementType!R) c = input.input.front;
@@ -749,7 +748,7 @@ alias Tuple!(string, string) StateType;
                             return result;
                         }
                     }
-                    result.error = Error("space", input.line);
+                    result.error = Error("space", input.position, input.line);
                 }else{
                     throw new Exception("");
                 }
@@ -795,11 +794,7 @@ alias Tuple!(string, string) StateType;
                     result.rest.position = input.position;
                     result.rest.state = input.state;
                 }else{
-                    static if(isSomeString!R || isCharRange!R){
-                        result.error = Error("EOF", input.line);
-                    }else{
-                        result.error = Error("EOF");
-                    }
+                    result.error = Error("EOF", input.position, input.line);
                 }
                 return result;
             }
@@ -952,9 +947,8 @@ alias Tuple!(string, string) StateType;
                                 result.value = tuple(r1.value, r2.value.field);
                             }
                             result.rest = r2.rest;
-                        }else{
-                            result.error = r2.error;
                         }
+                        result.error = r1.error.position > r2.error.position ? r1.error : r2.error;
                     }else{
                         result.error = r1.error;
                     }
@@ -967,8 +961,8 @@ alias Tuple!(string, string) StateType;
             enum dg = {
                 assert(getParseResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("helloworld") == makeParseResult(true, tuple("hello", "world"), makeContext("", 10)));
                 assert(getParseResult!(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!"))("helloworld!") == makeParseResult(true, tuple("hello", "world", "!"), makeContext("", 11)));
-                assert(getParseResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("hellovvorld") == makeParseResult(false, tuple("", ""), makeContext(""), Error(q{"world"})));
-                assert(getParseResult!(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")))("helloworld?") == makeParseResult(false, tuple("", "", ""), makeContext(""), Error(q{"!"})));
+                assert(getParseResult!(combinateSequence!(parseString!("hello"), parseString!("world")))("hellovvorld") == makeParseResult(false, tuple("", ""), makeContext(""), Error(q{"world"}, 5)));
+                assert(getParseResult!(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")))("helloworld?") == makeParseResult(false, tuple("", "", ""), makeContext(""), Error(q{"!"}, 10)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1007,11 +1001,17 @@ alias Tuple!(string, string) StateType;
                 static if(parsers.length == 1){
                     return parsers[0].parse(input, info);
                 }else{
-                    auto r = parsers[0].parse(input.save, info);
-                    if(r.match){
-                        return r;
+                    auto r1 = parsers[0].parse(input.save, info);
+                    if(r1.match){
+                        return r1;
                     }
-                    return combinateChoice!(parsers[1..$]).parse(input, info);
+                    auto r2 = combinateChoice!(parsers[1..$]).parse(input, info);
+                    if(r2.match){
+                        return r2;
+                    }
+                    typeof(return) result;
+                    result.error = r1.error.position > r2.error.position ? r1.error : r2.error;
+                    return result;
                 }
             }
         }
@@ -1021,6 +1021,7 @@ alias Tuple!(string, string) StateType;
                 assert(getParseResult!(combinateChoice!(parseString!"h", parseString!"w"))("hw") == makeParseResult(true, "h", makeContext("w", 1))); 
                 assert(getParseResult!(combinateChoice!(parseString!"h", parseString!"w"))("w") == makeParseResult(true, "w", makeContext("", 1)));
                 assert(getParseResult!(combinateChoice!(parseString!"h", parseString!"w"))("") == makeParseResult(false, "", makeContext(""), Error(q{"w"})));
+                assert(getParseResult!(combinateChoice!(combinateSequence!(parseString!"h", parseString!"w"), combinateSequence!(parseString!"w", parseString!"h")))("h") == makeParseResult(false, tuple("", ""), makeContext(""), Error(q{"w"}, 1)));
                 //assert(getParseResult!(combinateChoice!(parseString!"h", combinateSequence!(parseString!"w", parseString!"w")))(testRange("w"d)) == makeParseResult(true, "w", makeContext(testRange(""d), 1)));
                 //assert(getParseResult!(combinateChoice!(__LINE__, "foo/bar.d", parseString!"h", combinateSequence!(parseString!"w", parseString!"w")))(testRange("w"d)) == makeParseResult(true, "w", makeContext(testRange(""d), 1)));
                 return true;
@@ -1046,11 +1047,12 @@ alias Tuple!(string, string) StateType;
                         if(r2.match){
                             rest = r2.rest;
                         }else{
+                            result.error = r2.error;
                             break;
                         }
                     }else{
+                        result.error = r1.error;
                         if(result.value.length < n){
-                            result.error = r1.error;
                             return result;
                         }else{
                             break;
@@ -1073,10 +1075,10 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getParseResult!(combinateMore0!(parseString!"w"))("www w") == makeParseResult(true, ["w", "w", "w"], makeContext(" w", 3)));
-                assert(getParseResult!(combinateMore0!(parseString!"w"))(" w") == makeParseResult(true, [""][0..0], makeContext(" w")));
-                assert(getParseResult!(combinateMore1!(parseString!"w"))("www w") == makeParseResult(true, ["w", "w", "w"], makeContext(" w", 3)));
-                assert(getParseResult!(combinateMore1!(parseString!"w"))(" w") == makeParseResult(false, [""][0..0], makeContext(""), Error(q{"w"})));
+                assert(getParseResult!(combinateMore0!(parseString!"w"))("www w") == makeParseResult(true, ["w", "w", "w"], makeContext(" w", 3), Error(q{"w"}, 3)));
+                assert(getParseResult!(combinateMore0!(parseString!"w"))(" w") == makeParseResult(true, [""][0..0], makeContext(" w"), Error(q{"w"}, 0)));
+                assert(getParseResult!(combinateMore1!(parseString!"w"))("www w") == makeParseResult(true, ["w", "w", "w"], makeContext(" w", 3), Error(q{"w"}, 3)));
+                assert(getParseResult!(combinateMore1!(parseString!"w"))(" w") == makeParseResult(false, [""][0..0], makeContext(""), Error(q{"w"}, 0)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1130,7 +1132,7 @@ alias Tuple!(string, string) StateType;
         unittest{
             enum dg = {
                 assert(getParseResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w)") == makeParseResult(true, "w", makeContext("", 3)));
-                assert(getParseResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w}") == makeParseResult(false, "", makeContext(""), Error(q{")"})));
+                assert(getParseResult!(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")))("(w}") == makeParseResult(false, "", makeContext(""), Error(q{")"}, 2)));
                 assert(getParseResult!(combinateNone!(parseString!"w"))("a") == makeParseResult(false, None.init, makeContext(""), Error(q{"w"})));
                 return true;
             };
@@ -1155,8 +1157,8 @@ alias Tuple!(string, string) StateType;
             enum dg = {
                 assert(getParseResult!(combinateAndPred!(parseString!"w"))("www") == makeParseResult(true, None.init, makeContext("www", 0)));
                 assert(getParseResult!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")))("www") == makeParseResult(true, "w", makeContext("ww", 1)));
-                assert(getParseResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))))("www") == makeParseResult(true, ["w", "w"], makeContext("w", 2)));
-                assert(getParseResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))))("w") == makeParseResult(false, [""][0..0], makeContext(""), Error(q{"w"})));
+                assert(getParseResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))))("www") == makeParseResult(true, ["w", "w"], makeContext("w", 2), Error(q{"w"}, 3)));
+                assert(getParseResult!(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))))("w") == makeParseResult(false, [""][0..0], makeContext(""), Error(q{"w"}, 1)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1419,7 +1421,7 @@ alias Tuple!(string, string) StateType;
                     if(checker(r.value)){
                         result = r;
                     }else{
-                        result.error = Error("passing check", input.line);
+                        result.error = Error("passing check", input.position, input.line);
                     }
                 }else{
                     result.error = r.error;
@@ -1430,7 +1432,7 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(getParseResult!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }))("wwwww") == makeParseResult(true, ["w", "w", "w", "w", "w"], makeContext("", 5)));
+                assert(getParseResult!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }))("wwwww") == makeParseResult(true, ["w", "w", "w", "w", "w"], makeContext("", 5), Error(q{"w"}, 5)));
                 assert(getParseResult!(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }))("wwww") == makeParseResult(false, [""][0..0], makeContext(""), Error("passing check")));
                 return true;
             };
@@ -1748,7 +1750,11 @@ alias Tuple!(string, string) StateType;
         }
 
 string generateParsers(size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
-    return src.parse!(defs, callerLine, callerFile)().value;
+    auto parsed = src.parse!(defs, callerLine, callerFile)();
+    if(!parsed.match){
+        throw new Exception(text("[", parsed.error.line + callerLine - 1, ".", parsed.error.position, "] ", parsed.error.need, " is needed"));
+    }
+    return parsed.value;
 }
 
 string getSource(size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
@@ -2799,3 +2805,4 @@ bool isMatch(alias fun)(string src){
             debug(ctpg_compile_time) static assert(dg());
             dg();
         };
+
