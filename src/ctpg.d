@@ -176,23 +176,23 @@ alias Tuple!(string, string) StateType;
     struct ParseResult(Range, T){
         bool match;
         T value;
-        Context!Range rest;
+        Context!Range next;
         Error error;
 
         void opAssign(U)(ParseResult!(Range, U) rhs)if(isAssignable!(T, U)){
             match = rhs.match;
             value = rhs.value;
-            rest = rhs.rest;
+            next = rhs.next;
             error = rhs.error;
         }
 
         equals_t opEquals(ParseResult lhs){
-            return match == lhs.match && value == lhs.value && rest == lhs.rest && error == lhs.error;
+            return match == lhs.match && value == lhs.value && next == lhs.next && error == lhs.error;
         }
     }
 
-    ParseResult!(Range, T) makeParseResult(Range, T)(bool match, T value, Context!Range rest, Error error = Error.init){
-        return ParseResult!(Range, T)(match, value, rest, error);
+    ParseResult!(Range, T) makeParseResult(Range, T)(bool match, T value, Context!Range next, Error error = Error.init){
+        return ParseResult!(Range, T)(match, value, next, error);
     }
 
 // struct Error
@@ -327,10 +327,10 @@ alias Tuple!(string, string) StateType;
                     if(input.input.length >= convertedString.length && convertedString == input.input[0..convertedString.length]){
                         result.match = true;
                         result.value = str;
-                        result.rest.input = input.input[convertedString.length..$];
-                        result.rest.line = input.line + lines;
-                        result.rest.position = input.position + convertedString.length;
-                        result.rest.state = input.state;
+                        result.next.input = input.input[convertedString.length..$];
+                        result.next.line = input.line + lines;
+                        result.next.position = input.position + convertedString.length;
+                        result.next.state = input.state;
                         return result;
                     }
                     result.error = Error('"' ~ str ~ '"', input.position, input.line);
@@ -345,10 +345,10 @@ alias Tuple!(string, string) StateType;
                     }
                     result.match = true;
                     result.value = str;
-                    result.rest.input = input.input;
-                    result.rest.line = input.line + lines;
-                    result.rest.position = input.position + convertedString.length;
-                    result.rest.state = input.state;
+                    result.next.input = input.input;
+                    result.next.line = input.line + lines;
+                    result.next.position = input.position + convertedString.length;
+                    result.next.state = input.state;
                     return result;
 
                     Lerror:
@@ -501,10 +501,10 @@ alias Tuple!(string, string) StateType;
                             }else{
                                 result.value = c.to!string();
                             }
-                            result.rest.input = input.input[idx..$];
-                            result.rest.line = c == '\n' ? input.line + 1 : input.line;
-                            result.rest.position = input.position + idx;
-                            result.rest.state = input.state;
+                            result.next.input = input.input[idx..$];
+                            result.next.line = c == '\n' ? input.line + 1 : input.line;
+                            result.next.position = input.position + idx;
+                            result.next.state = input.state;
                             return result;
                         }
                     }
@@ -520,10 +520,10 @@ alias Tuple!(string, string) StateType;
                         if(low <= c && c <= high){
                             result.match = true;
                             result.value = c.to!string();
-                            result.rest.input = input.input;
-                            result.rest.line = c == '\n' ? input.line + 1 : input.line;
-                            result.rest.position = input.position + advance;
-                            result.rest.state = input.state;
+                            result.next.input = input.input;
+                            result.next.line = c == '\n' ? input.line + 1 : input.line;
+                            result.next.position = input.position + advance;
+                            result.next.state = input.state;
                             return result;
                         }
                     }
@@ -583,28 +583,28 @@ alias Tuple!(string, string) StateType;
                             case 'u':{
                                 result.match = true;
                                 result.value = input.input[0..6].to!string();
-                                result.rest.input = input.input[6..$];
-                                result.rest.line = input.line;
-                                result.rest.position = input.position + 1;
-                                result.rest.state = input.state;
+                                result.next.input = input.input[6..$];
+                                result.next.line = input.line;
+                                result.next.position = input.position + 1;
+                                result.next.state = input.state;
                                 return result;
                             }
                             case 'U':{
                                 result.match = true;
                                 result.value = input.input[0..10].to!string();
-                                result.rest.input = input.input[10..$];
-                                result.rest.line = input.line;
-                                result.rest.position = input.position + 1;
-                                result.rest.state = input.state;
+                                result.next.input = input.input[10..$];
+                                result.next.line = input.line;
+                                result.next.position = input.position + 1;
+                                result.next.state = input.state;
                                 return result;
                             }
                             case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
                                 result.match = true;
                                 result.value = input.input[0..2].to!string();
-                                result.rest.input = input.input[2..$];
-                                result.rest.line = input.line;
-                                result.rest.position = input.position + 1;
-                                result.rest.state = input.state;
+                                result.next.input = input.input[2..$];
+                                result.next.line = input.line;
+                                result.next.position = input.position + 1;
+                                result.next.state = input.state;
                                 return result;
                             }
                             default:{
@@ -628,10 +628,10 @@ alias Tuple!(string, string) StateType;
                                     input.input.popFront;
                                 }
                                 result.value = to!string(data);
-                                result.rest.input = input.input;
-                                result.rest.line = input.line;
-                                result.rest.position = input.position + 1;
-                                result.rest.state = input.state;
+                                result.next.input = input.input;
+                                result.next.line = input.line;
+                                result.next.position = input.position + 1;
+                                result.next.state = input.state;
                                 return result;
                             }
                             case 'U':{
@@ -644,20 +644,20 @@ alias Tuple!(string, string) StateType;
                                     input.input.popFront;
                                 }
                                 result.value = to!string(data);
-                                result.rest.input = input.input;
-                                result.rest.line = input.line;
-                                result.rest.position = input.position + 1;
-                                result.rest.state = input.state;
+                                result.next.input = input.input;
+                                result.next.line = input.line;
+                                result.next.position = input.position + 1;
+                                result.next.state = input.state;
                                 return result;
                             }
                             case '\'': case '"': case '?': case '\\': case 'a': case 'b': case 'f': case 'n': case 'r': case 't': case 'v':{
                                 result.match = true;
                                 input.input.popFront;
                                 result.value = "\\" ~ to!string(c2);
-                                result.rest.input = input.input;
-                                result.rest.line = input.line;
-                                result.rest.position = input.position + 1;
-                                result.rest.state = input.state;
+                                result.next.input = input.input;
+                                result.next.line = input.line;
+                                result.next.position = input.position + 1;
+                                result.next.state = input.state;
                                 return result;
                             }
                             default:{
@@ -728,10 +728,10 @@ alias Tuple!(string, string) StateType;
                     if(input.input.length > 0 && (input.input[0] == ' ' || input.input[0] == '\n' || input.input[0] == '\t' || input.input[0] == '\r' || input.input[0] == '\f')){
                         result.match = true;
                         result.value = input.input[0..1].to!string();
-                        result.rest.input = input.input[1..$];
-                        result.rest.line = (input.input[0] == '\n' ? input.line + 1 : input.line);
-                        result.rest.position = input.position + 1;
-                        result.rest.state = input.state;
+                        result.next.input = input.input[1..$];
+                        result.next.line = (input.input[0] == '\n' ? input.line + 1 : input.line);
+                        result.next.position = input.position + 1;
+                        result.next.state = input.state;
                         return result;
                     }
                     result.error = Error("space", input.position, input.line);
@@ -742,10 +742,10 @@ alias Tuple!(string, string) StateType;
                             result.match = true;
                             result.value = c.to!string();
                             input.input.popFront;
-                            result.rest.input = input.input;
-                            result.rest.line = (c == '\n' ? input.line + 1 : input.line);
-                            result.rest.position = input.position + 1;
-                            result.rest.state = input.state;
+                            result.next.input = input.input;
+                            result.next.line = (c == '\n' ? input.line + 1 : input.line);
+                            result.next.position = input.position + 1;
+                            result.next.state = input.state;
                             return result;
                         }
                     }
@@ -790,10 +790,10 @@ alias Tuple!(string, string) StateType;
                 typeof(return) result;
                 if(input.input.empty){
                     result.match = true;
-                    result.rest.input = input.input;
-                    result.rest.line = input.line;
-                    result.rest.position = input.position;
-                    result.rest.state = input.state;
+                    result.next.input = input.input;
+                    result.next.line = input.line;
+                    result.next.position = input.position;
+                    result.next.state = input.state;
                 }else{
                     result.error = Error("EOF", input.position, input.line);
                 }
@@ -831,7 +831,7 @@ alias Tuple!(string, string) StateType;
                 if(!r.match){
                     auto skipped = skip.parse(input, info);
                     if(skipped.match){
-                        return parser.parse(skipped.rest, info);
+                        return parser.parse(skipped.next, info);
                     }else{
                         return r;
                     }
@@ -861,7 +861,7 @@ alias Tuple!(string, string) StateType;
                     auto r = parser.parse(input, info);
                     result.match = r.match;
                     result.value = r.value[0];
-                    result.rest = r.rest;
+                    result.next = r.next;
                     result.error = r.error;
                     return result;
                 }
@@ -932,14 +932,14 @@ alias Tuple!(string, string) StateType;
                         }else{
                             result.value = tuple(r.value);
                         }
-                        result.rest = r.rest;
+                        result.next = r.next;
                     }else{
                         result.error = r.error;
                     }
                 }else{
                     auto r1 = parsers[0].parse(input, info);
                     if(r1.match){
-                        auto r2 = combinateSequenceImpl!(parsers[1..$]).parse(r1.rest, info);
+                        auto r2 = combinateSequenceImpl!(parsers[1..$]).parse(r1.next, info);
                         if(r2.match){
                             result.match = true;
                             static if(isTuple!(ParserType!(parsers[0]))){
@@ -947,7 +947,7 @@ alias Tuple!(string, string) StateType;
                             }else{
                                 result.value = tuple(r1.value, r2.value.field);
                             }
-                            result.rest = r2.rest;
+                            result.next = r2.next;
                         }
                         result.error = r1.error.position > r2.error.position ? r1.error : r2.error;
                     }else{
@@ -1036,17 +1036,17 @@ alias Tuple!(string, string) StateType;
             alias ParserType!(parser)[] ResultType;
             static ParseResult!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
                 typeof(return) result;
-                Context!R rest = input;
+                Context!R next = input;
                 while(true){
-                    auto input1 = rest.save;
+                    auto input1 = next.save;
                     auto r1 = parser.parse(input1, info);
                     if(r1.match){
                         result.value ~= r1.value;
-                        rest = r1.rest;
-                        auto input2 = rest.save;
+                        next = r1.next;
+                        auto input2 = next.save;
                         auto r2 = sep.parse(input2, info);
                         if(r2.match){
-                            rest = r2.rest;
+                            next = r2.next;
                         }else{
                             result.error = r2.error;
                             break;
@@ -1061,7 +1061,7 @@ alias Tuple!(string, string) StateType;
                     }
                 }
                 result.match = true;
-                result.rest = rest;
+                result.next = next;
                 return result;
             }
         }
@@ -1097,9 +1097,9 @@ alias Tuple!(string, string) StateType;
                 if(r.match){
                     result.value = r.value;
                     result.value.some = true;
-                    result.rest = r.rest;
+                    result.next = r.next;
                 }else{
-                    result.rest = input;
+                    result.next = input;
                 }
                 return result;
             }
@@ -1123,7 +1123,7 @@ alias Tuple!(string, string) StateType;
                 auto r = parser.parse(input, info);
                 if(r.match){
                     result.match = true;
-                    result.rest = r.rest;
+                    result.next = r.next;
                 }else{
                     result.error = r.error;
                 }
@@ -1147,7 +1147,7 @@ alias Tuple!(string, string) StateType;
             alias None ResultType;
             static ParseResult!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
                 typeof(return) result;
-                result.rest = input;
+                result.next = input;
                 auto r = parser.parse(input.save, info);
                 result.match = r.match;
                 result.error = r.error;
@@ -1172,7 +1172,7 @@ alias Tuple!(string, string) StateType;
             alias None ResultType;
             static ParseResult!(R, ResultType) parse(R)(Context!R input, in CallerInfo info){
                 typeof(return) result;
-                result.rest = input;
+                result.next = input;
                 auto r = parser.parse(input.save, info);
                 result.match = !r.match;
                 if(result.match){
@@ -1267,7 +1267,7 @@ alias Tuple!(string, string) StateType;
                     }else{
                         static assert(false);
                     }
-                    result.rest = r.rest;
+                    result.next = r.next;
                 }
                 result.error = r.error;
                 return result;
@@ -1357,7 +1357,7 @@ alias Tuple!(string, string) StateType;
                     }else{
                         static assert(false, converter.mangleof ~ " cannot call with argument type " ~ typeof(r.value).stringof);
                     }
-                    result.rest = r.rest;
+                    result.next = r.next;
                 }
                 result.error = r.error;
                 return result;
@@ -1454,10 +1454,10 @@ alias Tuple!(string, string) StateType;
                 auto r = parser.parse(input, info);
                 if(r.match){
                     result.match = true;
-                    result.rest.input = r.rest.input;
-                    result.rest.position = r.rest.position;
-                    result.rest.line = r.rest.line;
-                    result.rest.state = r.value;
+                    result.next.input = r.next.input;
+                    result.next.position = r.next.position;
+                    result.next.line = r.next.line;
+                    result.next.state = r.value;
                 }
                 result.error = r.error;
                 return result;
@@ -1468,13 +1468,13 @@ alias Tuple!(string, string) StateType;
             enum dg = {
                 {
                     auto r = combinateChangeState!(parseString!"hoge").parse(makeContext("hoge"), new CallerInfo(0, ""));
-                    assert(r.rest.input == "");
-                    assert(r.rest.state == "hoge");
+                    assert(r.next.input == "");
+                    assert(r.next.state == "hoge");
                 }
                 {
                     auto r = combinateSequence!(combinateChangeState!(parseString!"hoge"), combinateChangeState!(parseString!"piyo")).parse(makeContext("hogepiyo"), new CallerInfo(0, ""));
-                    assert(r.rest.input == "");
-                    assert(r.rest.state == "piyo");
+                    assert(r.next.input == "");
+                    assert(r.next.state == "piyo");
                 }
                 return true;
             };
