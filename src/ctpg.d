@@ -1012,12 +1012,11 @@ alias Tuple!(string, string) StateType;
             alias CommonParserType!(parsers) ResultType;
             static if(is(ResultType == void)){
                 static if(line){
-                    mixin("#line " ~ toStringNow!line ~ " \"" ~ file ~ "\"" q{
-                        static assert(false, "types of parsers: \"" ~ staticMap!(ParserType, parsers).stringof[1..$-1] ~ "\" should have a common convertible type");
-                    });
+                    pragma(msg, file ~ "(" ~ toStringNow!line ~ "): Error: types of parsers: '" ~ staticMap!(ParserType, parsers).stringof[1..$-1] ~ "' should have a common convertible type");
                 }else{
-                    static assert(false, "types of parsers: \"" ~ staticMap!(ParserType, parsers).stringof[1..$-1] ~ "\" should have a common convertible type");
+                    pragma(msg, __FILE__ ~ "(" ~ toStringNow!__LINE__ ~ "): Error: types of parsers: '" ~ staticMap!(ParserType, parsers).stringof[1..$-1] ~ "' should have a common convertible type");
                 }
+                static assert(false);
             }
             static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
                 static assert(parsers.length > 0);
@@ -1266,11 +1265,11 @@ alias Tuple!(string, string) StateType;
             alias CombinateConvertType!(converter, ParserType!parser) ResultType;
             static if(is(ResultType == void)){
                 static if(line){
-                    mixin("pragma(msg, `" ~ file ~ "(" ~ toStringNow!line ~ "): Error: cannot call " ~ converter.stringof ~ " using '>>' with types: " ~ ParserType!parser.stringof ~ "`);");
-                    static assert(false);
+                    pragma(msg, file ~ "(" ~ toStringNow!line ~ "): Error: cannot call " ~ converter.stringof ~ " using '>>' with types: " ~ ParserType!parser.stringof);
                 }else{
-                    static assert(false, "cannot call " ~ converter.stringof ~ " using `>>` with type: " ~ ParserType!parser.stringof);
+                    pragma(msg, __FILE__ ~ "(" ~ toStringNow!__LINE__ ~ "): Error: cannot call " ~ converter.stringof ~ " using '>>' with types: " ~ ParserType!parser.stringof);
                 }
+                static assert(false);
             }
             static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
                 typeof(return) result;
@@ -1355,12 +1354,11 @@ alias Tuple!(string, string) StateType;
             alias CombinateConvertWithStateType!(converter, ParserType!parser) ResultType;
             static if(is(ResultType == void)){
                 static if(line){
-                    mixin("#line " ~ toStringNow!line ~ " \"" ~ file ~ "\"" q{
-                        static assert(false, "cannot call " ~ converter.stringof ~ " using `>>>` with types: " ~ ParserType!parser.stringof);
-                    });
+                    pragma(msg, file ~ "(" ~ toStringNow!line ~ "): Error: cannot call " ~ converter.stringof ~ " using '>>>' with types: " ~ ParserType!parser.stringof);
                 }else{
-                    static assert(false, "cannot call " ~ converter.stringof ~ " using `>>>` with type: " ~ ParserType!parser.stringof);
+                    pragma(msg, __FILE__ ~ "(" ~ toStringNow!__LINE__ ~ "): Error: cannot call " ~ converter.stringof ~ " using '>>>' with types: " ~ ParserType!parser.stringof);
                 }
+                static assert(false);
             }
             static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
                 typeof(return) result;
@@ -1375,8 +1373,6 @@ alias Tuple!(string, string) StateType;
                         result.value = converter(r.value, input.state);
                     }else static if(__traits(compiles, new converter(r.value, input.state))){
                         result.value = new converter(r.value, input.state);
-                    }else{
-                        static assert(false, converter.mangleof ~ " cannot call with argument type " ~ typeof(r.value).stringof);
                     }
                     result.next = r.next;
                 }
@@ -1434,12 +1430,11 @@ alias Tuple!(string, string) StateType;
             alias ParserType!parser ResultType;
             static if(!isValidChecker!(checker, ResultType)){
                 static if(line){
-                    mixin("#line " ~ toStringNow!line ~ " \"" ~ file ~ "\"" q{
-                        static assert(false, "cannot call " ~ checker.stringof ~ " using `>>?` with types: " ~ ParserType!parser.stringof);
-                    });
+                    pragma(msg, file ~ "(" ~ toStringNow!line ~ "): Error: cannot call " ~ checker.stringof ~ " using '>>?' with types: " ~ ParserType!parser.stringof);
                 }else{
-                    static assert(false, "cannot call " ~ checker.stringof ~ " using `>>?` with type: " ~ ParserType!parser.stringof);
+                    pragma(msg, __FILE__ ~ "(" ~ toStringNow!__LINE__ ~ "): Error: cannot call " ~ checker.stringof ~ " using '>>?' with types: " ~ ParserType!parser.stringof);
                 }
+                static assert(false);
             }
             static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
                 typeof(return) result;
