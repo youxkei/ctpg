@@ -741,70 +741,6 @@ alias Tuple!(string, string) StateType;
             dg();
         }
 
-    // parseSpace
-        template parseSpace(){
-            alias string ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                typeof(return) result;
-                static if(isSomeString!R){
-                    if(input.source.length > 0 && (input.source[0] == ' ' || input.source[0] == '\n' || input.source[0] == '\t' || input.source[0] == '\r' || input.source[0] == '\f')){
-                        result.match = true;
-                        result.value = input.source[0..1].to!string();
-                        result.next.source = input.source[1..$];
-                        result.next.line = (input.source[0] == '\n' ? input.line + 1 : input.line);
-                        result.next.position = input.position + 1;
-                        result.next.state = input.state;
-                        return result;
-                    }
-                    result.error = Error("space", input.position, input.line);
-                }else static if(isCharRange!R){
-                    if(!input.source.empty){
-                        Unqual!(ElementType!R) c = input.source.front;
-                        if(c == ' ' || c == '\n' || c == '\t' || c == '\r' || c == '\f'){
-                            result.match = true;
-                            result.value = c.to!string();
-                            input.source.popFront;
-                            result.next.source = input.source;
-                            result.next.line = (c == '\n' ? input.line + 1 : input.line);
-                            result.next.position = input.position + 1;
-                            result.next.state = input.state;
-                            return result;
-                        }
-                    }
-                    result.error = Error("space", input.position, input.line);
-                }else{
-                    throw new Exception("");
-                }
-                return result;
-            }
-        }
-
-        unittest{
-            enum dg = {
-                assert(parseSpace!().parse(makeInput("\thoge"             ), new CallerInfo(0, "")) == makeParseResult(true, "\t", makeInput("hoge"             , 1)));
-                assert(parseSpace!().parse(makeInput("\thoge"w            ), new CallerInfo(0, "")) == makeParseResult(true, "\t", makeInput("hoge"w            , 1)));
-                assert(parseSpace!().parse(makeInput("\thoge"d            ), new CallerInfo(0, "")) == makeParseResult(true, "\t", makeInput("hoge"d            , 1)));
-                assert(parseSpace!().parse(makeInput("\thoge" .testRange()), new CallerInfo(0, "")) == makeParseResult(true, "\t", makeInput("hoge" .testRange(), 1)));
-                assert(parseSpace!().parse(makeInput("\thoge"w.testRange()), new CallerInfo(0, "")) == makeParseResult(true, "\t", makeInput("hoge"w.testRange(), 1)));
-                assert(parseSpace!().parse(makeInput("\thoge"d.testRange()), new CallerInfo(0, "")) == makeParseResult(true, "\t", makeInput("hoge"d.testRange(), 1)));
-
-                assert(parseSpace!().parse(makeInput("hoge"             ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""             ), Error("space")));
-                assert(parseSpace!().parse(makeInput("hoge"w            ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""w            ), Error("space")));
-                assert(parseSpace!().parse(makeInput("hoge"d            ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""d            ), Error("space")));
-                assert(parseSpace!().parse(makeInput("hoge" .testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput("" .testRange()), Error("space")));
-                assert(parseSpace!().parse(makeInput("hoge"w.testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""w.testRange()), Error("space")));
-                assert(parseSpace!().parse(makeInput("hoge"d.testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""d.testRange()), Error("space")));
-
-                try{
-                    scope(success) assert(false);
-                    auto result = parseSpace!().parse(makeInput([0, 0]), new CallerInfo(0, ""));
-                }catch(Exception ex){}
-                return true;
-            };
-            debug(ctpg_compile_time) static assert(dg());
-            dg();
-        }
-
     // parseEOF
         template parseEOF(){
             alias None ResultType;
@@ -1545,7 +1481,7 @@ alias Tuple!(string, string) StateType;
 
     // parseSpaces
         template parseSpaces(){
-            alias combinateNone!(combinateMore0!(parseSpace!())) parseSpaces;
+            alias combinateNone!(combinateMore0!(combinateChoice!(parseString!" ", parseString!"\n", parseString!"\t", parseString!"\r", parseString!"\f"))) parseSpaces;
         }
 
         alias parseSpaces ss;
