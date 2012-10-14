@@ -201,13 +201,13 @@ alias Tuple!(string, string) StateType;
             assert(line >= 1);
         }
 
-        string need;
+        string msg;
         size_t position;
         size_t line = 1;
 
         pure @safe nothrow const
         bool opEquals(in Error rhs){
-            return need == rhs.need && position == rhs.position && line == rhs.line;
+            return msg == rhs.msg && position == rhs.position && line == rhs.line;
         }
     }
 
@@ -321,23 +321,33 @@ alias Tuple!(string, string) StateType;
             static ParseResult!(R, ResultType) parse(R)(Input!R _input, in CallerInfo info){
                 auto input = _input; // Somehow this parser doesn't work well without this line.
                 enum lines = str.countLines();
+                size_t idx;
                 typeof(return) result;
                 static if(isSomeString!R){
                     enum convertedString = staticConvertString!(str, R);
-                    if(input.source.length >= convertedString.length && convertedString == input.source[0..convertedString.length]){
+                    if(input.source.length < convertedString.length){
+                        result.error = Error(text("'", str, "' expected but EOF found"), input.position, input.line);
+                    }else if(convertedString != input.source[0..convertedString.length]){
+                        result.error = Error(text("'", str, "' expected but '", input.source.decode(idx), "' found"), input.position, input.line);
+                    }else{
                         result.match = true;
                         result.value = str;
                         result.next.source = input.source[convertedString.length..$];
                         result.next.line = input.line + lines;
                         result.next.position = input.position + convertedString.length;
                         result.next.state = input.state;
-                        return result;
                     }
-                    result.error = Error('"' ~ str ~ '"', input.position, input.line);
                 }else static if(isCharRange!R){
                     enum convertedString = staticConvertString!(str, R);
-                    foreach(c; convertedString){
-                        if(input.source.empty || c != input.source.front){
+                    string first;
+                    foreach(i, c; convertedString){
+                        if(input.source.empty){
+                            result.error = Error("'" ~ str ~ "' expected but EOF found", input.position, input.line);
+                            goto Lerror;
+                        }
+                        if(i < 4) first ~= input.source.front.to!string();
+                        if(c != input.source.front){
+                            result.error = Error("'" ~ str ~ "' expected but '" ~ first.decode(idx).to!string() ~ "' found", input.position, input.line);
                             goto Lerror;
                         }else{
                             input.source.popFront;
@@ -349,11 +359,8 @@ alias Tuple!(string, string) StateType;
                     result.next.line = input.line + lines;
                     result.next.position = input.position + convertedString.length;
                     result.next.state = input.state;
-                    return result;
 
-                    Lerror:
-
-                    result.error = Error('"' ~ str ~ '"', input.position, input.line);
+                    Lerror:{}
                 }else{
                     throw new Exception("");
                 }
@@ -385,12 +392,12 @@ alias Tuple!(string, string) StateType;
                 assert(parseString!"表が怖い".parse(makeInput("表が怖い噂のソフト"w.testRange()), new CallerInfo(0, "")) == makeParseResult(true, "表が怖い", makeInput("噂のソフト"w.testRange(),  4)));
                 assert(parseString!"表が怖い".parse(makeInput("表が怖い噂のソフト"d.testRange()), new CallerInfo(0, "")) == makeParseResult(true, "表が怖い", makeInput("噂のソフト"d.testRange(),  4)));
 
-                assert(parseString!"hello".parse(makeInput("hllo world"             ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""             ), Error(q{"hello"}, 0)));
-                assert(parseString!"hello".parse(makeInput("hllo world"w            ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""w            ), Error(q{"hello"}, 0)));
-                assert(parseString!"hello".parse(makeInput("hllo world"d            ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""d            ), Error(q{"hello"}, 0)));
-                assert(parseString!"hello".parse(makeInput("hllo world" .testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput("" .testRange()), Error(q{"hello"}, 0)));
-                assert(parseString!"hello".parse(makeInput("hllo world"w.testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""w.testRange()), Error(q{"hello"}, 0)));
-                assert(parseString!"hello".parse(makeInput("hllo world"d.testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""d.testRange()), Error(q{"hello"}, 0)));
+                assert(parseString!"hello".parse(makeInput("hllo world"             ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""             ), Error("'hello' expected but 'h' found", 0)));
+                assert(parseString!"hello".parse(makeInput("hllo world"w            ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""w            ), Error("'hello' expected but 'h' found", 0)));
+                assert(parseString!"hello".parse(makeInput("hllo world"d            ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""d            ), Error("'hello' expected but 'h' found", 0)));
+                assert(parseString!"hello".parse(makeInput("hllo world" .testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput("" .testRange()), Error("'hello' expected but 'h' found", 0)));
+                assert(parseString!"hello".parse(makeInput("hllo world"w.testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""w.testRange()), Error("'hello' expected but 'h' found", 0)));
+                assert(parseString!"hello".parse(makeInput("hllo world"d.testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""d.testRange()), Error("'hello' expected but 'h' found", 0)));
 
                 try{
                     scope(success) assert(false);
@@ -506,12 +513,19 @@ alias Tuple!(string, string) StateType;
                             result.next.position = input.position + idx;
                             result.next.state = input.state;
                             return result;
+                        }else{
+                            if(low == dchar.min && high == dchar.max){
+                                result.error = Error("any char expected but '" ~ c.to!string() ~ "' found", input.position, input.line);
+                            }else{
+                                result.error = Error("'" ~ low.to!string() ~ "' ~ '" ~ high.to!string() ~ "' expected but '" ~ c.to!string() ~ "' found", input.position, input.line);
+                            }
                         }
-                    }
-                    if(low == dchar.min && high == dchar.max){
-                        result.error = Error("any char", input.position, input.line);
                     }else{
-                        result.error = Error("c: '" ~ low.to!string() ~ "' <= c <= '" ~ high.to!string() ~ "'", input.position, input.line);
+                        if(low == dchar.min && high == dchar.max){
+                            result.error = Error("any char expected but EOF found", input.position, input.line);
+                        }else{
+                            result.error = Error("'" ~ low.to!string() ~ "' ~ '" ~ high.to!string() ~ "' expected but EOF found", input.position, input.line);
+                        }
                     }
                 }else static if(isCharRange!R){
                     if(!input.source.empty){
@@ -525,12 +539,19 @@ alias Tuple!(string, string) StateType;
                             result.next.position = input.position + advance;
                             result.next.state = input.state;
                             return result;
+                        }else{
+                            if(low == dchar.min && high == dchar.max){
+                                result.error = Error("any char is expected but '" ~ c.to!string() ~ "' found", input.position, input.line);
+                            }else{
+                                result.error = Error("'" ~ low.to!string() ~ "' ~ '" ~ high.to!string() ~ "' expected but '" ~ c.to!string() ~ "' found", input.position, input.line);
+                            }
                         }
-                    }
-                    if(low == dchar.min && high == dchar.max){
-                        result.error = Error("any char", input.position, input.line);
                     }else{
-                        result.error = Error("c: '" ~ low.to!string() ~ "' <= c <= '" ~ high.to!string() ~ "'", input.position, input.line);
+                        if(low == dchar.min && high == dchar.max){
+                            result.error = Error("any char expected but EOF found", input.position, input.line);
+                        }else{
+                            result.error = Error("'" ~ low.to!string() ~ "' ~ '" ~ high.to!string() ~ "' expected but EOF found", input.position, input.line);
+                        }
                     }
                 }else{
                     throw new Exception("");
@@ -555,12 +576,12 @@ alias Tuple!(string, string) StateType;
                 assert(parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput("\U00012345hoge"w.testRange()), new CallerInfo(0, "")) == makeParseResult(true, "\U00012345", makeInput("hoge"w.testRange(), 2)));
                 assert(parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput("\U00012345hoge"d.testRange()), new CallerInfo(0, "")) == makeParseResult(true, "\U00012345", makeInput("hoge"d.testRange(), 1)));
 
-                assert(parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput("hello world"             ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""             ), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
-                assert(parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput("hello world"w            ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""w            ), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
-                assert(parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput("hello world"d            ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""d            ), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
-                assert(parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput("hello world" .testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput("" .testRange()), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
-                assert(parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput("hello world"w.testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""w.testRange()), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
-                assert(parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput("hello world"d.testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""d.testRange()), Error("c: '\u0100' <= c <= '\U0010FFFF'")));
+                assert(parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput("hello world"             ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""             ), Error("'\u0100' ~ '\U0010FFFF' expected but 'h' found")));
+                assert(parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput("hello world"w            ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""w            ), Error("'\u0100' ~ '\U0010FFFF' expected but 'h' found")));
+                assert(parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput("hello world"d            ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""d            ), Error("'\u0100' ~ '\U0010FFFF' expected but 'h' found")));
+                assert(parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput("hello world" .testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput("" .testRange()), Error("'\u0100' ~ '\U0010FFFF' expected but 'h' found")));
+                assert(parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput("hello world"w.testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""w.testRange()), Error("'\u0100' ~ '\U0010FFFF' expected but 'h' found")));
+                assert(parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput("hello world"d.testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""d.testRange()), Error("'\u0100' ~ '\U0010FFFF' expected but 'h' found")));
 
                 try{
                     scope(success) assert(false);
@@ -577,6 +598,7 @@ alias Tuple!(string, string) StateType;
             alias string ResultType;
             static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
                 typeof(return) result;
+                size_t i;
                 static if(isSomeString!R){
                     if(input.source[0] == '\\'){
                         switch(input.source[1]){
@@ -611,7 +633,7 @@ alias Tuple!(string, string) StateType;
                             }
                         }
                     }
-                    result.error = Error("escape sequence", input.position, input.line);
+                    result.error = Error("escape sequence expected but '" ~ input.source.decode(i).to!string() ~ "' found", input.position, input.line);
                 }else static if(isCharRange!R){
                     auto c1 = input.source.front;
                     if(c1 == '\\'){
@@ -664,7 +686,7 @@ alias Tuple!(string, string) StateType;
                             }
                         }
                     }
-                    result.error = Error("escape sequence", input.position, input.line);
+                    result.error = Error("escape sequence expected but '" ~ input.source.decodeRange(i).to!string() ~ "' found", input.position, input.line);
                 }else{
                     throw new Exception("");
                 }
@@ -702,12 +724,12 @@ alias Tuple!(string, string) StateType;
                 assert(parseEscapeSequence!().parse(makeInput(`\nhoge`w.testRange()), new CallerInfo(0, "")) == makeParseResult(true, `\n`, makeInput("hoge"w.testRange(), 1)));
                 assert(parseEscapeSequence!().parse(makeInput(`\nhoge`d.testRange()), new CallerInfo(0, "")) == makeParseResult(true, `\n`, makeInput("hoge"d.testRange(), 1)));
 
-                assert(parseEscapeSequence!().parse(makeInput("鬱hoge"             ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""             ), Error("escape sequence")));
-                assert(parseEscapeSequence!().parse(makeInput("鬱hoge"w            ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""w            ), Error("escape sequence")));
-                assert(parseEscapeSequence!().parse(makeInput("鬱hoge"d            ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""d            ), Error("escape sequence")));
-                assert(parseEscapeSequence!().parse(makeInput("鬱hoge" .testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput("" .testRange()), Error("escape sequence")));
-                assert(parseEscapeSequence!().parse(makeInput("鬱hoge"w.testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""w.testRange()), Error("escape sequence")));
-                assert(parseEscapeSequence!().parse(makeInput("鬱hoge"d.testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""d.testRange()), Error("escape sequence")));
+                assert(parseEscapeSequence!().parse(makeInput("鬱hoge"             ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""             ), Error("escape sequence expected but '鬱' found", 0)));
+                assert(parseEscapeSequence!().parse(makeInput("鬱hoge"w            ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""w            ), Error("escape sequence expected but '鬱' found", 0)));
+                assert(parseEscapeSequence!().parse(makeInput("鬱hoge"d            ), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""d            ), Error("escape sequence expected but '鬱' found", 0)));
+                assert(parseEscapeSequence!().parse(makeInput("鬱hoge" .testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput("" .testRange()), Error("escape sequence expected but '鬱' found", 0)));
+                assert(parseEscapeSequence!().parse(makeInput("鬱hoge"w.testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""w.testRange()), Error("escape sequence expected but '鬱' found", 0)));
+                assert(parseEscapeSequence!().parse(makeInput("鬱hoge"d.testRange()), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""d.testRange()), Error("escape sequence expected but '鬱' found", 0)));
 
                 try{
                     scope(success) assert(false);
@@ -962,8 +984,8 @@ alias Tuple!(string, string) StateType;
             enum dg = {
                 assert(combinateSequence!(parseString!("hello"), parseString!("world")).parse(makeInput("helloworld"), new CallerInfo(0, "")) == makeParseResult(true, tuple("hello", "world"), makeInput("", 10)));
                 assert(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!").parse(makeInput("helloworld!"), new CallerInfo(0, "")) == makeParseResult(true, tuple("hello", "world", "!"), makeInput("", 11)));
-                assert(combinateSequence!(parseString!("hello"), parseString!("world")).parse(makeInput("hellovvorld"), new CallerInfo(0, "")) == makeParseResult(false, tuple("", ""), makeInput(""), Error(q{"world"}, 5)));
-                assert(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")).parse(makeInput("helloworld?"), new CallerInfo(0, "")) == makeParseResult(false, tuple("", "", ""), makeInput(""), Error(q{"!"}, 10)));
+                assert(combinateSequence!(parseString!("hello"), parseString!("world")).parse(makeInput("hellovvorld"), new CallerInfo(0, "")) == makeParseResult(false, tuple("", ""), makeInput(""), Error("'world' expected but 'v' found", 5)));
+                assert(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")).parse(makeInput("helloworld?"), new CallerInfo(0, "")) == makeParseResult(false, tuple("", "", ""), makeInput(""), Error("'!' expected but '?' found", 10)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1021,8 +1043,8 @@ alias Tuple!(string, string) StateType;
             enum dg = {
                 assert(combinateChoice!(parseString!"h", parseString!"w").parse(makeInput("hw"), new CallerInfo(0, "")) == makeParseResult(true, "h", makeInput("w", 1))); 
                 assert(combinateChoice!(parseString!"h", parseString!"w").parse(makeInput("w"), new CallerInfo(0, "")) == makeParseResult(true, "w", makeInput("", 1)));
-                assert(combinateChoice!(parseString!"h", parseString!"w").parse(makeInput(""), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error(q{"w"})));
-                assert(combinateChoice!(combinateSequence!(parseString!"h", parseString!"w"), combinateSequence!(parseString!"w", parseString!"h")).parse(makeInput("h"), new CallerInfo(0, "")) == makeParseResult(false, tuple("", ""), makeInput(""), Error(q{"w"}, 1)));
+                assert(combinateChoice!(parseString!"h", parseString!"w").parse(makeInput(""), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'w' expected but EOF found", 0)));
+                assert(combinateChoice!(combinateSequence!(parseString!"h", parseString!"w"), combinateSequence!(parseString!"w", parseString!"h")).parse(makeInput("h"), new CallerInfo(0, "")) == makeParseResult(false, tuple("", ""), makeInput(""), Error("'w' expected but EOF found", 1)));
                 //assert(combinateChoice!(parseString!"h", combinateSequence!(parseString!"w", parseString!"w")).parse(makeInput(testRange("w"d)), new CallerInfo(0, "")) == makeParseResult(true, "w", makeInput(testRange(""d), 1)));
                 //assert(combinateChoice!(__LINE__, "foo/bar.d", parseString!"h", combinateSequence!(parseString!"w", parseString!"w")).parse(makeInput(testRange("w"d)), new CallerInfo(0, "")) == makeParseResult(true, "w", makeInput(testRange(""d), 1)));
                 return true;
@@ -1076,11 +1098,11 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(combinateMore0!(parseString!"w").parse(makeInput("www w"), new CallerInfo(0, "")) == makeParseResult(true, ["w", "w", "w"], makeInput(" w", 3), Error(q{"w"}, 3)));
-                assert(combinateMore0!(parseString!"w").parse(makeInput(" w"), new CallerInfo(0, "")) == makeParseResult(true, [""][0..0], makeInput(" w"), Error(q{"w"}, 0)));
-                assert(combinateMore0!(combinateSequence!(parseString!"w", parseString!"h")).parse(makeInput("whwhw"), new CallerInfo(0, "")) == makeParseResult(true, [tuple("w", "h"), tuple("w", "h")], makeInput("w", 4), Error(q{"h"}, 5)));
-                assert(combinateMore1!(parseString!"w").parse(makeInput("www w"), new CallerInfo(0, "")) == makeParseResult(true, ["w", "w", "w"], makeInput(" w", 3), Error(q{"w"}, 3)));
-                assert(combinateMore1!(parseString!"w").parse(makeInput(" w"), new CallerInfo(0, "")) == makeParseResult(false, [""][0..0], makeInput(""), Error(q{"w"}, 0)));
+                assert(combinateMore0!(parseString!"w").parse(makeInput("www w"), new CallerInfo(0, "")) == makeParseResult(true, ["w", "w", "w"], makeInput(" w", 3), Error("'w' expected but ' ' found", 3)));
+                assert(combinateMore0!(parseString!"w").parse(makeInput(" w"), new CallerInfo(0, "")) == makeParseResult(true, [""][0..0], makeInput(" w"), Error("'w' expected but ' ' found", 0)));
+                assert(combinateMore0!(combinateSequence!(parseString!"w", parseString!"h")).parse(makeInput("whwhw"), new CallerInfo(0, "")) == makeParseResult(true, [tuple("w", "h"), tuple("w", "h")], makeInput("w", 4), Error("'h' expected but EOF found", 5)));
+                assert(combinateMore1!(parseString!"w").parse(makeInput("www w"), new CallerInfo(0, "")) == makeParseResult(true, ["w", "w", "w"], makeInput(" w", 3), Error("'w' expected but ' ' found", 3)));
+                assert(combinateMore1!(parseString!"w").parse(makeInput(" w"), new CallerInfo(0, "")) == makeParseResult(false, [""][0..0], makeInput(""), Error("'w' expected but ' ' found", 0)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1134,8 +1156,8 @@ alias Tuple!(string, string) StateType;
         unittest{
             enum dg = {
                 assert(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")).parse(makeInput("(w)"), new CallerInfo(0, "")) == makeParseResult(true, "w", makeInput("", 3)));
-                assert(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")).parse(makeInput("(w}"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error(q{")"}, 2)));
-                assert(combinateNone!(parseString!"w").parse(makeInput("a"), new CallerInfo(0, "")) == makeParseResult(false, None.init, makeInput(""), Error(q{"w"})));
+                assert(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")).parse(makeInput("(w}"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("')' expected but '}' found", 2)));
+                assert(combinateNone!(parseString!"w").parse(makeInput("a"), new CallerInfo(0, "")) == makeParseResult(false, None.init, makeInput(""), Error("'w' expected but 'a' found")));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1159,8 +1181,8 @@ alias Tuple!(string, string) StateType;
             enum dg = {
                 assert(combinateAndPred!(parseString!"w").parse(makeInput("www"), new CallerInfo(0, "")) == makeParseResult(true, None.init, makeInput("www", 0)));
                 assert(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")).parse(makeInput("www"), new CallerInfo(0, "")) == makeParseResult(true, "w", makeInput("ww", 1)));
-                assert(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))).parse(makeInput("www"), new CallerInfo(0, "")) == makeParseResult(true, ["w", "w"], makeInput("w", 2), Error(q{"w"}, 3)));
-                assert(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))).parse(makeInput("w"), new CallerInfo(0, "")) == makeParseResult(false, [""][0..0], makeInput(""), Error(q{"w"}, 1)));
+                assert(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))).parse(makeInput("www"), new CallerInfo(0, "")) == makeParseResult(true, ["w", "w"], makeInput("w", 2), Error("'w' expected but EOF found", 3)));
+                assert(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))).parse(makeInput("w"), new CallerInfo(0, "")) == makeParseResult(false, [""][0..0], makeInput(""), Error("'w' expected but EOF found", 1)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1244,9 +1266,8 @@ alias Tuple!(string, string) StateType;
             alias CombinateConvertType!(converter, ParserType!parser) ResultType;
             static if(is(ResultType == void)){
                 static if(line){
-                    mixin("#line " ~ toStringNow!line ~ " \"" ~ file ~ "\"" q{
-                        static assert(false, "cannot call " ~ converter.stringof ~ " using `>>` with types: " ~ ParserType!parser.stringof);
-                    });
+                    mixin("pragma(msg, `" ~ file ~ "(" ~ toStringNow!line ~ "): Error: cannot call " ~ converter.stringof ~ " using '>>' with types: " ~ ParserType!parser.stringof ~ "`);");
+                    static assert(false);
                 }else{
                     static assert(false, "cannot call " ~ converter.stringof ~ " using `>>` with type: " ~ ParserType!parser.stringof);
                 }
@@ -1276,8 +1297,8 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }).parse(makeInput("www"), new CallerInfo(0, "")) == makeParseResult(true, cast(size_t)3, makeInput("", 3), Error(q{"w"}, 3)));
-                assert(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }).parse(makeInput("a"), new CallerInfo(0, "")) == makeParseResult(false, cast(size_t)0, makeInput(""), Error(q{"w"})));
+                assert(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }).parse(makeInput("www"), new CallerInfo(0, "")) == makeParseResult(true, cast(size_t)3, makeInput("", 3), Error("'w' expected but EOF found", 3)));
+                assert(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }).parse(makeInput("a"), new CallerInfo(0, "")) == makeParseResult(false, cast(size_t)0, makeInput(""), Error("'w' expected but 'a' found", 0)));
                 //assert(combinateConvert!(10, "hoge/fuga.d", combinateMore1!(parseString!"w"), function(string ws){ return ws.length; }).parse(makeInput(testRange("a")), new CallerInfo(0, "")) == makeParseResult(false, cast(size_t)0, makeInput(testRange("")), Error(q{"w"})));
                 return true;
             };
@@ -1366,8 +1387,8 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(combinateConvertWithState!(combinateMore1!(parseString!"w"), function(string[] ws, StateType state){ return ws.length; }).parse(makeInput("www"), new CallerInfo(0, "")) == makeParseResult(true, cast(size_t)3, makeInput("", 3), Error(q{"w"}, 3)));
-                assert(combinateConvertWithState!(combinateMore1!(parseString!"w"), function(string[] ws, StateType state){ return ws.length; }).parse(makeInput("a"), new CallerInfo(0, "")) == makeParseResult(false, cast(size_t)0, makeInput(""), Error(q{"w"})));
+                assert(combinateConvertWithState!(combinateMore1!(parseString!"w"), function(string[] ws, StateType state){ return ws.length; }).parse(makeInput("www"), new CallerInfo(0, "")) == makeParseResult(true, cast(size_t)3, makeInput("", 3), Error("'w' expected but EOF found", 3)));
+                assert(combinateConvertWithState!(combinateMore1!(parseString!"w"), function(string[] ws, StateType state){ return ws.length; }).parse(makeInput("a"), new CallerInfo(0, "")) == makeParseResult(false, cast(size_t)0, makeInput(""), Error("'w' expected but 'a' found", 0)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1438,8 +1459,8 @@ alias Tuple!(string, string) StateType;
 
         unittest{
             enum dg = {
-                assert(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }).parse(makeInput("wwwww"), new CallerInfo(0, "")) == makeParseResult(true, ["w", "w", "w", "w", "w"], makeInput("", 5), Error(q{"w"}, 5)));
-                assert(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }).parse(makeInput("wwww"), new CallerInfo(0, "")) == makeParseResult(false, [""][0..0], makeInput(""), Error("passing check")));
+                assert(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }).parse(makeInput("wwwww"), new CallerInfo(0, "")) == makeParseResult(true, ["w", "w", "w", "w", "w"], makeInput("", 5), Error("'w' expected but EOF found", 5)));
+                assert(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }).parse(makeInput("wwww"), new CallerInfo(0, "")) == makeParseResult(false, [""][0..0], makeInput(""), Error("passing check", 0)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1520,7 +1541,7 @@ alias Tuple!(string, string) StateType;
                 assert(parseAnyChar!().parse(makeInput("hoge"), new CallerInfo(0, "")) == makeParseResult(true, "h", makeInput("oge", 1)));
                 assert(parseAnyChar!().parse(makeInput("\U00012345"), new CallerInfo(0, "")) == makeParseResult(true, "\U00012345", makeInput("", 4)));
                 assert(parseAnyChar!().parse(makeInput("\nhoge"), new CallerInfo(0, "")) == makeParseResult(true, "\n", makeInput("hoge", 1, 2)));
-                assert(parseAnyChar!().parse(makeInput(""), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("any char")));
+                assert(parseAnyChar!().parse(makeInput(""), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("any char expected but EOF found")));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1576,8 +1597,8 @@ alias Tuple!(string, string) StateType;
             enum dg = {
                 assert(parseIdent!().parse(makeInput("hoge"), new CallerInfo(0, "")) == makeParseResult(true, "hoge", makeInput("", 4)));
                 assert(parseIdent!().parse(makeInput("_0"), new CallerInfo(0, "")) == makeParseResult(true, "_0", makeInput("", 2)));
-                assert(parseIdent!().parse(makeInput("0"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("c: 'A' <= c <= 'Z'")));
-                assert(parseIdent!().parse(makeInput("あ"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("c: 'A' <= c <= 'Z'")));
+                assert(parseIdent!().parse(makeInput("0"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'A' ~ 'Z' expected but '0' found")));
+                assert(parseIdent!().parse(makeInput("あ"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'A' ~ 'Z' expected but 'あ' found")));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1762,7 +1783,7 @@ string generateParsers(size_t callerLine = __LINE__, string callerFile = __FILE_
     if(parsed.match){
         return parsed.value;
     }else{
-        return "#line " ~ (parsed.error.line + callerLine - 1).to!string() ~ "\nstatic assert(false, `" ~ parsed.error.need ~ " is needed`);";
+        return "pragma(msg, __FILE__ ~ `(" ~ (parsed.error.line + callerLine - 1).to!string() ~ "): Error: " ~ parsed.error.msg ~ "`);static assert(false);";
     }
 }
 
@@ -1895,7 +1916,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             enum dg = {
                 assert(id!().parse(makeInput("A"), new CallerInfo(0, "")) == makeParseResult(true, "A", makeInput("", 1)));
                 assert(id!().parse(makeInput("int"), new CallerInfo(0, "")) == makeParseResult(true, "int", makeInput("", 3)));
-                assert(id!().parse(makeInput("0"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error(q{"_"}, 0)));
+                assert(id!().parse(makeInput("0"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'_' expected but '0' found", 0)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -1999,7 +2020,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
         unittest{
             enum dg = {
                 assert(eofLit!().parse(makeInput("$"), new CallerInfo(0, "")) == makeParseResult(true, "parseEOF!()", makeInput("", 1)));
-                assert(eofLit!().parse(makeInput("#"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error(q{"$"}, 0)));
+                assert(eofLit!().parse(makeInput("#"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'$' expected but '#' found", 0)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -2112,7 +2133,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
         unittest{
             enum dg = {
                 assert(stringLit!().parse(makeInput("\"hello\nworld\" "), new CallerInfo(0, "")) == makeParseResult(true, "parseString!\"hello\nworld\"", makeInput(" ", 13, 2), Error("Expected failure", 12, 2)));
-                assert(stringLit!().parse(makeInput("aa\""), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error(`"""`, 0)));
+                assert(stringLit!().parse(makeInput("aa\""), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'\"' expected but 'a' found", 0)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -2142,7 +2163,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                 assert(literal!().parse(makeInput("[a-z]"), new CallerInfo(0, "")) == makeParseResult(true, "combinateMemoize!(parseCharRange!('a','z'))", makeInput("", 5), Error("Expected failure", 4)));
                 assert(literal!().parse(makeInput("$"), new CallerInfo(0, "")) == makeParseResult(true, "combinateMemoize!(parseEOF!())", makeInput("", 1)));
                 assert(literal!().parse(makeInput("$", 0, 1, tuple("", "skip!()")), new CallerInfo(0, "")) == makeParseResult(true, "combinateSkip!(combinateMemoize!(parseEOF!()),skip!())", makeInput("", 1, 1, tuple("", "skip!()"))));
-                assert(literal!().parse(makeInput("表が怖い噂のソフト"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error(`"$"`, 0)));
+                assert(literal!().parse(makeInput("表が怖い噂のソフト"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'$' expected but '表' found", 0)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -2173,10 +2194,10 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
 
         unittest{
             enum dg = {
-                assert(primaryExp!().parse(makeInput("(&(^$)?)"), new CallerInfo(0, "")) == makeParseResult(true, "combinateOption!(combinateAndPred!(combinateNotPred!(combinateMemoize!(parseEOF!()))))", makeInput("", 8), Error(q{"("}, 7)));
+                assert(primaryExp!().parse(makeInput("(&(^$)?)"), new CallerInfo(0, "")) == makeParseResult(true, "combinateOption!(combinateAndPred!(combinateNotPred!(combinateMemoize!(parseEOF!()))))", makeInput("", 8), Error("'(' expected but ')' found", 7)));
                 assert(primaryExp!().parse(makeInput("int"), new CallerInfo(__LINE__, "")) == makeParseResult(true, " #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(int!())", makeInput("", 3)));
-                assert(primaryExp!().parse(makeInput("###このコメントは表示されません###"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error(`"("`, 0)));
-                assert(primaryExp!().parse(makeInput("(&(^$)?"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error(`")"`, 7)));
+                assert(primaryExp!().parse(makeInput("###このコメントは表示されません###"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'(' expected but '#' found", 0)));
+                assert(primaryExp!().parse(makeInput("(&(^$)?"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("')' expected but EOF found", 7)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -2332,9 +2353,9 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
 
         unittest{
             enum dg = {
-                assert(seqExp!().parse(makeInput("!$* (&(^$))?"), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateMore0!(combinateNone!(combinateMemoize!(parseEOF!()))),combinateOption!(combinateAndPred!(combinateNotPred!(combinateMemoize!(parseEOF!())))))", makeInput("", 12), Error(q{"("}, 12)));
-                assert(seqExp!().parse(makeInput("!\"hello\" $"), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateNone!(combinateMemoize!(parseString!\"hello\")),combinateMemoize!(parseEOF!()))", makeInput("", 10), Error(q{"("}, 10)));
-                assert(seqExp!().parse(makeInput("!$* (&(^$)?"), new CallerInfo(0, "")) == makeParseResult(true, "combinateMore0!(combinateNone!(combinateMemoize!(parseEOF!())))", makeInput("(&(^$)?", 4), Error(q{")"}, 11)));
+                assert(seqExp!().parse(makeInput("!$* (&(^$))?"), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateMore0!(combinateNone!(combinateMemoize!(parseEOF!()))),combinateOption!(combinateAndPred!(combinateNotPred!(combinateMemoize!(parseEOF!())))))", makeInput("", 12), Error("'(' expected but EOF found", 12)));
+                assert(seqExp!().parse(makeInput("!\"hello\" $"), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateNone!(combinateMemoize!(parseString!\"hello\")),combinateMemoize!(parseEOF!()))", makeInput("", 10), Error("'(' expected but EOF found", 10)));
+                assert(seqExp!().parse(makeInput("!$* (&(^$)?"), new CallerInfo(0, "")) == makeParseResult(true, "combinateMore0!(combinateNone!(combinateMemoize!(parseEOF!())))", makeInput("(&(^$)?", 4), Error("')' expected but EOF found", 11)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -2390,10 +2411,10 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
 
         unittest{
             enum dg = {
-                assert(convExp!().parse(makeInput(q{!"hello" $ >> {return false;}}), new CallerInfo(__LINE__, `src\ctpg.d`)) == makeParseResult(true, "combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateSequence!(combinateNone!(combinateMemoize!(parseString!\"hello\")),combinateMemoize!(parseEOF!())),function(){return false;})", makeInput("", 29), Error(q{"("}, 11)));
-                assert(convExp!().parse(makeInput(q{"hello" >> flat >> to!int}), new CallerInfo(__LINE__, `src/ctpg.d`)) == makeParseResult(true, "combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateMemoize!(parseString!\"hello\"),flat),to!int)", makeInput("", 25), Error(q{"("}, 8)));
-                assert(convExp!().parse(makeInput(q{$ >>> to!string >>? isValid}, 0, 1, tuple("", "skip!()")), new CallerInfo(__LINE__, `src\ctpg.d`)) == makeParseResult(true, "combinateCheck!(" ~ toStringNow!__LINE__ ~ r",`src\ctpg.d`,combinateConvertWithState!(" ~ toStringNow!__LINE__ ~ r",`src\ctpg.d`,combinateSkip!(combinateMemoize!(parseEOF!()),skip!()),to!string),isValid)", makeInput("", 27, 1, tuple("", "skip!()")), Error(q{"("}, 2)));
-                assert(convExp!().parse(makeInput(q{!"hello" $ > {return false;}}), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateNone!(combinateMemoize!(parseString!\"hello\")),combinateMemoize!(parseEOF!()))", makeInput("> {return false;}", 11), Error(q{"("}, 11)));
+                assert(convExp!().parse(makeInput(q{!"hello" $ >> {return false;}}), new CallerInfo(__LINE__, `src\ctpg.d`)) == makeParseResult(true, "combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateSequence!(combinateNone!(combinateMemoize!(parseString!\"hello\")),combinateMemoize!(parseEOF!())),function(){return false;})", makeInput("", 29), Error("'(' expected but '>' found", 11)));
+                assert(convExp!().parse(makeInput(q{"hello" >> flat >> to!int}), new CallerInfo(__LINE__, `src/ctpg.d`)) == makeParseResult(true, "combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateMemoize!(parseString!\"hello\"),flat),to!int)", makeInput("", 25), Error("'(' expected but '>' found", 8)));
+                assert(convExp!().parse(makeInput(q{$ >>> to!string >>? isValid}, 0, 1, tuple("", "skip!()")), new CallerInfo(__LINE__, `src\ctpg.d`)) == makeParseResult(true, "combinateCheck!(" ~ toStringNow!__LINE__ ~ r",`src\ctpg.d`,combinateConvertWithState!(" ~ toStringNow!__LINE__ ~ r",`src\ctpg.d`,combinateSkip!(combinateMemoize!(parseEOF!()),skip!()),to!string),isValid)", makeInput("", 27, 1, tuple("", "skip!()")), Error("'(' expected but '>' found", 2)));
+                assert(convExp!().parse(makeInput(q{!"hello" $ > {return false;}}), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateNone!(combinateMemoize!(parseString!\"hello\")),combinateMemoize!(parseEOF!()))", makeInput("> {return false;}", 11), Error("'(' expected but '>' found", 11)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -2428,8 +2449,8 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
 
         unittest{
             enum dg = {
-                assert(choiceExp!().parse(makeInput(`!$* / (&(^"a"))?`), new CallerInfo(__LINE__, `src\ctpg.d`)) == makeParseResult(true, "combinateChoice!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateMore0!(combinateNone!(combinateMemoize!(parseEOF!()))),combinateOption!(combinateAndPred!(combinateNotPred!(combinateMemoize!(parseString!\"a\")))))", makeInput("", 16), Error(q{"("}, 4)));
-                assert(choiceExp!().parse(makeInput(`!"hello" $`, 0, 1, tuple("", "skip!()")), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),skip!())),combinateSkip!(combinateMemoize!(parseEOF!()),skip!()))", makeInput("", 10, 1, tuple("", "skip!()")), Error(q{"("}, 10)));
+                assert(choiceExp!().parse(makeInput(`!$* / (&(^"a"))?`), new CallerInfo(__LINE__, `src\ctpg.d`)) == makeParseResult(true, "combinateChoice!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateMore0!(combinateNone!(combinateMemoize!(parseEOF!()))),combinateOption!(combinateAndPred!(combinateNotPred!(combinateMemoize!(parseString!\"a\")))))", makeInput("", 16), Error("'(' expected but '/' found", 4)));
+                assert(choiceExp!().parse(makeInput(`!"hello" $`, 0, 1, tuple("", "skip!()")), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),skip!())),combinateSkip!(combinateMemoize!(parseEOF!()),skip!()))", makeInput("", 10, 1, tuple("", "skip!()")), Error("'(' expected but EOF found", 10)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -2492,10 +2513,10 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
         unittest{
             enum dg = {
                 cast(void)__LINE__;
-                assert(def!().parse(makeInput(`@skip(" ") bool hoge = !"hello" $ >> {return false;};`), new CallerInfo(__LINE__, `src/ctpg.d`)) == makeParseResult(true, "template hoge(){alias bool ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),combinateMemoize!(parseString!\" \"))),combinateSkip!(combinateMemoize!(parseEOF!()),combinateMemoize!(parseString!\" \"))),function(){return false;}).parse(input, info);}}", makeInput("", 53, 1, tuple("", "combinateMemoize!(parseString!\" \")")), Error(q{"("}, 34)));
-                assert(def!().parse(makeInput(`None recursive = A $;`), new CallerInfo(__LINE__, "")) == makeParseResult(true, "template recursive(){alias None ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateSequence!( #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(A!()),combinateMemoize!(parseEOF!())).parse(input, info);}}", makeInput("", 21), Error(q{"("}, 20)));
-                assert(def!().parse(makeInput(`None recursive  A $;`), new CallerInfo(__LINE__, "")) == makeParseResult(false, "", makeInput(""), Error(q{"="}, 16)));
-                assert(def!().parse(makeInput("None recursive  \nA $;"), new CallerInfo(__LINE__, "")) == makeParseResult(false, "", makeInput(""), Error(q{"="}, 17, 2)));
+                assert(def!().parse(makeInput(`@skip(" ") bool hoge = !"hello" $ >> {return false;};`), new CallerInfo(__LINE__, `src/ctpg.d`)) == makeParseResult(true, "template hoge(){alias bool ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),combinateMemoize!(parseString!\" \"))),combinateSkip!(combinateMemoize!(parseEOF!()),combinateMemoize!(parseString!\" \"))),function(){return false;}).parse(input, info);}}", makeInput("", 53, 1, tuple("", "combinateMemoize!(parseString!\" \")")), Error("'(' expected but '>' found", 34)));
+                assert(def!().parse(makeInput(`None recursive = A $;`), new CallerInfo(__LINE__, "")) == makeParseResult(true, "template recursive(){alias None ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateSequence!( #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(A!()),combinateMemoize!(parseEOF!())).parse(input, info);}}", makeInput("", 21), Error("'(' expected but ';' found", 20)));
+                assert(def!().parse(makeInput(`None recursive  A $;`), new CallerInfo(__LINE__, "")) == makeParseResult(false, "", makeInput(""), Error("'=' expected but 'A' found", 16)));
+                assert(def!().parse(makeInput("None recursive  \nA $;"), new CallerInfo(__LINE__, "")) == makeParseResult(false, "", makeInput(""), Error("'=' expected but 'A' found", 17, 2)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -2539,7 +2560,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
         unittest{
             enum dg = {
                 cast(void)__LINE__; 
-                assert(defs!().parse(makeInput(q{ @default_skip(" " / "\t" / "\n") bool hoge = !"hello" $ >> {return false;}; @skip(" ") Tuple!piyo hoge2 = hoge* >> {return tuple("foo");}; }), new CallerInfo(__LINE__, r"src\ctpg.d")) == makeParseResult(true, "template hoge(){alias bool ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),combinateChoice!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateMemoize!(parseString!\" \"),combinateMemoize!(parseString!\"\\t\"),combinateMemoize!(parseString!\"\\n\")))),combinateSkip!(combinateMemoize!(parseEOF!()),combinateChoice!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateMemoize!(parseString!\" \"),combinateMemoize!(parseString!\"\\t\"),combinateMemoize!(parseString!\"\\n\")))),function(){return false;}).parse(input, info);}}template hoge2(){alias Tuple!piyo ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateMore0!( #line " ~ toStringNow!__LINE__ ~ "\ncombinateSkip!(combinateMemoize!(hoge!()),combinateMemoize!(parseString!\" \"))),function(){return tuple(\"foo\");}).parse(input, info);}}", makeInput("", 138, 1, tuple("combinateChoice!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateMemoize!(parseString!\" \"),combinateMemoize!(parseString!\"\\t\"),combinateMemoize!(parseString!\"\\n\"))", "combinateMemoize!(parseString!\" \")")), Error(q{"_"}, 138)));
+                assert(defs!().parse(makeInput(q{ @default_skip(" " / "\t" / "\n") bool hoge = !"hello" $ >> {return false;}; @skip(" ") Tuple!piyo hoge2 = hoge* >> {return tuple("foo");}; }), new CallerInfo(__LINE__, r"src\ctpg.d")) == makeParseResult(true, "template hoge(){alias bool ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),combinateChoice!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateMemoize!(parseString!\" \"),combinateMemoize!(parseString!\"\\t\"),combinateMemoize!(parseString!\"\\n\")))),combinateSkip!(combinateMemoize!(parseEOF!()),combinateChoice!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateMemoize!(parseString!\" \"),combinateMemoize!(parseString!\"\\t\"),combinateMemoize!(parseString!\"\\n\")))),function(){return false;}).parse(input, info);}}template hoge2(){alias Tuple!piyo ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateMore0!( #line " ~ toStringNow!__LINE__ ~ "\ncombinateSkip!(combinateMemoize!(hoge!()),combinateMemoize!(parseString!\" \"))),function(){return tuple(\"foo\");}).parse(input, info);}}", makeInput("", 138, 1, tuple("combinateChoice!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateMemoize!(parseString!\" \"),combinateMemoize!(parseString!\"\\t\"),combinateMemoize!(parseString!\"\\n\"))", "combinateMemoize!(parseString!\" \")")), Error("'_' expected but EOF found", 138)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
