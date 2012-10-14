@@ -23,7 +23,6 @@ public import std.typecons: Tuple, isTuple, tuple;
 
 alias Tuple!() None;
 
-version = Issue_8038_Fixed;
 //debug = ctpg;
 debug(ctpg){
     debug = ctpg_compile_time;
@@ -1599,11 +1598,7 @@ alias Tuple!(string, string) StateType;
         template getLine(){
             alias size_t ResultType;
             static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                static if(isSomeString!R || isCharRange!R){
-                    return makeParseResult(true, input.line, input, Error.init);
-                }else{
-                    throw new Exception("");
-                }
+                return makeParseResult(true, input.line, input, Error.init);
             }
         }
 
@@ -1818,30 +1813,17 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // nonterminal
         template nonterminal(){
             alias string ResultType;
-            version(Issue_8038_Fixed){
-                ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                    return combinateConvertWithState!(
-                        combinateSequence!(
-                            getCallerLine!(),
-                            getLine!(),
-                            id!()
-                        ),
-                        function(size_t callerLine, size_t line, string id, StateType state)
-                        =>
-                        state[1].length ? " #line " ~ (callerLine + line - 1).to!string() ~ "\ncombinateSkip!(combinateMemoize!(" ~ id ~ "!())," ~ state[1] ~ ")" : " #line " ~ (callerLine + line - 1).to!string() ~ "\ncombinateMemoize!(" ~ id ~ "!())"
-                    ).parse(input, info);
-                }
-            }else{
-                ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                    return combinateConvert!(
-                        combinateSequence!(
-                            getCallerLine!(),
-                            getLine!(),
-                            id!()
-                        ),
-                        function(size_t callerLine, size_t line, string id) => id ~ "!()"
-                    ).parse(input, info);
-                }
+            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
+                return combinateConvertWithState!(
+                    combinateSequence!(
+                        getCallerLine!(),
+                        getLine!(),
+                        id!()
+                    ),
+                    function(size_t callerLine, size_t line, string id, StateType state)
+                    =>
+                    state[1].length ? " #line " ~ (callerLine + line - 1).to!string() ~ "\ncombinateSkip!(combinateMemoize!(" ~ id ~ "!())," ~ state[1] ~ ")" : " #line " ~ (callerLine + line - 1).to!string() ~ "\ncombinateMemoize!(" ~ id ~ "!())"
+                ).parse(input, info);
             }
         }
 
