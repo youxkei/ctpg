@@ -2359,6 +2359,8 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                         ),
                         parseSpaces!(),
                         typeName!(),
+                        getLine!(),
+                        getCallerLine!(),
                         parseSpaces!(),
                         id!(),
                         parseSpaces!(),
@@ -2372,9 +2374,10 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                             parseString!";"
                         )
                     ),
-                    function(string type, string name, string choiceExp)
+                    function(string type, size_t line, size_t callerLine, string name, string choiceExp)
                     =>
                         "template " ~ name ~ "(){"
+                            "#line " ~ (line + callerLine - 1).to!string() ~ "\n"
                             "alias " ~ type ~ " ResultType;"
                             "static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){"
                                 "return "~choiceExp~".parse(input, info);"
@@ -2387,8 +2390,8 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
         unittest{
             enum dg = {
                 cast(void)__LINE__;
-                assert(def!().parse(makeInput(`@skip(" ") bool hoge = !"hello" $ >> {return false;};`), new CallerInfo(__LINE__, `src/ctpg.d`)) == makeParseResult(true, "template hoge(){alias bool ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),combinateMemoize!(parseString!\" \"))),combinateSkip!(combinateMemoize!(parseEOF!()),combinateMemoize!(parseString!\" \"))),function(){return false;}).parse(input, info);}}", makeInput("", 53, 1, tuple("", "combinateMemoize!(parseString!\" \")")), Error("'(' expected but '>' found", 34)));
-                assert(def!().parse(makeInput(`None recursive = A $;`), new CallerInfo(__LINE__, "")) == makeParseResult(true, "template recursive(){alias None ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateSequence!( #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(A!()),combinateMemoize!(parseEOF!())).parse(input, info);}}", makeInput("", 21), Error("'(' expected but ';' found", 20)));
+                assert(def!().parse(makeInput(`@skip(" ") bool hoge = !"hello" $ >> {return false;};`), new CallerInfo(__LINE__, `src/ctpg.d`)) == makeParseResult(true, "template hoge(){#line " ~ toStringNow!__LINE__~ "\nalias bool ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),combinateMemoize!(parseString!\" \"))),combinateSkip!(combinateMemoize!(parseEOF!()),combinateMemoize!(parseString!\" \"))),function(){return false;}).parse(input, info);}}", makeInput("", 53, 1, tuple("", "combinateMemoize!(parseString!\" \")")), Error("'(' expected but '>' found", 34)));
+                assert(def!().parse(makeInput(`None recursive = A $;`), new CallerInfo(__LINE__, "")) == makeParseResult(true, "template recursive(){#line " ~ toStringNow!__LINE__~ "\nalias None ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateSequence!( #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(A!()),combinateMemoize!(parseEOF!())).parse(input, info);}}", makeInput("", 21), Error("'(' expected but ';' found", 20)));
                 assert(def!().parse(makeInput(`None recursive  A $;`), new CallerInfo(__LINE__, "")) == makeParseResult(false, "", makeInput(""), Error("'=' expected but 'A' found", 16)));
                 assert(def!().parse(makeInput("None recursive  \nA $;"), new CallerInfo(__LINE__, "")) == makeParseResult(false, "", makeInput(""), Error("'=' expected but 'A' found", 17, 2)));
                 return true;
@@ -2434,7 +2437,66 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
         unittest{
             enum dg = {
                 cast(void)__LINE__; 
-                assert(defs!().parse(makeInput(q{ @default_skip(" " / "\t" / "\n") bool hoge = !"hello" $ >> {return false;}; @skip(" ") Tuple!piyo hoge2 = hoge* >> {return tuple("foo");}; }), new CallerInfo(__LINE__, r"src\ctpg.d")) == makeParseResult(true, "template hoge(){alias bool ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),combinateChoice!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateMemoize!(parseString!\" \"),combinateMemoize!(parseString!\"\\t\"),combinateMemoize!(parseString!\"\\n\")))),combinateSkip!(combinateMemoize!(parseEOF!()),combinateChoice!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateMemoize!(parseString!\" \"),combinateMemoize!(parseString!\"\\t\"),combinateMemoize!(parseString!\"\\n\")))),function(){return false;}).parse(input, info);}}template hoge2(){alias Tuple!piyo ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateMore0!( #line " ~ toStringNow!__LINE__ ~ "\ncombinateSkip!(combinateMemoize!(hoge!()),combinateMemoize!(parseString!\" \"))),function(){return tuple(\"foo\");}).parse(input, info);}}", makeInput("", 140, 1, tuple("combinateChoice!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateMemoize!(parseString!\" \"),combinateMemoize!(parseString!\"\\t\"),combinateMemoize!(parseString!\"\\n\"))", "combinateMemoize!(parseString!\" \")")), Error("'_' expected but EOF found", 140)));
+                version(none) pragma(msg, defs!().parse(makeInput(q{
+                    @default_skip(" " / "\t" / "\n")
+                    bool hoge = !"hello" $ >> {return false;};
+                    @skip(" ") Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
+                }), new CallerInfo(__LINE__ - 4, r"src\ctpg.d")).error);
+                assert(defs!().parse(makeInput(q{
+                    @default_skip(" " / "\t" / "\n")
+                    bool hoge = !"hello" $ >> {return false;};
+                    @skip(" ") Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
+                }), new CallerInfo(__LINE__ - 4, r"src\ctpg.d")) == makeParseResult(true, 
+                    "template hoge(){"
+                        "#line " ~ toStringNow!(__LINE__ - 4) ~ "\n"
+                        "alias bool ResultType;"
+                        "static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){"
+                            "return combinateConvert!(" ~ toStringNow!(__LINE__ - 7) ~ ",`src\\ctpg.d`,"
+                                "combinateSequence!("
+                                    "combinateNone!("
+                                        "combinateSkip!("
+                                            "combinateMemoize!(parseString!\"hello\"),"
+                                            "combinateChoice!(" ~ toStringNow!(__LINE__ - 13) ~ ",`src\\ctpg.d`,"
+                                                "combinateMemoize!(parseString!\" \"),"
+                                                "combinateMemoize!(parseString!\"\\t\"),"
+                                                "combinateMemoize!(parseString!\"\\n\")"
+                                            ")"
+                                        ")"
+                                    "),"
+                                    "combinateSkip!("
+                                        "combinateMemoize!(parseEOF!()),"
+                                        "combinateChoice!(" ~ toStringNow!(__LINE__ - 22) ~ ",`src\\ctpg.d`,"
+                                            "combinateMemoize!(parseString!\" \"),"
+                                            "combinateMemoize!(parseString!\"\\t\"),"
+                                            "combinateMemoize!(parseString!\"\\n\")"
+                                        ")"
+                                    ")"
+                                "),"
+                                "function(){"
+                                    "return false;"
+                                "}"
+                            ").parse(input, info);"
+                        "}"
+                    "}"
+                    "template hoge2(){"
+                        "#line " ~ toStringNow!(__LINE__ - 34) ~ "\n"
+                        "alias Tuple!piyo ResultType;"
+                        "static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){"
+                            "return combinateConvert!(" ~ toStringNow!(__LINE__ - 37) ~ ",`src\\ctpg.d`,"
+                                "combinateMore0!("
+                                    " #line " ~ toStringNow!(__LINE__ - 39) ~ "\n"
+                                    "combinateSkip!("
+                                        "combinateMemoize!(hoge!()),"
+                                        "combinateMemoize!(parseString!\" \")"
+                                    ")"
+                                "),"
+                                "function(){"
+                                    "return tuple(\"foo\");"
+                                "}"
+                            ").parse(input, info);"
+                        "}"
+                    "}",
+                makeInput("", 216, 5, tuple("combinateChoice!(" ~ toStringNow!(__LINE__ - 53) ~ ",`src\\ctpg.d`,combinateMemoize!(parseString!\" \"),combinateMemoize!(parseString!\"\\t\"),combinateMemoize!(parseString!\"\\n\"))", "combinateMemoize!(parseString!\" \")")), Error("'_' expected but EOF found", 216, 5)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
