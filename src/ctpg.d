@@ -2253,8 +2253,8 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                                     parseString!">>?",
                                     parseString!">>"
                                 ),
-                                getLine!(),
                                 parseSpaces!(),
+                                getLine!(),
                                 combinateChoice!(
                                     func!(),
                                     typeName!()
@@ -2265,15 +2265,16 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                     function(size_t callerLine, string callerFile, string seqExp, Tuple!(string, size_t, string)[] funcs){
                         string result = seqExp;
                         foreach(func; funcs){
+                            string line = (callerLine + func[1] - 1).to!string();
                             final switch(func[0]){
                                 case ">>":
-                                    result = "combinateConvert!(" ~ (callerLine + func[1] - 1).to!string() ~ ",`" ~ callerFile ~ "`," ~ result ~ "," ~ func[2] ~ ")";
+                                    result = "combinateConvert!(" ~ line ~ ",`" ~ callerFile ~ "`," ~ result ~ ",#line " ~ line ~ "\n" ~ func[2] ~ ")";
                                     break;
                                 case ">>>":
-                                    result = "combinateConvertWithState!(" ~ (callerLine + func[1] - 1).to!string() ~ ",`" ~ callerFile ~ "`," ~ result ~ "," ~ func[2] ~ ")";
+                                    result = "combinateConvertWithState!(" ~ (callerLine + func[1] - 1).to!string() ~ ",`" ~ callerFile ~ "`," ~ result ~ ",#line " ~ line ~ "\n" ~ func[2] ~ ")";
                                     break;
                                 case ">>?":
-                                    result = "combinateCheck!(" ~ (callerLine + func[1] - 1).to!string() ~ ",`" ~ callerFile ~ "`," ~ result ~ "," ~ func[2] ~ ")";
+                                    result = "combinateCheck!(" ~ (callerLine + func[1] - 1).to!string() ~ ",`" ~ callerFile ~ "`," ~ result ~ ",#line " ~ line ~ "\n" ~ func[2] ~ ")";
                                     break;
                             }
                         }
@@ -2285,9 +2286,9 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
 
         unittest{
             enum dg = {
-                assert(convExp!().parse(makeInput(q{!"hello" $ >> {return false;}}), new CallerInfo(__LINE__, `src\ctpg.d`)) == makeParseResult(true, "combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateSequence!(combinateNone!(combinateMemoize!(parseString!\"hello\")),combinateMemoize!(parseEOF!())),function(){return false;})", makeInput("", 29), Error("'(' expected but '>' found", 11)));
-                assert(convExp!().parse(makeInput(q{"hello" >> flat >> to!int}), new CallerInfo(__LINE__, `src/ctpg.d`)) == makeParseResult(true, "combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateMemoize!(parseString!\"hello\"),flat),to!int)", makeInput("", 25), Error("'(' expected but '>' found", 8)));
-                assert(convExp!().parse(makeInput(q{$ >>> to!string >>? isValid}, 0, 1, tuple("", "skip!()")), new CallerInfo(__LINE__, `src\ctpg.d`)) == makeParseResult(true, "combinateCheck!(" ~ toStringNow!__LINE__ ~ r",`src\ctpg.d`,combinateConvertWithState!(" ~ toStringNow!__LINE__ ~ r",`src\ctpg.d`,combinateSkip!(combinateMemoize!(parseEOF!()),skip!()),to!string),isValid)", makeInput("", 27, 1, tuple("", "skip!()")), Error("'(' expected but '>' found", 2)));
+                assert(convExp!().parse(makeInput(q{!"hello" $ >> {return false;}}), new CallerInfo(__LINE__, `src\ctpg.d`)) == makeParseResult(true, "combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateSequence!(combinateNone!(combinateMemoize!(parseString!\"hello\")),combinateMemoize!(parseEOF!())),#line " ~ toStringNow!__LINE__ ~ "\nfunction(){return false;})", makeInput("", 29), Error("'(' expected but '>' found", 11)));
+                assert(convExp!().parse(makeInput(q{"hello" >> flat >> to!int}), new CallerInfo(__LINE__, `src/ctpg.d`)) == makeParseResult(true, "combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateMemoize!(parseString!\"hello\"),#line " ~ toStringNow!__LINE__ ~ "\nflat),#line " ~ toStringNow!__LINE__ ~ "\nto!int)", makeInput("", 25), Error("'(' expected but '>' found", 8)));
+                assert(convExp!().parse(makeInput(q{$ >>> to!string >>? isValid}, 0, 1, tuple("", "skip!()")), new CallerInfo(__LINE__, `src\ctpg.d`)) == makeParseResult(true, "combinateCheck!(" ~ toStringNow!__LINE__ ~ r",`src\ctpg.d`,combinateConvertWithState!(" ~ toStringNow!__LINE__ ~ r",`src\ctpg.d`,combinateSkip!(combinateMemoize!(parseEOF!()),skip!()),#line " ~ toStringNow!__LINE__ ~ "\nto!string),#line " ~ toStringNow!__LINE__ ~ "\nisValid)", makeInput("", 27, 1, tuple("", "skip!()")), Error("'(' expected but '>' found", 2)));
                 assert(convExp!().parse(makeInput(q{!"hello" $ > {return false;}}), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateNone!(combinateMemoize!(parseString!\"hello\")),combinateMemoize!(parseEOF!()))", makeInput("> {return false;}", 11), Error("'(' expected but '>' found", 11)));
                 return true;
             };
@@ -2390,7 +2391,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
         unittest{
             enum dg = {
                 cast(void)__LINE__;
-                assert(def!().parse(makeInput(`@skip(" ") bool hoge = !"hello" $ >> {return false;};`), new CallerInfo(__LINE__, `src/ctpg.d`)) == makeParseResult(true, "template hoge(){#line " ~ toStringNow!__LINE__~ "\nalias bool ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),combinateMemoize!(parseString!\" \"))),combinateSkip!(combinateMemoize!(parseEOF!()),combinateMemoize!(parseString!\" \"))),function(){return false;}).parse(input, info);}}", makeInput("", 53, 1, tuple("", "combinateMemoize!(parseString!\" \")")), Error("'(' expected but '>' found", 34)));
+                assert(def!().parse(makeInput(`@skip(" ") bool hoge = !"hello" $ >> {return false;};`), new CallerInfo(__LINE__, `src/ctpg.d`)) == makeParseResult(true, "template hoge(){#line " ~ toStringNow!__LINE__~ "\nalias bool ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),combinateMemoize!(parseString!\" \"))),combinateSkip!(combinateMemoize!(parseEOF!()),combinateMemoize!(parseString!\" \"))),#line " ~ toStringNow!__LINE__ ~ "\nfunction(){return false;}).parse(input, info);}}", makeInput("", 53, 1, tuple("", "combinateMemoize!(parseString!\" \")")), Error("'(' expected but '>' found", 34)));
                 assert(def!().parse(makeInput(`None recursive = A $;`), new CallerInfo(__LINE__, "")) == makeParseResult(true, "template recursive(){#line " ~ toStringNow!__LINE__~ "\nalias None ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateSequence!( #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(A!()),combinateMemoize!(parseEOF!())).parse(input, info);}}", makeInput("", 21), Error("'(' expected but ';' found", 20)));
                 assert(def!().parse(makeInput(`None recursive  A $;`), new CallerInfo(__LINE__, "")) == makeParseResult(false, "", makeInput(""), Error("'=' expected but 'A' found", 16)));
                 assert(def!().parse(makeInput("None recursive  \nA $;"), new CallerInfo(__LINE__, "")) == makeParseResult(false, "", makeInput(""), Error("'=' expected but 'A' found", 17, 2)));
@@ -2437,11 +2438,6 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
         unittest{
             enum dg = {
                 cast(void)__LINE__; 
-                version(none) pragma(msg, defs!().parse(makeInput(q{
-                    @default_skip(" " / "\t" / "\n")
-                    bool hoge = !"hello" $ >> {return false;};
-                    @skip(" ") Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
-                }), new CallerInfo(__LINE__ - 4, r"src\ctpg.d")).error);
                 assert(defs!().parse(makeInput(q{
                     @default_skip(" " / "\t" / "\n")
                     bool hoge = !"hello" $ >> {return false;};
@@ -2471,7 +2467,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                                             "combinateMemoize!(parseString!\"\\n\")"
                                         ")"
                                     ")"
-                                "),"
+                                "),#line " ~ toStringNow!(__LINE__ - 27) ~ "\n"
                                 "function(){"
                                     "return false;"
                                 "}"
@@ -2489,7 +2485,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                                         "combinateMemoize!(hoge!()),"
                                         "combinateMemoize!(parseString!\" \")"
                                     ")"
-                                "),"
+                                "),#line " ~ toStringNow!(__LINE__ - 44) ~ "\n"
                                 "function(){"
                                     "return tuple(\"foo\");"
                                 "}"
