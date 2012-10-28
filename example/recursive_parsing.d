@@ -14,14 +14,14 @@ mixin(generateParsers(q{
 
 void main(){
     enum dg = {
-        assert( isMatch!recursive("a"));
-        assert( isMatch!recursive("aaa"));
-        assert(!isMatch!recursive("aaaaa"));
-        assert( isMatch!recursive("aaaaaaa"));
-        assert(!isMatch!recursive("aaaaaaaaa"));
-        assert(!isMatch!recursive("aaaaaaaaaaa"));
-        assert(!isMatch!recursive("aaaaaaaaaaaaa"));
-        assert( isMatch!recursive("aaaaaaaaaaaaaaa"));
+        assert( parse!recursive("a").match);
+        assert( parse!recursive("aaa").match);
+        assert(!parse!recursive("aaaaa").match);
+        assert( parse!recursive("aaaaaaa").match);
+        assert(!parse!recursive("aaaaaaaaa").match);
+        assert(!parse!recursive("aaaaaaaaaaa").match);
+        assert(!parse!recursive("aaaaaaaaaaaaa").match);
+        assert( parse!recursive("aaaaaaaaaaaaaaa").match);
         return true;
     };
     static assert(dg());
