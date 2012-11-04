@@ -668,16 +668,11 @@ alias Tuple!(string, string) StateType;
         template combinateSkip(alias parser, alias skip){
             alias ParserType!parser ResultType;
             static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                auto r = parser.parse(input.save, info);
-                if(!r.match){
-                    auto skipped = skip.parse(input, info);
-                    if(skipped.match){
-                        return parser.parse(skipped.next, info);
-                    }else{
-                        return r;
-                    }
+                auto skipped = combinateMemoize!skip.parse(input.save, info);
+                if(skipped.match){
+                    return parser.parse(skipped.next, info);
                 }else{
-                    return r;
+                    return parser.parse(input, info);
                 }
             }
         }
@@ -686,7 +681,7 @@ alias Tuple!(string, string) StateType;
             enum dg = {
                 assert(combinateSkip!(parseString!"foo", parseString!" ").parse(makeInput(" foo"), new CallerInfo(0, "")) == makeParseResult(true, "foo", makeInput("", 4)));
                 assert(combinateSkip!(parseString!"foo", parseString!" ").parse(makeInput("foo"), new CallerInfo(0, "")) == makeParseResult(true, "foo", makeInput("", 3)));
-                assert(combinateSkip!(parseString!"foo", parseString!"foo").parse(makeInput("foo"), new CallerInfo(0, "")) == makeParseResult(true, "foo", makeInput("", 3)));
+                assert(combinateSkip!(parseString!"foo", parseString!"foo").parse(makeInput("foo"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'foo' expected but EOF found", 3)));
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
