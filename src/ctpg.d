@@ -17,8 +17,6 @@ import std.traits:      CommonType, isCallable, ReturnType, isSomeChar, isSomeSt
 import std.typetuple:   staticMap, TypeTuple;
 import std.metastrings: toStringNow;
 
-import std.utf: decode;
-
 public import std.typecons: Tuple, isTuple, tuple;
 
 alias Tuple!() None;
@@ -148,10 +146,6 @@ alias Tuple!(string, string) StateType;
             static assert(isForwardRange!Range);
         }
 
-        invariant(){
-            assert(line >= 1);
-        }
-
         @property
         Input save(){
             return Input(source.save, position, line, state);
@@ -263,14 +257,38 @@ alias Tuple!(string, string) StateType;
         }
 
     // parseCharRange
-        dchar decodeRange(R)(auto ref R range, auto ref size_t advance){
+        dchar decode(R)(auto ref R range, auto ref size_t advance){
             dchar result;
-            static if(is(Unqual!(ElementType!R) == char)){
+            static if(is(Unqual!R == string)){
+                if(!(range[0] & 0b_1000_0000)){
+                    result = range[0];
+                    advance = 1;
+                }else if(!(range[0] & 0b_0010_0000)){
+                    result = ((range[0] & 0b_0001_1111) << 6) | (range[1] & 0b_0011_1111);
+                    advance = 2;
+                }else if(!(range[0] & 0b_0001_0000)){
+                    result = ((range[0] & 0b_0000_1111) << 12) | ((range[1] & 0b_0011_1111) << 6) | (range[2] & 0b_0011_1111);
+                    advance = 3;
+                }else{
+                    result = ((range[0] & 0b_0000_0111) << 18) | ((range[1] & 0b_0011_1111) << 12) | ((range[2] & 0b_0011_1111) << 6) | (range[3] & 0b_0011_1111);
+                    advance = 4;
+                }
+            }else static if(is(Unqual!R == wstring)){
+                if(range[0] <= 0xD7FF || (0xE000 <= range[0] && range[0] < 0xFFFF)){
+                    result = range[0];
+                    advance = 1;
+                }else{
+                    result = (range[0] & 0b_0000_0011_1111_1111) * 0x400 + (range[1] & 0b_0000_0011_1111_1111) + 0x10000;
+                    advance = 2;
+                }
+            }else static if(is(Unqual!R == dstring)){
+                result = range[0];
+                advance = 1;
+            }else static if(is(Unqual!(ElementType!R) == char)){
                 if(!(range.front & 0b_1000_0000)){
                     result = range.front;
                     range.popFront;
                     advance = 1;
-                    return result;
                 }else if(!(range.front & 0b_0010_0000)){
                     result = range.front & 0b_0001_1111;
                     result <<= 6;
@@ -278,7 +296,6 @@ alias Tuple!(string, string) StateType;
                     result |= range.front & 0b_0011_1111;
                     range.popFront;
                     advance = 2;
-                    return result;
                 }else if(!(range.front & 0b_0001_0000)){
                     result = range.front & 0b_0000_1111;
                     result <<= 6;
@@ -289,7 +306,6 @@ alias Tuple!(string, string) StateType;
                     result |= range.front & 0b_0011_1111;
                     range.popFront;
                     advance = 3;
-                    return result;
                 }else{
                     result = range.front & 0b_0000_0111;
                     result <<= 6;
@@ -303,40 +319,48 @@ alias Tuple!(string, string) StateType;
                     result |= range.front & 0b_0011_1111;
                     range.popFront;
                     advance = 4;
-                    return result;
                 }
             }else static if(is(Unqual!(ElementType!R) == wchar)){
                 if(range.front <= 0xD7FF || (0xE000 <= range.front && range.front < 0xFFFF)){
                     result = range.front;
                     range.popFront;
                     advance = 1;
-                    return result;
                 }else{
                     result = (range.front & 0b_0000_0011_1111_1111) * 0x400;
                     range.popFront;
                     result += (range.front & 0b_0000_0011_1111_1111) + 0x10000;
                     range.popFront;
                     advance = 2;
-                    return result;
                 }
             }else static if(is(Unqual!(ElementType!R) == dchar)){
                 result = range.front;
                 range.popFront;
                 advance = 1;
-                return result;
+            }else{
+                static assert(false);
             }
+            return result;
         }
 
         unittest{
             enum dg = {
-                assert(decodeRange(testRange("\u0001"), 0) == '\u0001');
-                assert(decodeRange(testRange("\u0081"), 0) == '\u0081');
-                assert(decodeRange(testRange("\u0801"), 0) == '\u0801');
-                assert(decodeRange(testRange("\U00012345"), 0) == '\U00012345');
-                assert(decodeRange(testRange("\u0001"w), 0) == '\u0001');
-                assert(decodeRange(testRange("\uE001"w), 0) == '\uE001');
-                assert(decodeRange(testRange("\U00012345"w), 0) == '\U00012345');
-                assert(decodeRange(testRange("\U0010FFFE"), 0) == '\U0010FFFE');
+                assert(decode("\u0001", 0) == '\u0001');
+                assert(decode("\u0081", 0) == '\u0081');
+                assert(decode("\u0801", 0) == '\u0801');
+                assert(decode("\U00012345", 0) == '\U00012345');
+                assert(decode("\u0001"w, 0) == '\u0001');
+                assert(decode("\uE001"w, 0) == '\uE001');
+                assert(decode("\U00012345"w, 0) == '\U00012345');
+                assert(decode("\U0010FFFE", 0) == '\U0010FFFE');
+
+                assert(decode(testRange("\u0001"), 0) == '\u0001');
+                assert(decode(testRange("\u0081"), 0) == '\u0081');
+                assert(decode(testRange("\u0801"), 0) == '\u0801');
+                assert(decode(testRange("\U00012345"), 0) == '\U00012345');
+                assert(decode(testRange("\u0001"w), 0) == '\u0001');
+                assert(decode(testRange("\uE001"w), 0) == '\uE001');
+                assert(decode(testRange("\U00012345"w), 0) == '\U00012345');
+                assert(decode(testRange("\U0010FFFE"), 0) == '\U0010FFFE');
                 return true;
             };
             debug(ctpg_compile_time) static assert(dg());
@@ -383,7 +407,7 @@ alias Tuple!(string, string) StateType;
                 }else static if(isCharRange!R){
                     if(!input.source.empty){
                         size_t advance;
-                        dchar c = decodeRange(input.source, advance);
+                        dchar c = decode(input.source, advance);
                         if(low <= c && c <= high){
                             result.match = true;
                             result.value = c.to!string();
@@ -546,7 +570,7 @@ alias Tuple!(string, string) StateType;
                             result.error = Error("'" ~ str ~ "' expected but EOF found", input.position, input.line);
                             goto Lerror;
                         }else if(c != input.source.front){
-                            result.error = Error("'" ~ str ~ "' expected but '" ~ saved.decodeRange(idx).to!string() ~ "' found", input.position, input.line);
+                            result.error = Error("'" ~ str ~ "' expected but '" ~ saved.decode(idx).to!string() ~ "' found", input.position, input.line);
                             goto Lerror;
                         }else{
                             input.source.popFront;
@@ -621,10 +645,8 @@ alias Tuple!(string, string) StateType;
                     result.next.state = input.state;
                 }else{
                     size_t idx;
-                    static if(isSomeString!R){
+                    static if(isSomeString!R || isCharRange!R){
                         result.error = Error("EOF expected but '" ~ input.source.decode(idx).to!string() ~ "' found", input.position, input.line);
-                    }else static if(isCharRange!R){
-                        result.error = Error("EOF expected but '" ~ input.source.decodeRange(idx).to!string() ~ "' found", input.position, input.line);
                     }else{
                         result.error = Error("EOF expected but '" ~ input.source.front.to!string() ~ "' found", input.position, input.line);
                     }
@@ -930,7 +952,7 @@ alias Tuple!(string, string) StateType;
                 result.match = true;
                 auto r = parser.parse(input.save, info);
                 if(r.match){
-                    result.value = r.value;
+                    result.value.value = r.value;
                     result.value.some = true;
                     result.next = r.next;
                 }else{
@@ -1050,8 +1072,8 @@ alias Tuple!(string, string) StateType;
             static struct S2{ string str; int i;}
             static int f1(string){ return 0; }
             static int f2(string, int){ return 0; }
-            static int t1(T)(T){ static assert(false); }
-            static int t2(T, U)(T, U){ static assert(false); }
+            static int t1(T)(T){ return 0; }
+            static int t2(T, U)(T, U){ return 0; }
 
             static assert(is(CombinateConvertType!(C1, string) == C1));
             static assert(is(CombinateConvertType!(C1, double) == void));
@@ -1141,8 +1163,8 @@ alias Tuple!(string, string) StateType;
             static struct S2{ string str; int i; StateType state; }
             static int f1(string, StateType){ return 0; }
             static int f2(string, int, StateType){ return 0; }
-            static int t1(T)(T, StateType){ static assert(false); }
-            static int t2(T, U)(T, U, StateType){ static assert(false); }
+            static int t1(T)(T, StateType){ return 0; }
+            static int t2(T, U)(T, U, StateType){ return 0; }
 
             static assert(is(CombinateConvertWithStateType!(C1, string) == C1));
             static assert(is(CombinateConvertWithStateType!(C1, int) == void));
@@ -1220,9 +1242,9 @@ alias Tuple!(string, string) StateType;
             static bool f1(string){ return true; }
             static bool f2(string, int){ return true; }
             static string f3(string){ return ""; }
-            static bool t1(T)(T){ static assert(false); }
-            static bool t2(T, U)(T, U){ static assert(false); }
-            static string t3(T)(T){ static assert(false); }
+            static bool t1(T)(T){ return true; }
+            static bool t2(T, U)(T, U){ return true; }
+            static string t3(T)(T){ return ""; }
 
             static assert( isValidChecker!(f1, string));
             static assert(!isValidChecker!(f1, int));
