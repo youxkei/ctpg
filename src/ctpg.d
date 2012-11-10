@@ -2434,6 +2434,12 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                                         combinateConvert!(
                                             combinateSequence!(
                                                 combinateNone!(parseString!"@default_skip("),
+                                                combinateChangeState!(
+                                                    combinateConvert!(
+                                                        success!(),
+                                                        () => tuple("", "")
+                                                    )
+                                                ),
                                                 choiceExp!(),
                                                 combinateNone!(parseString!")")
                                             ),
