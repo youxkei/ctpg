@@ -12,7 +12,7 @@ module ctpg;
 
 import std.array:       save, empty, join, front;
 import std.conv:        to, text;
-import std.range:       isInputRange, isForwardRange, ElementType;
+import std.range:       isInputRange, isForwardRange, isRandomAccessRange, ElementType;
 import std.traits:      CommonType, isCallable, ReturnType, isSomeChar, isSomeString, Unqual, isAssignable, isArray;
 import std.typetuple:   staticMap, TypeTuple;
 import std.metastrings: toStringNow;
@@ -121,12 +121,10 @@ final class CallerInfo{
 
 // struct Option
     struct Option(T){
-        public{
-            bool some;
-            T value;
+        bool some;
+        T value;
 
-            alias value this;
-        }
+        alias value this;
     }
 
     Option!T makeOption(T)(bool some, T value){
@@ -190,10 +188,6 @@ alias Tuple!(string, string) StateType;
 
 // struct Error
     struct Error{
-        invariant(){
-            assert(line >= 1);
-        }
-
         string msg;
         size_t position;
         size_t line = 1;
@@ -249,93 +243,101 @@ alias Tuple!(string, string) StateType;
         }
 
     // failure
-        template failure(){
+        template failure(string msg){
             alias None ResultType;
             static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                return makeParseResult(false, None.init, Input!R.init, Error("", input.position, input.line));
+                return makeParseResult(false, None.init, Input!R.init, Error(msg, input.position, input.line));
             }
         }
 
     // parseCharRange
-        dchar decode(R)(auto ref R range, auto ref size_t advance){
+        dchar decode(R)(auto ref R input, auto ref size_t advance){
             dchar result;
-            static if(is(Unqual!R == string)){
-                if(!(range[0] & 0b_1000_0000)){
-                    result = range[0];
-                    advance = 1;
-                }else if(!(range[0] & 0b_0010_0000)){
-                    result = ((range[0] & 0b_0001_1111) << 6) | (range[1] & 0b_0011_1111);
-                    advance = 2;
-                }else if(!(range[0] & 0b_0001_0000)){
-                    result = ((range[0] & 0b_0000_1111) << 12) | ((range[1] & 0b_0011_1111) << 6) | (range[2] & 0b_0011_1111);
-                    advance = 3;
-                }else{
-                    result = ((range[0] & 0b_0000_0111) << 18) | ((range[1] & 0b_0011_1111) << 12) | ((range[2] & 0b_0011_1111) << 6) | (range[3] & 0b_0011_1111);
-                    advance = 4;
-                }
-            }else static if(is(Unqual!R == wstring)){
-                if(range[0] <= 0xD7FF || (0xE000 <= range[0] && range[0] < 0xFFFF)){
-                    result = range[0];
-                    advance = 1;
-                }else{
-                    result = (range[0] & 0b_0000_0011_1111_1111) * 0x400 + (range[1] & 0b_0000_0011_1111_1111) + 0x10000;
-                    advance = 2;
-                }
-            }else static if(is(Unqual!R == dstring)){
-                result = range[0];
-                advance = 1;
-            }else static if(is(Unqual!(ElementType!R) == char)){
-                if(!(range.front & 0b_1000_0000)){
-                    result = range.front;
-                    range.popFront;
-                    advance = 1;
-                }else if(!(range.front & 0b_0010_0000)){
-                    result = range.front & 0b_0001_1111;
-                    result <<= 6;
-                    range.popFront;
-                    result |= range.front & 0b_0011_1111;
-                    range.popFront;
-                    advance = 2;
-                }else if(!(range.front & 0b_0001_0000)){
-                    result = range.front & 0b_0000_1111;
-                    result <<= 6;
-                    range.popFront;
-                    result |= range.front & 0b_0011_1111;
-                    result <<= 6;
-                    range.popFront;
-                    result |= range.front & 0b_0011_1111;
-                    range.popFront;
-                    advance = 3;
-                }else{
-                    result = range.front & 0b_0000_0111;
-                    result <<= 6;
-                    range.popFront;
-                    result |= range.front & 0b_0011_1111;
-                    result <<= 6;
-                    range.popFront;
-                    result |= range.front & 0b_0011_1111;
-                    result <<= 6;
-                    range.popFront;
-                    result |= range.front & 0b_0011_1111;
-                    range.popFront;
-                    advance = 4;
-                }
-            }else static if(is(Unqual!(ElementType!R) == wchar)){
-                if(range.front <= 0xD7FF || (0xE000 <= range.front && range.front < 0xFFFF)){
-                    result = range.front;
-                    range.popFront;
+            static if(isArray!R || isRandomAccessRange!R){
+                static if(is(Unqual!(typeof(input[0])) == char)){
+                    if(!(input[0] & 0b_1000_0000)){
+                        result = input[0];
+                        advance = 1;
+                    }else if(!(input[0] & 0b_0010_0000)){
+                        result = ((input[0] & 0b_0001_1111) << 6) | (input[1] & 0b_0011_1111);
+                        advance = 2;
+                    }else if(!(input[0] & 0b_0001_0000)){
+                        result = ((input[0] & 0b_0000_1111) << 12) | ((input[1] & 0b_0011_1111) << 6) | (input[2] & 0b_0011_1111);
+                        advance = 3;
+                    }else{
+                        result = ((input[0] & 0b_0000_0111) << 18) | ((input[1] & 0b_0011_1111) << 12) | ((input[2] & 0b_0011_1111) << 6) | (input[3] & 0b_0011_1111);
+                        advance = 4;
+                    }
+                }else static if(is(Unqual!(typeof(input[0])) == wchar)){
+                    if(input[0] <= 0xD7FF || (0xE000 <= input[0] && input[0] < 0xFFFF)){
+                        result = input[0];
+                        advance = 1;
+                    }else{
+                        result = (input[0] & 0b_0000_0011_1111_1111) * 0x400 + (input[1] & 0b_0000_0011_1111_1111) + 0x10000;
+                        advance = 2;
+                    }
+                }else static if(is(Unqual!(typeof(input[0])) == dchar)){
+                    result = input[0];
                     advance = 1;
                 }else{
-                    result = (range.front & 0b_0000_0011_1111_1111) * 0x400;
-                    range.popFront;
-                    result += (range.front & 0b_0000_0011_1111_1111) + 0x10000;
-                    range.popFront;
-                    advance = 2;
+                    static assert(false);
                 }
-            }else static if(is(Unqual!(ElementType!R) == dchar)){
-                result = range.front;
-                range.popFront;
-                advance = 1;
+            }else static if(isInputRange!R){
+                static if(is(Unqual!(ElementType!R) == char)){
+                    if(!(input.front & 0b_1000_0000)){
+                        result = input.front;
+                        input.popFront;
+                        advance = 1;
+                    }else if(!(input.front & 0b_0010_0000)){
+                        result = input.front & 0b_0001_1111;
+                        result <<= 6;
+                        input.popFront;
+                        result |= input.front & 0b_0011_1111;
+                        input.popFront;
+                        advance = 2;
+                    }else if(!(input.front & 0b_0001_0000)){
+                        result = input.front & 0b_0000_1111;
+                        result <<= 6;
+                        input.popFront;
+                        result |= input.front & 0b_0011_1111;
+                        result <<= 6;
+                        input.popFront;
+                        result |= input.front & 0b_0011_1111;
+                        input.popFront;
+                        advance = 3;
+                    }else{
+                        result = input.front & 0b_0000_0111;
+                        result <<= 6;
+                        input.popFront;
+                        result |= input.front & 0b_0011_1111;
+                        result <<= 6;
+                        input.popFront;
+                        result |= input.front & 0b_0011_1111;
+                        result <<= 6;
+                        input.popFront;
+                        result |= input.front & 0b_0011_1111;
+                        input.popFront;
+                        advance = 4;
+                    }
+                }else static if(is(Unqual!(ElementType!R) == wchar)){
+                    if(input.front <= 0xD7FF || (0xE000 <= input.front && input.front < 0xFFFF)){
+                        result = input.front;
+                        input.popFront;
+                        advance = 1;
+                    }else{
+                        result = (input.front & 0b_0000_0011_1111_1111) * 0x400;
+                        input.popFront;
+                        result += (input.front & 0b_0000_0011_1111_1111) + 0x10000;
+                        input.popFront;
+                        advance = 2;
+                    }
+                }else static if(is(Unqual!(ElementType!R) == dchar)){
+                    result = input.front;
+                    input.popFront;
+                    advance = 1;
+                }else{
+                    static assert(false);
+                }
             }else{
                 static assert(false);
             }
