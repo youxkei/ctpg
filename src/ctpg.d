@@ -373,8 +373,7 @@ alias Tuple!(string, string) StateType;
             static assert(low <= high);
 
             alias string ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R _input, in CallerInfo info){
-                auto input = _input; // Somehow this parser doesn't work well without this line.
+            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
                 typeof(return) result;
                 static if(isSomeString!R){
                     if(input.source.length){
@@ -545,8 +544,8 @@ alias Tuple!(string, string) StateType;
         template parseString(string str){
             static assert(str.length);
             alias string ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R _input, in CallerInfo info){
-                auto input = _input; // Somehow this parser doesn't work well without this line.
+            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
+                //auto input = _input; // Somehow this parser doesn't work well without this line.
                 enum lines = str.countLines();
                 size_t idx;
                 typeof(return) result;
