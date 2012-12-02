@@ -8,8 +8,6 @@ This module implements a compile time parser generator.
  *          http://www.boost.org/LICENSE_1_0.txt)
  */
 
-module ctpg;
-
 import std.array:       save, empty, join, front;
 import std.conv:        to, text;
 import std.range:       isInputRange, isForwardRange, isRandomAccessRange, ElementType;
