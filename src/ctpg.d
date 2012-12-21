@@ -38,7 +38,7 @@ version(unittest){
     import std.stdio: writeln;
     template TestParser(T){
         alias T ResultType;
-        ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+        ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
             return makeParseResult!(R, ResultType)();
         }
     }
@@ -182,8 +182,8 @@ alias Tuple!(string, string) StateType;
         }
 
         @property
-        Input* save(){
-            return new Input(source.save, position, line, state);
+        Input save(){
+            return Input(source.save, position, line, state);
         }
 
         @property
@@ -196,18 +196,18 @@ alias Tuple!(string, string) StateType;
         }
     }
 
-    Input!Range* makeInput(Range)(Range source = Range.init, size_t position = 0, size_t line = 1, StateType state = StateType.init){
-        return new Input!Range(source, position, line, state);
+    Input!Range makeInput(Range)(Range source = Range.init, size_t position = 0, size_t line = 1, StateType state = StateType.init){
+        return Input!Range(source, position, line, state);
     }
 
 // struct ParseResult
     struct ParseResult(Range, T){
         bool match;
         T value;
-        Input!Range* next;
+        Input!Range next;
         Error error;
 
-        this(bool match, T value, Input!Range* next, Error error){
+        this(bool match, T value, Input!Range next, Error error){
             this.match = match;
             this.value = value;
             this.next = next;
@@ -222,11 +222,11 @@ alias Tuple!(string, string) StateType;
         }
 
         equals_t opEquals(ParseResult lhs){
-            return match == lhs.match && value == lhs.value && *next == *lhs.next && error == lhs.error;
+            return match == lhs.match && value == lhs.value && next == lhs.next && error == lhs.error;
         }
     }
 
-    ParseResult!(Range, T)* makeParseResult(Range, T)(bool match = false, T value = T.init, Input!Range* next = makeInput!Range(), Error error = Error.init){
+    ParseResult!(Range, T)* makeParseResult(Range, T)(bool match = false, T value = T.init, Input!Range next = makeInput!Range(), Error error = Error.init){
         return new ParseResult!(Range, T)(match, value, next, error);
     }
 
@@ -281,7 +281,7 @@ alias Tuple!(string, string) StateType;
     // success
         template success(){
             alias None ResultType;
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 return makeParseResult(true, None.init, input, Error.init);
             }
         }
@@ -289,7 +289,7 @@ alias Tuple!(string, string) StateType;
     // failure
         template failure(string msg){
             alias None ResultType;
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 return makeParseResult(false, None.init, Input!R.init, Error(msg, input.position, input.line));
             }
         }
@@ -417,7 +417,7 @@ alias Tuple!(string, string) StateType;
             static assert(low <= high);
 
             alias string ResultType;
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 auto result = makeParseResult!(R, ResultType)();
                 static if(isSomeString!R){
                     if(input.source.length){
@@ -575,7 +575,7 @@ alias Tuple!(string, string) StateType;
         template parseString(alias string str){
             static assert(str.length);
             alias string ResultType;
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 //auto input = _input; // Somehow this parser doesn't work well without this line.
                 enum lines = str.countLines();
                 enum advances = (cast(dstring)str).length;
@@ -646,7 +646,7 @@ alias Tuple!(string, string) StateType;
     // parseEOF
         template parseEOF(){
             alias None ResultType;
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 auto result = makeParseResult!(R, ResultType)();
                 if(input.source.empty){
                     result.match = true;
@@ -685,7 +685,7 @@ alias Tuple!(string, string) StateType;
         template combinateUnTuple(alias parser){
             static if(isTuple!(ParserType!parser) && ParserType!parser.Types.length == 1){
                 alias ParserType!parser.Types[0] ResultType;
-                static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+                static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                     auto result = makeParseResult!(R, ResultType)();
                     auto r = parser.parse(input, info);
                     result.match = r.match;
@@ -752,7 +752,7 @@ alias Tuple!(string, string) StateType;
 
         template combinateSequenceImpl(parsers...){
             alias CombinateSequenceImplType!(parsers) ResultType;
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 auto result = makeParseResult!(R, ResultType)();
                 static if(parsers.length == 1){
                     auto r = parsers[0].parse(input, info);
@@ -829,7 +829,7 @@ alias Tuple!(string, string) StateType;
                 }
                 static assert(false);
             }
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 static assert(parsers.length > 0);
                 static if(parsers.length == 1){
                     return parsers[0].parse(input, info);
@@ -868,9 +868,9 @@ alias Tuple!(string, string) StateType;
     // combinateMore
         template combinateMore(int n, alias parser, alias sep){
             alias ParserType!(parser)[] ResultType;
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 auto result = makeParseResult!(R, ResultType)();
-                Input!R* next = input;
+                Input!R next = input;
                 while(true){
                     auto input1 = next.save;
                     auto r1 = parser.parse(input1, info);
@@ -926,7 +926,7 @@ alias Tuple!(string, string) StateType;
     // combinateOption
         template combinateOption(alias parser){
             alias Option!(ParserType!parser) ResultType;
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 auto result = makeParseResult!(R, ResultType)();
                 result.match = true;
                 auto r = parser.parse(input.save, info);
@@ -956,7 +956,7 @@ alias Tuple!(string, string) StateType;
     // combinateNone
         template combinateNone(alias parser){
             alias None ResultType;
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 auto result = makeParseResult!(R, ResultType)();
                 auto r = parser.parse(input, info);
                 if(r.match){
@@ -985,7 +985,7 @@ alias Tuple!(string, string) StateType;
     // combinateAndPred
         template combinateAndPred(alias parser){
             alias None ResultType;
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 auto result = makeParseResult!(R, ResultType)();
                 result.next = input;
                 auto r = parser.parse(input.save, info);
@@ -1012,7 +1012,7 @@ alias Tuple!(string, string) StateType;
     // combinateNotPred
         template combinateNotPred(alias parser){
             alias None ResultType;
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 auto result = makeParseResult!(R, ResultType)();
                 result.next = input;
                 auto r = parser.parse(input.save, info);
@@ -1094,7 +1094,7 @@ alias Tuple!(string, string) StateType;
                 }
                 static assert(false);
             }
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 auto result = makeParseResult!(R, ResultType)();
                 auto r = parser.parse(input, info);
                 if(r.match){
@@ -1185,7 +1185,7 @@ alias Tuple!(string, string) StateType;
                 }
                 static assert(false);
             }
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 auto result = makeParseResult!(R, ResultType)();
                 auto r = parser.parse(input, info);
                 if(r.match){
@@ -1263,7 +1263,7 @@ alias Tuple!(string, string) StateType;
                 }
                 static assert(false);
             }
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 auto result = makeParseResult!(R, ResultType)();
                 auto r = parser.parse(input, info);
                 if(r.match){
@@ -1294,7 +1294,7 @@ alias Tuple!(string, string) StateType;
     // combinateChangeState
         template combinateChangeState(alias parser){
             alias None ResultType;
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 auto result = makeParseResult!(R, ResultType)();
                 auto r = parser.parse(input, info);
                 if(r.match){
@@ -1330,17 +1330,16 @@ alias Tuple!(string, string) StateType;
     // combinateMemoize
         template combinateMemoize(alias parser){
             alias ParserType!parser ResultType;
-            ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 if(!__ctfe){
                 //static if(false){
-                    static typeof(return)[Tuple!(R, StateType)] memo;
-                    auto key = tuple(input.source, input.state);
-                    auto p = key in memo;
+                    static typeof(return)[Input!R] memo;
+                    auto p = input in memo;
                     if(p){
                         return *p;
                     }
                     auto result = parser.parse(input, info);
-                    memo[key] = result;
+                    memo[input] = result;
                     return result;
                 }else{
                     return parser.parse(input, info);
@@ -1357,7 +1356,7 @@ alias Tuple!(string, string) StateType;
     // combinateSkip
         template combinateSkip(alias parser, alias skip){
             alias ParserType!parser ResultType;
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 auto skipped = combinateMemoize!skip.parse(input.save, info);
                 if(skipped.match){
                     return parser.parse(skipped.next, info);
@@ -1616,7 +1615,7 @@ alias Tuple!(string, string) StateType;
     // getLine
         template getLine(){
             alias size_t ResultType;
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 return makeParseResult(true, input.line, input, Error.init);
             }
         }
@@ -1640,7 +1639,7 @@ alias Tuple!(string, string) StateType;
     // getCallerLine
         template getCallerLine(){
             alias size_t ResultType;
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 return makeParseResult(true, info.line, input, Error.init);
             }
         }
@@ -1659,7 +1658,7 @@ alias Tuple!(string, string) StateType;
     // getCallerFile
         template getCallerFile(){
             alias string ResultType;
-            static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){
+            static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){
                 return makeParseResult(true, info.file, input, Error.init);
             }
         }
@@ -1692,7 +1691,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // arch
         template arch(string open, string close){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
                         parseString!open,
@@ -1731,7 +1730,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // func
         template func(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
                         combinateOption!(
@@ -1787,7 +1786,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // id
         template id(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
                         combinateChoice!(
@@ -1823,7 +1822,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // nonterminal
         template nonterminal(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvertWithState!(
                     combinateSequence!(
                         getCallerLine!(),
@@ -1850,7 +1849,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // typeName
         template typeName(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
                         combinateChoice!(
@@ -1891,7 +1890,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // eofLit
         template eofLit(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateNone!(
                         parseString!"$"
@@ -1914,7 +1913,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // rangeLit
         template rangeLit(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
                         combinateNone!(
@@ -1942,7 +1941,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
 
         template charRange(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
                         combinateChoice!(
@@ -1964,7 +1963,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
 
         template oneChar(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateChoice!(
                         parseEscapeSequence!(),
@@ -1988,7 +1987,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // stringLit
         template stringLit(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
                         combinateNone!(
@@ -2027,7 +2026,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // literal
         template literal(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvertWithState!(
                     combinateChoice!(
                         rangeLit!(),
@@ -2057,7 +2056,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // primaryExp
         template primaryExp(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateChoice!(
                     literal!(),
                     nonterminal!(),
@@ -2091,7 +2090,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // preExp
         template preExp(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
                         combinateOption!(
@@ -2135,7 +2134,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // postExp
         template postExp(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
                         preExp!(),
@@ -2196,7 +2195,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // optionExp
         template optionExp(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
                         postExp!(),
@@ -2224,7 +2223,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // seqExp
         template seqExp(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateMore1!(
                         optionExp!(),
@@ -2249,7 +2248,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // convExp
         template convExp(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
                         getCallerLine!(),
@@ -2309,7 +2308,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // choiceExp
         template choiceExp(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
                         getLine!(),
@@ -2345,7 +2344,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // def
         template def(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
                         combinateChangeState!(
@@ -2390,7 +2389,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                         "template " ~ name ~ "(){"
                             "#line " ~ (line + callerLine - 1).to!string() ~ "\n"
                             "alias " ~ type ~ " ResultType;"
-                            "static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){"
+                            "static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){"
                                 "return "~choiceExp~".parse(input, info);"
                             "}"
                         "}"
@@ -2401,8 +2400,8 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
         unittest{
             enum dg = {
                 cast(void)__LINE__;
-                assert(*def!().parse(makeInput(`@skip(" ") bool hoge = !"hello" $ >> {return false;};`), new CallerInfo(__LINE__, `src/ctpg.d`)) == *makeParseResult(true, "template hoge(){#line " ~ toStringNow!__LINE__~ "\nalias bool ResultType;static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){return combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),combinateMemoize!(parseString!\" \"))),combinateSkip!(combinateMemoize!(parseEOF!()),combinateMemoize!(parseString!\" \"))),#line " ~ toStringNow!__LINE__ ~ "\nfunction(){return false;}).parse(input, info);}}", makeInput("", 53, 1, tuple("", "combinateMemoize!(parseString!\" \")")), Error("'(' expected but '>' found", 34)));
-                assert(*def!().parse(makeInput(`None recursive = A $;`), new CallerInfo(__LINE__, "")) == *makeParseResult(true, "template recursive(){#line " ~ toStringNow!__LINE__~ "\nalias None ResultType;static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){return combinateSequence!( #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(A!()),combinateMemoize!(parseEOF!())).parse(input, info);}}", makeInput("", 21), Error("'(' expected but ';' found", 20)));
+                assert(*def!().parse(makeInput(`@skip(" ") bool hoge = !"hello" $ >> {return false;};`), new CallerInfo(__LINE__, `src/ctpg.d`)) == *makeParseResult(true, "template hoge(){#line " ~ toStringNow!__LINE__~ "\nalias bool ResultType;static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){return combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),combinateMemoize!(parseString!\" \"))),combinateSkip!(combinateMemoize!(parseEOF!()),combinateMemoize!(parseString!\" \"))),#line " ~ toStringNow!__LINE__ ~ "\nfunction(){return false;}).parse(input, info);}}", makeInput("", 53, 1, tuple("", "combinateMemoize!(parseString!\" \")")), Error("'(' expected but '>' found", 34)));
+                assert(*def!().parse(makeInput(`None recursive = A $;`), new CallerInfo(__LINE__, "")) == *makeParseResult(true, "template recursive(){#line " ~ toStringNow!__LINE__~ "\nalias None ResultType;static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){return combinateSequence!( #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(A!()),combinateMemoize!(parseEOF!())).parse(input, info);}}", makeInput("", 21), Error("'(' expected but ';' found", 20)));
                 assert(*def!().parse(makeInput(`None recursive  A $;`), new CallerInfo(__LINE__, "")) == *makeParseResult(false, "", makeInput(""), Error("'=' expected but 'A' found", 16)));
                 assert(*def!().parse(makeInput("None recursive  \nA $;"), new CallerInfo(__LINE__, "")) == *makeParseResult(false, "", makeInput(""), Error("'=' expected but 'A' found", 17, 2)));
                 return true;
@@ -2414,7 +2413,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
     // defs
         template defs(){
             alias string ResultType;
-            ParseResult!(string, ResultType)* parse()(Input!string* input, in CallerInfo info){
+            ParseResult!(string, ResultType)* parse()(Input!string input, in CallerInfo info){
                 return combinateConvert!(
                     combinateSequence!(
                         parseSpaces!(),
@@ -2462,7 +2461,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                     "template hoge(){"
                         "#line " ~ toStringNow!(__LINE__ - 4) ~ "\n"
                         "alias bool ResultType;"
-                        "static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){"
+                        "static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){"
                             "return combinateConvert!(" ~ toStringNow!(__LINE__ - 7) ~ ",`src\\ctpg.d`,"
                                 "combinateSequence!("
                                     "combinateNone!("
@@ -2493,7 +2492,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                     "template hoge2(){"
                         "#line " ~ toStringNow!(__LINE__ - 34) ~ "\n"
                         "alias Tuple!piyo ResultType;"
-                        "static ParseResult!(R, ResultType)* parse(R)(Input!R* input, in CallerInfo info){"
+                        "static ParseResult!(R, ResultType)* parse(R)(Input!R input, in CallerInfo info){"
                             "return combinateConvert!(" ~ toStringNow!(__LINE__ - 37) ~ ",`src\\ctpg.d`,"
                                 "combinateMore0!("
                                     " #line " ~ toStringNow!(__LINE__ - 39) ~ "\n"
