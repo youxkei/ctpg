@@ -19,21 +19,15 @@ public import std.typecons: Tuple, isTuple, tuple;
 
 alias Tuple!() None;
 
-//debug = ctpg;
-debug(ctpg){
-    debug = ctpg_compile_time;
-}
-
 private:
 
-import std.stdio;
-
-debug(ctpg) void main(){
-    "unittest passed".writeln();
-}
-
-version(unittest){
+version(unittest) debug(ctpg){
     import std.stdio: writeln;
+
+    void main(){
+        "unittest passed".writeln();
+    }
+
     template TestParser(T){
         alias T ResultType;
         ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
@@ -98,7 +92,7 @@ template isParser(alias parser){
     enum isParser = is(ParserType!parser) && __traits(compiles, parser.parse);
 }
 
-unittest{
+debug(ctpg) unittest{
     static assert(isParser!(TestParser!int));
     static assert(isParser!(TestParser!real));
     static assert(isParser!(TestParser!(int function(int))));
@@ -112,7 +106,7 @@ template ParserType(alias parser){
     }
 }
 
-unittest{
+debug(ctpg) unittest{
     static assert(is(ParserType!(TestParser!string) == string));
     static assert(is(ParserType!(TestParser!int) == int));
     static assert(is(ParserType!(TestParser!long) == long));
@@ -122,7 +116,7 @@ template isCharRange(R){
     enum isCharRange = isInputRange!R && isSomeChar!(ElementType!R);
 }
 
-unittest{
+debug(ctpg) unittest{
     static assert(isCharRange!(TestRange! char));
     static assert(isCharRange!(TestRange!wchar));
     static assert(isCharRange!(TestRange!dchar));
@@ -174,7 +168,7 @@ alias Tuple!(string, string) StateType;
         size_t line = 1;
         StateType state;
 
-        unittest{
+        debug(ctpg) unittest{
             static assert(isForwardRange!Range);
         }
 
@@ -255,7 +249,7 @@ alias Tuple!(string, string) StateType;
         }
     }
 
-    unittest{
+    debug(ctpg) unittest{
         enum dg = {
             assert(flat(tuple(1, "hello", tuple(2, "world"))) == "1hello2world");
             assert(flat(tuple([0, 1, 2], "hello", tuple([3, 4, 5], ["wor", "ld!!"]), ["!", "!"])) == "012hello345world!!!!");
@@ -263,7 +257,7 @@ alias Tuple!(string, string) StateType;
             assert(flat(tuple("A", [""][0..0])) == "A");
             return true;
         };
-        debug(ctpg_compile_time) static assert(dg());
+        static assert(dg());
         dg();
     }
 
@@ -378,7 +372,7 @@ alias Tuple!(string, string) StateType;
             return result;
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(decode("\u0001", 0) == '\u0001');
                 assert(decode("\u0081", 0) == '\u0081');
@@ -399,7 +393,7 @@ alias Tuple!(string, string) StateType;
                 assert(decode(testRange("\U0010FFFE"), 0) == '\U0010FFFE');
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -472,7 +466,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(parseCharRange!('a', 'z').parse(makeInput(conv!"hoge") , new CallerInfo(0, "")) == makeParseResult(true, "h", makeInput(conv!"oge" , 1)), conv.stringof);
@@ -486,7 +480,7 @@ alias Tuple!(string, string) StateType;
                 }catch(Exception ex){}
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -496,7 +490,7 @@ alias Tuple!(string, string) StateType;
 
         alias parseAnyChar any;
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(parseAnyChar!().parse(makeInput("hoge"), new CallerInfo(0, "")) == makeParseResult(true, "h", makeInput("oge", 1)), conv.stringof);
@@ -506,7 +500,7 @@ alias Tuple!(string, string) StateType;
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -533,7 +527,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             static assert(staticConvertString!("foobar", string) == "foobar");
             static assert(staticConvertString!("foobar", wstring) == "foobar"w);
             static assert(staticConvertString!("foobar", dstring) == "foobar"d);
@@ -552,13 +546,13 @@ alias Tuple!(string, string) StateType;
             return lines;
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(countLines("これ\nとこれ") == 1);
                 assert(countLines("これ\nとこれ\nとさらにこれ") == 2);
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -614,7 +608,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(parseString!"hello".parse(makeInput(conv!"hello world"), new CallerInfo(0, "")) == makeParseResult(true, "hello", makeInput(conv!" world", 5)));
@@ -629,7 +623,7 @@ alias Tuple!(string, string) StateType;
                 }catch(Exception ex){}
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -656,7 +650,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(parseEOF!().parse(makeInput(conv!""), new CallerInfo(0, "")) == makeParseResult(true, None.init, makeInput(conv!"", 0)), conv.stringof);
@@ -666,7 +660,7 @@ alias Tuple!(string, string) StateType;
                 assert(parseEOF!().parse(makeInput([0, 1, 2]), new CallerInfo(0, "")) == makeParseResult(false, None.init, makeInput([0][0..0]), Error("EOF expected but '0' found")));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -689,7 +683,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(combinateUnTuple!(TestParser!int).parse(makeInput(conv!""), new CallerInfo(0, "")) == makeParseResult(false, 0, makeInput(conv!"")));
@@ -705,7 +699,7 @@ alias Tuple!(string, string) StateType;
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -718,7 +712,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             static assert(is(flatTuple!(string) == string));
             static assert(is(flatTuple!(Tuple!(string)) == TypeTuple!string));
             static assert(is(flatTuple!(Tuple!(Tuple!(string))) == TypeTuple!(Tuple!string)));
@@ -728,7 +722,7 @@ alias Tuple!(string, string) StateType;
             alias Tuple!(staticMap!(flatTuple, staticMap!(ParserType, parsers))) CombinateSequenceImplType;
         }
 
-        unittest{
+        debug(ctpg) unittest{
             static assert(is(CombinateSequenceImplType!(TestParser!string, TestParser!string) == Tuple!(string, string)));
             static assert(is(CombinateSequenceImplType!(TestParser!int, TestParser!long) == Tuple!(int, long)));
             static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(int, long)), TestParser!uint) == Tuple!(int, long, uint)));
@@ -779,7 +773,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(combinateSequence!(parseString!("hello"), parseString!("world")).parse(makeInput(conv!"helloworld"), new CallerInfo(0, "")) == makeParseResult(true, tuple("hello", "world"), makeInput(conv!"", 10)));
@@ -789,7 +783,7 @@ alias Tuple!(string, string) StateType;
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -798,7 +792,7 @@ alias Tuple!(string, string) StateType;
             alias CommonType!(staticMap!(ParserType, parsers)) CommonParserType;
         }
 
-        unittest{
+        debug(ctpg) unittest{
             static assert(is(CommonParserType!(TestParser!string, TestParser!string) == string));
             static assert(is(CommonParserType!(TestParser!int, TestParser!long) == long));
             static assert(is(CommonParserType!(TestParser!byte, TestParser!short, TestParser!int) == int));
@@ -839,7 +833,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(combinateChoice!(parseString!"h", parseString!"w").parse(makeInput(conv!"hw"), new CallerInfo(0, "")) == makeParseResult(true, "h", makeInput(conv!"w", 1))); 
@@ -851,7 +845,7 @@ alias Tuple!(string, string) StateType;
                 //assert(combinateChoice!(__LINE__, "foo/bar.d", parseString!"h", combinateSequence!(parseString!"w", parseString!"w")).parse(makeInput(testRange("w"d)), new CallerInfo(0, "")) == makeParseResult(true, "w", makeInput(testRange(""d), 1)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -898,7 +892,7 @@ alias Tuple!(string, string) StateType;
             alias combinateMore!(1, parser, sep) combinateMore1;
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(combinateMore0!(parseString!"w").parse(makeInput(conv!"www w"), new CallerInfo(0, "")) == makeParseResult(true, ["w", "w", "w"], makeInput(conv!" w", 3), Error("'w' expected but ' ' found", 3)));
@@ -909,7 +903,7 @@ alias Tuple!(string, string) StateType;
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -931,7 +925,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(combinateOption!(parseString!"w").parse(makeInput(conv!"w"), new CallerInfo(0, "")) == makeParseResult(true, makeOption(true, "w"), makeInput(conv!"", 1)));
@@ -939,7 +933,7 @@ alias Tuple!(string, string) StateType;
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -959,7 +953,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")).parse(makeInput(conv!"(w)"), new CallerInfo(0, "")) == makeParseResult(true, "w", makeInput(conv!"", 3)));
@@ -968,7 +962,7 @@ alias Tuple!(string, string) StateType;
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -985,7 +979,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(combinateAndPred!(parseString!"w").parse(makeInput(conv!"www"), new CallerInfo(0, "")) == makeParseResult(true, None.init, makeInput(conv!"www", 0)));
@@ -995,7 +989,7 @@ alias Tuple!(string, string) StateType;
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1016,14 +1010,14 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))).parse(makeInput(conv!"wwws"), new CallerInfo(0, "")) == makeParseResult(true, ["w", "w"], makeInput(conv!"ws", 2), Error("Expected failure", 3)));
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1042,7 +1036,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             static class C1{ this(string){} }
             static class C2{ this(string, int){} }
             static struct S1{ string str;}
@@ -1107,7 +1101,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }).parse(makeInput(conv!"www"), new CallerInfo(0, "")) == makeParseResult(true, cast(size_t)3, makeInput(conv!"", 3), Error("'w' expected but EOF found", 3)));
@@ -1116,7 +1110,7 @@ alias Tuple!(string, string) StateType;
                 //assert(combinateConvert!(10, "hoge/fuga.d", combinateMore1!(parseString!"w"), function(string ws){ return ws.length; }).parse(makeInput(testRange("a")), new CallerInfo(0, "")) == makeParseResult(false, cast(size_t)0, makeInput(testRange("")), Error(q{"w"})));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1135,7 +1129,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             static class C1{ this(string, StateType){} }
             static class C2{ this(string, int, StateType){} }
             static struct S1{ string str; StateType state; }
@@ -1196,7 +1190,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(combinateConvertWithState!(combinateMore1!(parseString!"w"), function(string[] ws, StateType state){ return ws.length; }).parse(makeInput(conv!"www"), new CallerInfo(0, "")) == makeParseResult(true, cast(size_t)3, makeInput(conv!"", 3), Error("'w' expected but EOF found", 3)));
@@ -1204,7 +1198,7 @@ alias Tuple!(string, string) StateType;
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1219,7 +1213,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             static bool f1(string){ return true; }
             static bool f2(string, int){ return true; }
             static string f3(string){ return ""; }
@@ -1269,7 +1263,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }).parse(makeInput(conv!"wwwww"), new CallerInfo(0, "")) == makeParseResult(true, ["w", "w", "w", "w", "w"], makeInput(conv!"", 5), Error("'w' expected but EOF found", 5)));
@@ -1277,7 +1271,7 @@ alias Tuple!(string, string) StateType;
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1299,7 +1293,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        version(none) unittest{
+        version(none) debug(ctpg) unittest{
             enum dg = {
                 {
                     auto r = combinateChangeState!(parseString!"hoge").parse(makeInput("hoge"), new CallerInfo(0, ""));
@@ -1314,7 +1308,7 @@ alias Tuple!(string, string) StateType;
                 return true;
             };
             dg();
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
         }
 
     // combinateMemoize
@@ -1337,7 +1331,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             alias combinateMemoize!(combinateConvert!(parseString!"str", (str){ "This message should be showed twice.".writeln(); return 0; })) p;
             combinateSequence!(combinateAndPred!p, p).parse(makeInput("str"), new CallerInfo(0, ""));
             combinateSequence!(combinateAndPred!p, p).parse(makeInput("str".testRange()), new CallerInfo(0, ""));
@@ -1356,7 +1350,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(combinateSkip!(parseString!"foo", parseString!" ").parse(makeInput(conv!" foo"), new CallerInfo(0, "")) == makeParseResult(true, "foo", makeInput(conv!"", 4)));
@@ -1365,7 +1359,7 @@ alias Tuple!(string, string) StateType;
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1419,7 +1413,7 @@ alias Tuple!(string, string) StateType;
             ) parseEscapeSequence;
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(parseEscapeSequence!().parse(makeInput(conv!`\"hoge`), new CallerInfo(0, "")) == makeParseResult(true, `\"`, makeInput(conv!"hoge", 2)));
@@ -1435,7 +1429,7 @@ alias Tuple!(string, string) StateType;
                 }catch(Exception ex){}
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1447,7 +1441,7 @@ alias Tuple!(string, string) StateType;
         alias parseSpaces ss;
         alias parseSpaces defaultSkip;
 
-        unittest{
+        debug(ctpg) unittest{
             static assert(is(parseSpaces!().ResultType));
             enum dg = {
                 foreach(conv; convs){
@@ -1456,7 +1450,7 @@ alias Tuple!(string, string) StateType;
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1486,7 +1480,7 @@ alias Tuple!(string, string) StateType;
             ) parseIdentChar;
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(parseIdent!().parse(makeInput(conv!"hoge"), new CallerInfo(0, "")) == makeParseResult(true, "hoge", makeInput(conv!"", 4)));
@@ -1496,7 +1490,7 @@ alias Tuple!(string, string) StateType;
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1550,7 +1544,7 @@ alias Tuple!(string, string) StateType;
 
         alias parseStringLiteral strLit_p;
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(parseStringLiteral!().parse(makeInput(conv!"\"表が怖い噂のソフト\""), new CallerInfo(0, "")) == makeParseResult(true, "\"表が怖い噂のソフト\"", makeInput(conv!"", 11), Error("Expected failure", 10)));
@@ -1559,7 +1553,7 @@ alias Tuple!(string, string) StateType;
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1588,7 +1582,7 @@ alias Tuple!(string, string) StateType;
 
         alias parseIntLiteral intLit_p;
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(parseIntLiteral!().parse(makeInput(conv!"3141"), new CallerInfo(0, "")) == makeParseResult(true, 3141, makeInput(conv!"", 4)));
@@ -1597,7 +1591,7 @@ alias Tuple!(string, string) StateType;
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1610,7 +1604,7 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(combinateSequence!(parseSpaces!(), getLine!()).parse(makeInput(conv!"\n\n"), new CallerInfo(0, "")) == makeParseResult(true, cast(size_t)3, makeInput(conv!"", 2, 3)));
@@ -1622,7 +1616,7 @@ alias Tuple!(string, string) StateType;
                 }catch(Exception ex){}
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1634,14 +1628,14 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(getCallerLine!().parse(makeInput(conv!""), new CallerInfo(__LINE__, "")) == makeParseResult(true, cast(size_t)__LINE__, makeInput(conv!"", 0)));
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1653,14 +1647,14 @@ alias Tuple!(string, string) StateType;
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 foreach(conv; convs){
                     assert(getCallerFile!().parse(makeInput(conv!""), new CallerInfo(0, __FILE__)) == makeParseResult(true, __FILE__, makeInput(conv!"", 0)));
                 }
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1706,14 +1700,14 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(arch!("(", ")").parse(makeInput("(a(i(u)e)o())"), new CallerInfo(0, "")) == makeParseResult(true, "(a(i(u)e)o())", makeInput("", 13), Error("Expected failure", 12)));
                 assert(arch!("[", "]").parse(makeInput("[a[i[u]e]o[]]"), new CallerInfo(0, "")) == makeParseResult(true, "[a[i[u]e]o[]]", makeInput("", 13), Error("Expected failure", 12)));
                 assert(arch!("{", "}").parse(makeInput("{a{i{u}e}o{}}"), new CallerInfo(0, "")) == makeParseResult(true, "{a{i{u}e}o{}}", makeInput("", 13), Error("Expected failure", 12)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1736,7 +1730,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(func!().parse(makeInput(
                     "(int num, string code){"
@@ -1769,7 +1763,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                 );
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1798,14 +1792,14 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(id!().parse(makeInput("A"), new CallerInfo(0, "")) == makeParseResult(true, "A", makeInput("", 1)));
                 assert(id!().parse(makeInput("int"), new CallerInfo(0, "")) == makeParseResult(true, "int", makeInput("", 3)));
                 assert(id!().parse(makeInput("0"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'_' expected but '0' found", 0)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1826,13 +1820,13 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(nonterminal!().parse(makeInput("A"), new CallerInfo(__LINE__, "")) == makeParseResult(true, " #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(A!())", makeInput("", 1)));
                 assert(nonterminal!().parse(makeInput("int"), new CallerInfo(__LINE__, "")) == makeParseResult(true, " #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(int!())", makeInput("", 3)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1866,14 +1860,14 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(typeName!().parse(makeInput("int"), new CallerInfo(0, "")) == makeParseResult(true, "int", makeInput("", 3)));
                 assert(typeName!().parse(makeInput("Tuple!(string, int)"), new CallerInfo(0, "")) == makeParseResult(true, "Tuple!(string, int)", makeInput("", 19)));
                 assert(typeName!().parse(makeInput("int[]"), new CallerInfo(0, "")) == makeParseResult(true, "int[]", makeInput("", 5)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1890,13 +1884,13 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(eofLit!().parse(makeInput("$"), new CallerInfo(0, "")) == makeParseResult(true, "parseEOF!()", makeInput("", 1)));
                 assert(eofLit!().parse(makeInput("#"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'$' expected but '#' found", 0)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -1964,13 +1958,13 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(rangeLit!().parse(makeInput("[a-z]"), new CallerInfo(0, "")) == makeParseResult(true, "parseCharRange!('a','z')", makeInput("", 5), Error("Expected failure", 4)));
                 assert(rangeLit!().parse(makeInput("[a-zA-Z_]"), new CallerInfo(0, "")) == makeParseResult(true, "combinateChoice!(parseCharRange!('a','z'),parseCharRange!('A','Z'),parseString!\"_\"" ")", makeInput("", 9), Error("Expected failure", 8)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -2003,13 +1997,13 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(stringLit!().parse(makeInput("\"hello\nworld\" "), new CallerInfo(0, "")) == makeParseResult(true, "parseString!\"hello\nworld\"", makeInput(" ", 13, 2), Error("Expected failure", 12, 2)));
                 assert(stringLit!().parse(makeInput("aa\""), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'\"' expected but 'a' found", 0)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -2030,7 +2024,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(literal!().parse(makeInput("\"hello\nworld\""), new CallerInfo(0, "")) == makeParseResult(true, "combinateMemoize!(parseString!\"hello\nworld\")", makeInput("", 13, 2), Error("Expected failure", 12, 2)));
                 assert(literal!().parse(makeInput("[a-z]"), new CallerInfo(0, "")) == makeParseResult(true, "combinateMemoize!(parseCharRange!('a','z'))", makeInput("", 5), Error("Expected failure", 4)));
@@ -2039,7 +2033,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                 assert(literal!().parse(makeInput("表が怖い噂のソフト"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'$' expected but '表' found", 0)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -2065,7 +2059,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(primaryExp!().parse(makeInput("(&(^$)?)"), new CallerInfo(0, "")) == makeParseResult(true, "combinateOption!(combinateAndPred!(combinateNotPred!(combinateMemoize!(parseEOF!()))))", makeInput("", 8), Error("'(' expected but ')' found", 7)));
                 assert(primaryExp!().parse(makeInput("int"), new CallerInfo(__LINE__, "")) == makeParseResult(true, " #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(int!())", makeInput("", 3)));
@@ -2073,7 +2067,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                 assert(primaryExp!().parse(makeInput("(&(^$)?"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("')' expected but EOF found", 7)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -2111,13 +2105,13 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(preExp!().parse(makeInput("!$"), new CallerInfo(0, "")) == makeParseResult(true, "combinateNone!(combinateMemoize!(parseEOF!()))", makeInput("", 2)));
                 assert(preExp!().parse(makeInput("!!$"), new CallerInfo(0, "")) == makeParseResult(true, "combinateChangeState!(combinateMemoize!(parseEOF!()))", makeInput("", 3)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -2173,12 +2167,12 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(postExp!().parse(makeInput("!$*"), new CallerInfo(0, "")) == makeParseResult(true, "combinateMore0!(combinateNone!(combinateMemoize!(parseEOF!())))", makeInput("", 3)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -2201,12 +2195,12 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(optionExp!().parse(makeInput("(&(^\"hello\"))?"), new CallerInfo(0, "")) == makeParseResult(true, "combinateOption!(combinateAndPred!(combinateNotPred!(combinateMemoize!(parseString!\"hello\"))))", makeInput("", 14)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -2224,14 +2218,14 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(seqExp!().parse(makeInput("!$* (&(^$))?"), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateMore0!(combinateNone!(combinateMemoize!(parseEOF!()))),combinateOption!(combinateAndPred!(combinateNotPred!(combinateMemoize!(parseEOF!())))))", makeInput("", 12), Error("'(' expected but EOF found", 12)));
                 assert(seqExp!().parse(makeInput("!\"hello\" $"), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateNone!(combinateMemoize!(parseString!\"hello\")),combinateMemoize!(parseEOF!()))", makeInput("", 10), Error("'(' expected but EOF found", 10)));
                 assert(seqExp!().parse(makeInput("!$* (&(^$)?"), new CallerInfo(0, "")) == makeParseResult(true, "combinateMore0!(combinateNone!(combinateMemoize!(parseEOF!())))", makeInput("(&(^$)?", 4), Error("')' expected but EOF found", 11)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -2283,7 +2277,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(convExp!().parse(makeInput(q{!"hello" $ >> {return false;}}), new CallerInfo(__LINE__, `src\ctpg.d`)) == makeParseResult(true, "combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateSequence!(combinateNone!(combinateMemoize!(parseString!\"hello\")),combinateMemoize!(parseEOF!())),#line " ~ toStringNow!__LINE__ ~ "\nfunction(){return false;})", makeInput("", 29), Error("'(' expected but '>' found", 11)));
                 assert(convExp!().parse(makeInput(q{"hello" >> flat >> to!int}), new CallerInfo(__LINE__, `src/ctpg.d`)) == makeParseResult(true, "combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateMemoize!(parseString!\"hello\"),#line " ~ toStringNow!__LINE__ ~ "\nflat),#line " ~ toStringNow!__LINE__ ~ "\nto!int)", makeInput("", 25), Error("'(' expected but '>' found", 8)));
@@ -2291,7 +2285,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                 assert(convExp!().parse(makeInput(q{!"hello" $ > {return false;}}), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateNone!(combinateMemoize!(parseString!\"hello\")),combinateMemoize!(parseEOF!()))", makeInput("> {return false;}", 11), Error("'(' expected but '>' found", 11)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -2321,13 +2315,13 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 assert(choiceExp!().parse(makeInput(`!$* / (&(^"a"))?`), new CallerInfo(__LINE__, `src\ctpg.d`)) == makeParseResult(true, "combinateChoice!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateMore0!(combinateNone!(combinateMemoize!(parseEOF!()))),combinateOption!(combinateAndPred!(combinateNotPred!(combinateMemoize!(parseString!\"a\")))))", makeInput("", 16), Error("'(' expected but '/' found", 4)));
                 assert(choiceExp!().parse(makeInput(`!"hello" $`, 0, 1, tuple("", "skip!()")), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),skip!())),combinateSkip!(combinateMemoize!(parseEOF!()),skip!()))", makeInput("", 10, 1, tuple("", "skip!()")), Error("'(' expected but EOF found", 10)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         }
 
@@ -2387,7 +2381,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 cast(void)__LINE__;
                 assert(def!().parse(makeInput(`@skip(" ") bool hoge = !"hello" $ >> {return false;};`), new CallerInfo(__LINE__, `src/ctpg.d`)) == makeParseResult(true, "template hoge(){#line " ~ toStringNow!__LINE__~ "\nalias bool ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),combinateMemoize!(parseString!\" \"))),combinateSkip!(combinateMemoize!(parseEOF!()),combinateMemoize!(parseString!\" \"))),#line " ~ toStringNow!__LINE__ ~ "\nfunction(){return false;}).parse(input, info);}}", makeInput("", 53, 1, tuple("", "combinateMemoize!(parseString!\" \")")), Error("'(' expected but '>' found", 34)));
@@ -2396,7 +2390,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                 assert(def!().parse(makeInput("None recursive  \nA $;"), new CallerInfo(__LINE__, "")) == makeParseResult(false, "", makeInput(""), Error("'=' expected but 'A' found", 17, 2)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         };
 
@@ -2440,7 +2434,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
             }
         }
 
-        unittest{
+        debug(ctpg) unittest{
             enum dg = {
                 cast(void)__LINE__; 
                 assert(defs!().parse(makeInput(q{
@@ -2500,7 +2494,7 @@ auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__
                 makeInput("", 216, 5, tuple("combinateChoice!(" ~ toStringNow!(__LINE__ - 53) ~ ",`src\\ctpg.d`,combinateMemoize!(parseString!\" \"),combinateMemoize!(parseString!\"\\t\"),combinateMemoize!(parseString!\"\\n\"))", "combinateMemoize!(parseString!\" \")")), Error("'_' expected but EOF found", 216, 5)));
                 return true;
             };
-            debug(ctpg_compile_time) static assert(dg());
+            static assert(dg());
             dg();
         };
 
