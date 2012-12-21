@@ -95,7 +95,13 @@ version(unittest){
 }
 
 template isParser(alias parser){
-    enum isParser = true;
+    enum isParser = is(ParserType!parser) && __traits(compiles, parser.parse);
+}
+
+unittest{
+    static assert(isParser!(TestParser!int));
+    static assert(isParser!(TestParser!real));
+    static assert(isParser!(TestParser!(int function(int))));
 }
 
 template ParserType(alias parser){
@@ -1667,7 +1673,7 @@ string generateParsers(size_t callerLine = __LINE__, string callerFile = __FILE_
     }
 }
 
-auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range input, StateType state = StateType.init) if(isParser!fun){
+auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range input, StateType state = StateType.init) if(isParser!(fun!())){
     return fun!().parse(Input!Range(input, 0, 1, state), new CallerInfo(callerLine, callerFile));
 }
 
