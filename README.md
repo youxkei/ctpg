@@ -2,6 +2,7 @@
 https://github.com/youkei/ctpg/wiki
 
 # History
+- 1.2.0: Add SExp example (Thanks to @gcfutsuki !!)
 - 1.1.4: Refactor unittests
 - 1.1.3: Remove module declaration
 - 1.1.2: Fix @default_skip bug
