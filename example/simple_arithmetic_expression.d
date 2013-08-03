@@ -14,13 +14,16 @@ mixin(genParsers(
 q{
     @_setSkip(skip)
 
+    // root parser
     int root = addExp $;
 
+    // addition and subtraction
     int addExp =
           mulExp !"+" addExp >> (lhs, rhs){ return lhs + rhs; }
         / mulExp !"-" addExp >> (lhs, rhs){ return lhs - rhs; }
         / mulExp;
 
+    // multiplication and division
     int mulExp =
           primary !"*" mulExp >> (lhs, rhs){ return lhs * rhs; }
         / primary !"/" mulExp >> (lhs, rhs){ return lhs / rhs; }

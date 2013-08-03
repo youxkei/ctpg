@@ -1565,7 +1565,7 @@ template combinateNone(alias parser)
             {
                 Result result;
 
-                with(parser.build!(kind, SrcType).parse(input, caller))
+                with(parser.build!(ParserKind!(false, kind.hasError), SrcType).parse(input, caller))
                 {
                     static if(kind.hasError)
                     {
@@ -4830,6 +4830,241 @@ template combinateMakeNode(alias parser, TokenType tokenType)
 }
 
 
+// 一行コメントを消費するパーサ
+template lineComment()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ None };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateNone!
+            (
+                combinateSequence!
+                (
+                    parseString!"//",
+                    combinateMore0!
+                    (
+                        combinateSequence!
+                        (
+                            combinateNotPred!
+                            (
+                                parseString!"\n"
+                            ),
+                            parseAnyChar!()
+                        )
+                    ),
+                    parseString!"\n"
+                )
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(lineComment!(), ParserKind!(true, true))("// comment\nnot comment"))
+        {
+            assert(match              == true);
+            assert(nextInput.source   == "not comment");
+        }
+
+        with(parse!(lineComment!(), ParserKind!(true, true))("// not terminated comment"))
+        {
+            assert(match          == false);
+            assert(error.position == 25);
+            assert(error.msg      == "'\n' expected");
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+// 普通のコメントを消費するパーサ
+template ordinaryComment()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ None };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateNone!
+            (
+                combinateSequence!
+                (
+                    parseString!"/*",
+                    combinateMore0!
+                    (
+                        combinateSequence!
+                        (
+                            combinateNotPred!
+                            (
+                                parseString!"*/"
+                            ),
+                            parseAnyChar!()
+                        )
+                    ),
+                    parseString!"*/"
+                )
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(ordinaryComment!(), ParserKind!(true, true))("/* comment */not comment"))
+        {
+            assert(match              == true);
+            assert(nextInput.source   == "not comment");
+        }
+
+        with(parse!(ordinaryComment!(), ParserKind!(true, true))("/* not terminated comment"))
+        {
+            assert(match          == false);
+            assert(error.position == 25);
+            assert(error.msg      == "'*/' expected");
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+// ネストされたコメントを消費するパーサ
+template nestedComment()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ None };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateNone!
+            (
+                combinateSequence!
+                (
+                    parseString!"/+",
+                    combinateMore0!
+                    (
+                        combinateChoice!
+                        (
+                            nestedComment!(),
+                            combinateSequence!
+                            (
+                                combinateNotPred!
+                                (
+                                    parseString!"+/"
+                                ),
+                                parseAnyChar!()
+                            )
+                        )
+                    ),
+                    parseString!"+/"
+                )
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(nestedComment!(), ParserKind!(true, true))("/+ comment +/not comment"))
+        {
+            assert(match              == true);
+            assert(nextInput.source   == "not comment");
+        }
+
+        with(parse!(nestedComment!(), ParserKind!(true, true))("/+ comment  /+ inner comment +/ comment +/not comment"))
+        {
+            assert(match              == true);
+            assert(nextInput.source   == "not comment");
+        }
+
+        with(parse!(nestedComment!(), ParserKind!(true, true))("/+ not terminated comment"))
+        {
+            assert(match          == false);
+            assert(error.position == 25);
+            assert(error.msg      == "'+/' expected");
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+// スキップされるべき空白を消費するパーサ
+template spaces()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ None };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateNone!
+            (
+                combinateMore0!
+                (
+                    combinateChoice!
+                    (
+                        parseString!" ",
+                        parseString!"\n",
+                        parseString!"\t",
+                        parseString!"\r",
+                        parseString!"\f",
+                        lineComment!(),
+                        ordinaryComment!(),
+                        nestedComment!()
+                    )
+                )
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(spaces!(), ParserKind!(true, true))("/* a */// b \nc"))
+        {
+            assert(match              == true);
+            assert(nextInput.source   == "c");
+        }
+
+        with(parse!(spaces!(), ParserKind!(true, true))("0/* a */// b \nc"))
+        {
+            assert(match              == true);
+            assert(nextInput.source   == "0/* a */// b \nc");
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
 template arch(string open, string close)
 {
     template build(alias kind, SrcType)
@@ -5558,9 +5793,9 @@ template primaryExp()
                         (
                             parseString!"("
                         ),
-                        parseSpaces!(),
+                        spaces!(),
                         choiceExp!(),
-                        parseSpaces!(),
+                        spaces!(),
                         combinateNone!
                         (
                             parseString!")"
@@ -5944,7 +6179,7 @@ template seqExp()
                 combinateMore1!
                 (
                     optionExp!(),
-                    parseSpaces!()
+                    spaces!()
                 ),
                 function(Node[] optionExps)
                 {
@@ -6021,7 +6256,7 @@ template convExp()
                         (
                             combinateSequence!
                             (
-                                parseSpaces!(),
+                                spaces!(),
                                 parseGetLine!(),
                                 parseGetCallerLine!(),
                                 parseGetCallerFile!(),
@@ -6030,7 +6265,7 @@ template convExp()
                                     parseString!">?",
                                     parseString!">>"
                                 ),
-                                parseSpaces!(),
+                                spaces!(),
                                 combinateChoice!
                                 (
                                     func!(),
@@ -6180,9 +6415,9 @@ template choiceExp()
                     convExp!(),
                     combinateSequence!
                     (
-                        parseSpaces!(),
+                        spaces!(),
                         parseString!"/",
-                        parseSpaces!()
+                        spaces!()
                     )
                 ),
                 function(Node[] convExps)
@@ -6271,28 +6506,28 @@ template def()
                                 (
                                     parseString!"@setSkip(",
                                 ),
-                                parseSpaces!(),
+                                spaces!(),
                                 choiceExp!(),
-                                parseSpaces!(),
+                                spaces!(),
                                 combinateNone!
                                 (
                                     parseString!")"
                                 ),
-                                parseSpaces!()
+                                spaces!()
                             )
                         )
                     ),
                     typeName!(),
-                    parseSpaces!(),
+                    spaces!(),
                     id!(),
-                    parseSpaces!(),
+                    spaces!(),
                     combinateNone!
                     (
                         parseString!"="
                     ),
-                    parseSpaces!(),
+                    spaces!(),
                     choiceExp!(),
-                    parseSpaces!(),
+                    spaces!(),
                     combinateNone!
                     (
                         parseString!";"
@@ -6395,9 +6630,9 @@ template defaultSkip()
                         (
                             parseString!"@_setSkip("
                         ),
-                        parseSpaces!(),
+                        spaces!(),
                         choiceExp!(),
-                        parseSpaces!(),
+                        spaces!(),
                         combinateNone!
                         (
                             parseString!")"
@@ -6433,7 +6668,7 @@ template defs()
                 (
                     combinateSequence!
                     (
-                        parseSpaces!(),
+                        spaces!(),
                         combinateMore0!
                         (
                             combinateChoice!
@@ -6441,9 +6676,9 @@ template defs()
                                 defaultSkip!(),
                                 def!()
                             ),
-                            parseSpaces!()
+                            spaces!()
                         ),
-                        parseSpaces!(),
+                        spaces!(),
                         parseEOF!()
                     )
                 ),
