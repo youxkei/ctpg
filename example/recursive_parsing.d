@@ -8,6 +8,7 @@ import ctpg;
 
 mixin (genParsers(
 q{
+    // root parser
     None recursive = A $;
 
     None A = !"a" !A !"a" / !"a";
