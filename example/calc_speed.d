@@ -1,9 +1,4 @@
-
 // Written in the D programming language.
-
-/**
- * Example of parsing simple arithmetic expession.
- */
 
 import ctpg;
 import std.array:    join;
@@ -11,8 +6,9 @@ import std.conv:     to;
 import std.stdio:    writeln;
 import std.datetime: Clock;
 
-mixin(generateParsers(q{
-    @default_skip(defaultSkip)
+mixin(genParsers(
+q{
+    @_setSkip(skip)
 
     int root = addExp $;
 
@@ -26,7 +22,7 @@ mixin(generateParsers(q{
         / primary !"/" mulExp >> (lhs, rhs){ return lhs / rhs; }
         / primary;
 
-    int primary = !"(" addExp !")" / [0-9]+ >> join >> to!int;
+    int primary = !"(" addExp !")" / [0-9]+ >> to!int;
 }));
 
 string[] generateExps(){

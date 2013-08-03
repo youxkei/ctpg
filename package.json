@@ -1,0 +1,9 @@
+{
+	"name": "ctpg",
+	"description": "Compile Time Parser Generator",
+	"homepage": "https://github.com/youkei/ctpg",
+    "license": "CC0",
+	"authors": [
+		"Hisayuki Mima"
+	]
+}
