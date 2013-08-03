@@ -6,14 +6,15 @@
 
 import ctpg;
 
-mixin(generateParsers(q{
+mixin (genParsers(
+q{
     None recursive = A $;
 
     None A = !"a" !A !"a" / !"a";
 }));
 
 void main(){
-    enum dg = {
+    static bool test(){
         assert( parse!recursive("a").match);
         assert( parse!recursive("aaa").match);
         assert(!parse!recursive("aaaaa").match);
@@ -23,8 +24,8 @@ void main(){
         assert(!parse!recursive("aaaaaaaaaaaaa").match);
         assert( parse!recursive("aaaaaaaaaaaaaaa").match);
         return true;
-    };
-    static assert(dg());
-    dg();
+    }
+    static assert(test());
+    test();
 }
 

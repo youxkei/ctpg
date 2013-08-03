@@ -1,2500 +1,6585 @@
-// Written in the D programming language.
-/++
-This module implements a compile time parser generator.
-+/
-/*          Copyright youkei 2010 - 2012.
- * Distributed under the Boost Software License, Version 1.0.
- *    (See accompanying file LICENSE_1_0.txt or copy at
- *          http://www.boost.org/LICENSE_1_0.txt)
- */
+import std.algorithm   : count;
+import std.array       : save, empty;
+import std.conv        : to, text;
+import std.range       : ElementEncodingType, isForwardRange, isRandomAccessRange, hasSlicing;
+import std.traits      : CommonType, EnumMembers, ReturnType, Unqual, isArray, isSomeChar, isSomeString;
+import std.typecons    : Tuple, tuple;
 
-import std.array:       save, empty, join, front;
-import std.conv:        to, text;
-import std.range:       isInputRange, isForwardRange, isRandomAccessRange, ElementType;
-import std.traits:      CommonType, isCallable, ReturnType, isSomeChar, isSomeString, Unqual, isAssignable, isArray;
-import std.typetuple:   staticMap, TypeTuple;
-import std.metastrings: toStringNow;
+debug = ctpg;
+debug = ctpgSuppressErrorMsg;
 
-public import std.typecons: Tuple, isTuple, tuple;
+debug(ctpg) version(unittest)
+{
+    import std.stdio     : writeln;
+    import std.typetuple : TypeTuple;
+    import std.exception : assertThrown;
 
-alias Tuple!() None;
-
-private:
-
-version(unittest) debug(ctpg){
-    import std.stdio: writeln;
-
-    void main(){
-        "unittest passed".writeln();
+    void main()
+    {
+        "pass".writeln();
     }
 
-    template TestParser(T){
-        alias T ResultType;
-        ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-            return typeof(return)();
+
+    template TestParser(alias value)
+    {
+        template build(alias kind, SrcType)
+        {
+            mixin MAKE_RESULT!q{ typeof(value) };
+
+            Result parse(Input!SrcType input, in Caller caller)
+            {
+                Result result;
+
+                result.match = true;
+                result.nextInput = input;
+
+                static if(kind.hasValue) result.value = value;
+
+                return result;
+            }
         }
     }
 
-    struct TestRange(T){
-        static assert(isForwardRange!(typeof(this)));
-        immutable(T)[] source;
 
-        const pure @safe nothrow @property
-        T front(){ return source[0]; }
+    auto rangize(T)(T source) if(isArray!T)
+    {
+        static struct Range
+        {
+            T source;
 
-        pure @safe nothrow @property
-        void popFront(){ source = source[1..$]; }
+            const pure @safe nothrow @property
+            Unqual!(ElementEncodingType!T) front(){ return source[0]; }
 
-        const pure @safe nothrow @property
-        bool empty(){ return source.length == 0; }
+            pure @safe nothrow @property
+            void popFront(){ source = source[1..$]; }
 
-        const pure @safe nothrow @property
-        typeof(this) save(){ return this; }
+            const pure @safe nothrow @property
+            bool empty(){ return source.length == 0; }
 
-        const pure @safe nothrow
-        bool opEquals(in TestRange rhs){
-            return source == rhs.source;
+            const pure @safe nothrow @property
+            Range save(){ return this; }
+
+            const pure @safe nothrow @property
+            size_t length(){ return source.length; }
+
+            pure @safe nothrow
+            Range opSlice(size_t begin, size_t end){ return Range(source[begin .. end]); }
+
+            const pure @safe nothrow
+            equals_t opEquals(Range rhs){ return source == rhs.source; }
+        }
+
+        return Range(source);
+    }
+
+
+    Input!SrcType inputize(SrcType)(SrcType source)
+    {
+        return typeof(return)(source);
+    }
+
+
+    template toString(alias input) {     enum toString     = cast(string)input; }
+    template toWstring(alias input) {    enum toWstring    = cast(wstring)input; }
+    template toDstring(alias input) {    enum toDstring    = cast(dstring)input; }
+    template toCharRange(alias input) {  enum toCharRange  = (cast(string)input).rangize(); }
+    template toWcharRange(alias input) { enum toWcharRange = (cast(wstring)input).rangize(); }
+    template toDcharRange(alias input) { enum toDcharRange = (cast(dstring)input).rangize(); }
+
+    alias convs = TypeTuple!(toString, toWstring, toDstring, toCharRange, toWcharRange, toDcharRange);
+
+
+    alias ParserKinds = TypeTuple!(ParserKind!(true, true), ParserKind!(true, false), ParserKind!(false, true), ParserKind!(false, false));
+
+
+    template root()
+    {
+        template build(alias kind, SrcType)
+        {
+            ParseResult!(kind, SrcType) parse(Input!SrcType input, in Caller caller)
+            {
+                return combinateChoice!
+                (
+                    combinateSequence!
+                    (
+                        parseString!"a",
+                        root!(),
+                        parseString!"a"
+                    ),
+                    parseString!"a"
+                ).build!(kind, SrcType).parse(input, caller);
+            }
         }
     }
+}
 
-    TestRange!(T) testRange(T)(immutable(T)[] source){
-        return TestRange!T(source);
-    }
 
-    alias convs = TypeTuple!(noChange, toWstring, toDstring, toCharTestRange, toWcharTestRange, toDcharTestRange);
-
-    template noChange(alias input){
-        enum noChange = input;
-    }
-
-    template toWstring(alias input){
-        enum toWstring = cast(wstring)input;
-    }
-
-    template toDstring(alias input){
-        enum toDstring = cast(dstring)input;
-    }
-
-    template toCharTestRange(alias input){
-        enum toCharTestRange = input.TestRange!char();
-    }
-
-    template toWcharTestRange(alias input){
-        enum toWcharTestRange = input.TestRange!wchar();
-    }
-
-    template toDcharTestRange(alias input){
-        enum toDcharTestRange = input.TestRange!dchar();
+class UnsupportedInputTypeException: Exception
+{
+    this(string msg)
+    {
+        super(msg);
     }
 }
 
-template isParser(alias parser){
-    enum isParser = is(ParserType!parser) && __traits(compiles, parser.parse);
+
+template ParserKind(bool hasValue_, bool hasError_)
+{
+    enum hasValue = hasValue_;
+    enum hasError = hasError_;
 }
 
-debug(ctpg) unittest{
-    static assert(isParser!(TestParser!int));
-    static assert(isParser!(TestParser!real));
-    static assert(isParser!(TestParser!(int function(int))));
+
+mixin template MAKE_RESULT(string MixiningType)
+{
+    static if(kind.hasValue)
+    {
+        mixin("alias Result = ParseResult!(kind, SrcType, " ~ MixiningType ~ ");");
+    }
+    else
+    {
+        alias Result = ParseResult!(kind, SrcType);
+    }
 }
 
-template ParserType(alias parser){
-    static if(is(parser.ResultType)){
-        alias parser.ResultType ParserType;
-    }else{
+
+alias Caller = Tuple!(size_t, "line", string, "file");
+
+
+alias None = Tuple!();
+
+
+struct Error
+{
+    string msg;
+    size_t position; 
+}
+
+
+struct Input(SrcType)
+{
+    SrcType source;
+    size_t position;
+    size_t line;
+
+    @property
+    Input save()
+    {
+        return Input(source.save, position, line);
+    }
+}
+
+
+struct ParseResult(alias kind, SrcType, T = void)
+{
+    static if(kind.hasValue) static assert(!is(T == void));
+    else                     static assert( is(T == void));
+
+    bool match;
+    Input!SrcType nextInput;
+
+    static if(kind.hasValue) T value;
+    static if(kind.hasError) Error error;
+}
+
+
+struct Option(T)
+{
+    bool some;
+    T value;
+    alias value this;
+}
+
+
+template getParseResultType(alias parser)
+{
+    static if(is(ReturnType!(parser.parse) == ParseResult!(kind, SrcType, T), SrcType, alias kind, T))
+    {
+        alias getParseResultType = T;
+    }
+}
+
+
+template success()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ None };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            Result result;
+
+            result.match = true;
+            result.nextInput = input;
+
+            return result;
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(success!(), kind)(conv!"hoge"))
+            {
+                assert(match              == true);
+                assert(nextInput.source   == conv!"hoge");
+                assert(nextInput.position == 0);
+                assert(nextInput.line     == 0);
+            }
+
+            with(parse!(success!(), kind)(conv!""))
+            {
+                assert(match              == true);
+                assert(nextInput.source   == conv!"");
+                assert(nextInput.position == 0);
+                assert(nextInput.line     == 0);
+            }
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template parseEOF()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ None };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            Result result;
+
+            if(input.source.empty)
+            {
+                result.match     = true;
+                result.nextInput = input;
+            }
+            else
+            {
+                static if(kind.hasError)
+                {
+                    result.error.msg      = "EOF expected";
+                    result.error.position = input.position;
+                }
+            }
+
+            return result;
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(parseString!"hoge", kind)(conv!"hogehoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == "hoge");
+                                         assert(nextInput.source   == conv!"hoge");
+                                         assert(nextInput.position == 4);
+                                         assert(nextInput.line     == 0);
+            }
+
+            with(parse!(parseString!"\n\nhoge", kind)(conv!"\n\nhogehoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == "\n\nhoge");
+                                         assert(nextInput.source   == conv!"hoge");
+                                         assert(nextInput.position == 6);
+                                         assert(nextInput.line     == 2);
+            }
+
+            with(parse!(parseString!"hoge", kind)(conv!"fuga"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'hoge' expected");
+                static if(kind.hasError) assert(error.position == 0);
+            }
+
+            assertThrown!UnsupportedInputTypeException(parse!(parseString!"hoge", kind)([0, 1]));
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template parseString(alias string str)
+{
+    template build(alias kind, SrcType)
+    {
+        static if(is(Unqual!(ElementEncodingType!SrcType) ==  char)) enum adaptedStr =              str;
+        static if(is(Unqual!(ElementEncodingType!SrcType) == wchar)) enum adaptedStr = cast(wstring)str;
+        static if(is(Unqual!(ElementEncodingType!SrcType) == dchar)) enum adaptedStr = cast(dstring)str;
+
+        enum lines = str.count('\n');
+        enum errorMsg = "'" ~ str ~ "' expected";
+
+        mixin MAKE_RESULT!q{ string };
+
+        static if(isSomeString!SrcType)
+        {
+            Result parse(Input!SrcType input, in Caller caller)
+            {
+                Result result;
+
+                if(input.source.length >= adaptedStr.length && input.source[0..adaptedStr.length] == adaptedStr)
+                {
+                    result.match              = true;
+                    result.nextInput.source   = input.source[str.length..$];
+                    result.nextInput.position = input.position + adaptedStr.length;
+                    result.nextInput.line     = input.line + lines;
+
+                    static if(kind.hasValue)
+                    {
+                        result.value = str;
+                    }
+                }
+                else
+                {
+                    static if(kind.hasError)
+                    {
+                        result.error.msg      = errorMsg;
+                        result.error.position = input.position;
+                    }
+                }
+
+                return result;
+            }
+        }
+        else static if(isSomeChar!(ElementEncodingType!SrcType))
+        {
+            Result parse(Input!SrcType input, in Caller caller)
+            {
+                Result result;
+
+                foreach(c; adaptedStr)
+                {
+                    if(input.source.empty || c != input.source.front)
+                    {
+                        static if(kind.hasError)
+                        {
+                            result.error.msg      = errorMsg;
+                            result.error.position = input.position;
+                        }
+
+                        return result;
+                    }
+                    else
+                    {
+                        input.source.popFront();
+                    }
+                }
+
+                result.match              = true;
+                result.nextInput.source   = input.source;
+                result.nextInput.position = input.position + adaptedStr.length;
+                result.nextInput.line     = input.line + lines;
+
+                static if(kind.hasValue)
+                {
+                    result.value = str;
+                }
+
+                return result;
+            }
+        }
+        else
+        {
+            Result parse(Input!SrcType input, in Caller caller)
+            {
+                throw new UnsupportedInputTypeException("Input should be some string or a range whose elemement type is some char");
+            }
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(parseString!"hoge", kind)(conv!"hogehoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == "hoge");
+                                         assert(nextInput.source   == conv!"hoge");
+                                         assert(nextInput.position == 4);
+                                         assert(nextInput.line     == 0);
+            }
+
+            with(parse!(parseString!"\n\nhoge", kind)(conv!"\n\nhogehoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == "\n\nhoge");
+                                         assert(nextInput.source   == conv!"hoge");
+                                         assert(nextInput.position == 6);
+                                         assert(nextInput.line     == 2);
+            }
+
+            with(parse!(parseString!"hoge", kind)(conv!"fuga"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'hoge' expected");
+                static if(kind.hasError) assert(error.position == 0);
+            }
+
+            assertThrown!UnsupportedInputTypeException(parse!(parseString!"hoge", kind)([0, 1]));
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template parseCharRange(dchar begin, dchar end, size_t line = 0, string file = "")
+{
+    static if(begin > end)
+    {
+        debug(ctpgSuppressErrorMsg) {} else pragma(msg, file ~ "(" ~ line.to!string() ~ "): Error: Invalid char range");
         static assert(false);
     }
-}
 
-debug(ctpg) unittest{
-    static assert(is(ParserType!(TestParser!string) == string));
-    static assert(is(ParserType!(TestParser!int) == int));
-    static assert(is(ParserType!(TestParser!long) == long));
-}
-
-template isCharRange(R){
-    enum isCharRange = isInputRange!R && isSomeChar!(ElementType!R);
-}
-
-debug(ctpg) unittest{
-    static assert(isCharRange!(TestRange! char));
-    static assert(isCharRange!(TestRange!wchar));
-    static assert(isCharRange!(TestRange!dchar));
-    static assert(!isCharRange!int);
-}
-
-public:
-
-final class CallerInfo{
-    this(size_t line, string file){
-        _line = line;
-        _file = file;
-    }
-
-    pure @safe nothrow const @property
-    size_t line(){
-        return _line;
-    }
-
-    pure @safe nothrow const @property
-    string file(){
-        return _file;
-    }
-
-    private{
-        size_t _line;
-        string _file;
-    }
-}
-
-// struct Option
-    struct Option(T){
-        bool some;
-        T value;
-
-        alias value this;
-    }
-
-    Option!T makeOption(T)(bool some, T value){
-        return Option!T(some, value);
-    }
-
-alias Tuple!(string, string) StateType;
-
-// struct Input
-    struct Input(Range){
-        Range source;
-        size_t position;
-        size_t line = 1;
-        StateType state;
-
-        debug(ctpg) unittest{
-            static assert(isForwardRange!Range);
-        }
-
-        @property
-        Input save(){
-            return Input(source.save, position, line, state);
-        }
-
-        @property
-        bool empty(){
-            return source.empty;
-        }
-
-        equals_t opEquals(Input rhs){
-            return source == rhs.source && position == rhs.position && line == rhs.line && state == rhs.state;
-        }
-    }
-
-    Input!Range makeInput(Range)(Range source, size_t position = 0, size_t line = 1, StateType state = StateType.init){
-        return Input!Range(source, position, line, state);
-    }
-
-// struct ParseResult
-    struct ParseResult(Range, T){
-        bool match;
-        T value;
-        Input!Range next;
-        Error error;
-
-        void opAssign(U)(ParseResult!(Range, U) rhs)if(isAssignable!(T, U)){
-            match = rhs.match;
-            value = rhs.value;
-            next = rhs.next;
-            error = rhs.error;
-        }
-
-        equals_t opEquals(ParseResult lhs){
-            return match == lhs.match && value == lhs.value && next == lhs.next && error == lhs.error;
-        }
-    }
-
-    ParseResult!(Range, T) makeParseResult(Range, T)(bool match, T value, Input!Range next, Error error = Error.init){
-        return ParseResult!(Range, T)(match, value, next, error);
-    }
-
-// struct Error
-    struct Error{
-        string msg;
-        size_t position;
-        size_t line = 1;
-
-        pure @safe nothrow const
-        bool opEquals(in Error rhs){
-            return msg == rhs.msg && position == rhs.position && line == rhs.line;
-        }
-    }
-
-// function flat
-    string flat(Arg)(Arg arg){
-        static if(is(Arg == Tuple!(string, string[]))){
-            string result = arg[0];
-            foreach(elem; arg[1]){
-                result ~= elem;
-            }
-            return result;
-        }else{
-            string result;
-            static if(isTuple!Arg || isArray!Arg){
-                if(arg.length){
-                    foreach(elem; arg){
-                        result ~= flat(elem);
-                    }
-                }
-            }else{
-                result = arg.to!string();
-            }
-            return result;
-        }
-    }
-
-    debug(ctpg) unittest{
-        enum dg = {
-            assert(flat(tuple(1, "hello", tuple(2, "world"))) == "1hello2world");
-            assert(flat(tuple([0, 1, 2], "hello", tuple([3, 4, 5], ["wor", "ld!!"]), ["!", "!"])) == "012hello345world!!!!");
-            assert(flat(tuple('表', 'が', '怖', 'い', '噂', 'の', 'ソ', 'フ', 'ト')) == "表が怖い噂のソフト");
-            assert(flat(tuple("A", [""][0..0])) == "A");
-            return true;
-        };
-        static assert(dg());
-        dg();
-    }
-
-// parsers
-    // success
-        template success(){
-            alias None ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                return makeParseResult(true, None.init, input, Error.init);
-            }
-        }
-
-    // failure
-        template failure(string msg){
-            alias None ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                return makeParseResult(false, None.init, Input!R.init, Error(msg, input.position, input.line));
-            }
-        }
-
-    // parseCharRange
-        dchar decode(R)(auto ref R input, auto ref size_t advance){
+    template build(alias kind, SrcType)
+    {
+        dchar decode(ref SrcType input, ref size_t advance)
+        {
             dchar result;
-            static if(isArray!R || isRandomAccessRange!R){
-                static if(is(Unqual!(typeof(input[0])) == char)){
-                    if(!(input[0] & 0b_1000_0000)){
-                        result = input[0];
+
+            static if(isArray!SrcType || isRandomAccessRange!SrcType)
+            {
+                static if(is(Unqual!(ElementEncodingType!SrcType) == char))
+                {
+                    if(!(input[0] & 0b_1000_0000))
+                    {
+                        result  = input[0];
+                        input   = input[1..$];
                         advance = 1;
-                    }else if(!(input[0] & 0b_0010_0000)){
-                        result = ((input[0] & 0b_0001_1111) << 6) | (input[1] & 0b_0011_1111);
+                    }
+                    else if(!(input[0] & 0b_0010_0000))
+                    {
+                        result  = ((input[0] & 0b_0001_1111) << 6) | (input[1] & 0b_0011_1111);
+                        input   = input[2..$];
                         advance = 2;
-                    }else if(!(input[0] & 0b_0001_0000)){
-                        result = ((input[0] & 0b_0000_1111) << 12) | ((input[1] & 0b_0011_1111) << 6) | (input[2] & 0b_0011_1111);
+                    }
+                    else if(!(input[0] & 0b_0001_0000))
+                    {
+                        result  = ((input[0] & 0b_0000_1111) << 12) | ((input[1] & 0b_0011_1111) << 6) | (input[2] & 0b_0011_1111);
+                        input   = input[3..$];
                         advance = 3;
-                    }else{
-                        result = ((input[0] & 0b_0000_0111) << 18) | ((input[1] & 0b_0011_1111) << 12) | ((input[2] & 0b_0011_1111) << 6) | (input[3] & 0b_0011_1111);
+                    }
+                    else
+                    {
+                        result  = ((input[0] & 0b_0000_0111) << 18) | ((input[1] & 0b_0011_1111) << 12) | ((input[2] & 0b_0011_1111) << 6) | (input[3] & 0b_0011_1111);
+                        input   = input[4..$];
                         advance = 4;
                     }
-                }else static if(is(Unqual!(typeof(input[0])) == wchar)){
-                    if(input[0] <= 0xD7FF || (0xE000 <= input[0] && input[0] < 0xFFFF)){
-                        result = input[0];
+                }
+                else static if(is(Unqual!(ElementEncodingType!SrcType) == wchar))
+                {
+                    if(input[0] <= 0xD7FF || (0xE000 <= input[0] && input[0] < 0xFFFF))
+                    {
+                        result  = input[0];
+                        input   = input[1..$];
                         advance = 1;
-                    }else{
-                        result = (input[0] & 0b_0000_0011_1111_1111) * 0x400 + (input[1] & 0b_0000_0011_1111_1111) + 0x10000;
+                    }
+                    else
+                    {
+                        result  = (input[0] & 0b_0000_0011_1111_1111) * 0x400 + (input[1] & 0b_0000_0011_1111_1111) + 0x10000;
+                        input   = input[2..$];
                         advance = 2;
                     }
-                }else static if(is(Unqual!(typeof(input[0])) == dchar)){
-                    result = input[0];
-                    advance = 1;
-                }else{
-                    static assert(false);
                 }
-            }else static if(isInputRange!R){
-                static if(is(Unqual!(ElementType!R) == char)){
-                    if(!(input.front & 0b_1000_0000)){
+                else static if(is(Unqual!(ElementEncodingType!SrcType) == dchar))
+                {
+                    result  = input[0];
+                    input   = input[1..$];
+                    advance = 1;
+                }
+            }
+            else
+            {
+                static if(is(Unqual!(ElementEncodingType!SrcType) == char))
+                {
+                    if(!(input.front & 0b_1000_0000))
+                    {
                         result = input.front;
-                        input.popFront;
+                        input.popFront();
                         advance = 1;
-                    }else if(!(input.front & 0b_0010_0000)){
+                    }
+                    else if(!(input.front & 0b_0010_0000))
+                    {
                         result = input.front & 0b_0001_1111;
                         result <<= 6;
-                        input.popFront;
+                        input.popFront();
                         result |= input.front & 0b_0011_1111;
-                        input.popFront;
+                        input.popFront();
                         advance = 2;
-                    }else if(!(input.front & 0b_0001_0000)){
+                    }
+                    else if(!(input.front & 0b_0001_0000))
+                    {
                         result = input.front & 0b_0000_1111;
                         result <<= 6;
-                        input.popFront;
+                        input.popFront();
                         result |= input.front & 0b_0011_1111;
                         result <<= 6;
-                        input.popFront;
+                        input.popFront();
                         result |= input.front & 0b_0011_1111;
                         input.popFront;
                         advance = 3;
-                    }else{
+                    }
+                    else
+                    {
                         result = input.front & 0b_0000_0111;
                         result <<= 6;
-                        input.popFront;
+                        input.popFront();
                         result |= input.front & 0b_0011_1111;
                         result <<= 6;
-                        input.popFront;
+                        input.popFront();
                         result |= input.front & 0b_0011_1111;
                         result <<= 6;
-                        input.popFront;
+                        input.popFront();
                         result |= input.front & 0b_0011_1111;
-                        input.popFront;
+                        input.popFront();
                         advance = 4;
                     }
-                }else static if(is(Unqual!(ElementType!R) == wchar)){
-                    if(input.front <= 0xD7FF || (0xE000 <= input.front && input.front < 0xFFFF)){
+                }
+                else static if(is(Unqual!(ElementEncodingType!SrcType) == wchar))
+                {
+                    if(input.front <= 0xD7FF || (0xE000 <= input.front && input.front < 0xFFFF))
+                    {
                         result = input.front;
-                        input.popFront;
+                        input.popFront();
                         advance = 1;
-                    }else{
+                    }
+                    else
+                    {
                         result = (input.front & 0b_0000_0011_1111_1111) * 0x400;
-                        input.popFront;
+                        input.popFront();
                         result += (input.front & 0b_0000_0011_1111_1111) + 0x10000;
-                        input.popFront;
+                        input.popFront();
                         advance = 2;
                     }
-                }else static if(is(Unqual!(ElementType!R) == dchar)){
-                    result = input.front;
-                    input.popFront;
-                    advance = 1;
-                }else{
-                    static assert(false);
                 }
-            }else{
-                static assert(false);
+                else static if(is(Unqual!(ElementEncodingType!SrcType) == dchar))
+                {
+                    result = input.front;
+                    input.popFront();
+                    advance = 1;
+                }
             }
+
             return result;
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(decode("\u0001", 0) == '\u0001');
-                assert(decode("\u0081", 0) == '\u0081');
-                assert(decode("\u0801", 0) == '\u0801');
-                assert(decode("\U00012345", 0) == '\U00012345');
-                assert(decode("\u0001"w, 0) == '\u0001');
-                assert(decode("\uE001"w, 0) == '\uE001');
-                assert(decode("\U00012345"w, 0) == '\U00012345');
-                assert(decode("\U0010FFFE", 0) == '\U0010FFFE');
-
-                assert(decode(testRange("\u0001"), 0) == '\u0001');
-                assert(decode(testRange("\u0081"), 0) == '\u0081');
-                assert(decode(testRange("\u0801"), 0) == '\u0801');
-                assert(decode(testRange("\U00012345"), 0) == '\U00012345');
-                assert(decode(testRange("\u0001"w), 0) == '\u0001');
-                assert(decode(testRange("\uE001"w), 0) == '\uE001');
-                assert(decode(testRange("\U00012345"w), 0) == '\U00012345');
-                assert(decode(testRange("\U0010FFFE"), 0) == '\U0010FFFE');
-                return true;
-            };
-            static assert(dg());
-            dg();
+        static if(begin == dchar.min && end == dchar.max)
+        {
+            enum errorMsg = "any char expected";
+        }
+        else
+        {
+            enum errorMsg = "'" ~ begin.to!string() ~ " ~ " ~ end.to!string() ~ "' expected";
         }
 
-        template parseCharRange(dchar low, dchar high){
-            static assert(low <= high);
+        mixin MAKE_RESULT!q{ dchar };
 
-            alias string ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                typeof(return) result;
-                static if(isSomeString!R){
-                    if(input.source.length){
-                        size_t idx;
-                        dchar c = decode(input.source, idx);
-                        if(low <= c && c <= high){
+        static if(isSomeChar!(ElementEncodingType!SrcType))
+        {
+            Result parse(Input!SrcType input, in Caller caller)
+            {
+                Result result;
+
+                if(input.source.empty)
+                {
+                    static if(kind.hasError)
+                    {
+                        result.error.msg      = errorMsg;
+                        result.error.position = input.position;
+                    }
+                }
+                else
+                {
+                    size_t advance;
+                    dchar c = decode(input.source, advance);
+
+                    if(begin <= c && c <= end)
+                    {
+                        result.match              = true;
+                        result.nextInput.source   = input.source;
+                        result.nextInput.position = input.position + advance;
+                        result.nextInput.line     = input.line + (c == '\n' ? 1 : 0);
+
+                        static if(kind.hasValue)
+                        {
+                            result.value = c;
+                        }
+                    }
+                    else
+                    {
+                        static if(kind.hasError)
+                        {
+                            result.error.msg      = errorMsg;
+                            result.error.position = input.position;
+                        }
+                    }
+                }
+
+                return result;
+            }
+        }
+        else
+        {
+            Result parse(Input!SrcType input, in Caller caller)
+            {
+                throw new UnsupportedInputTypeException("Input should be some string or a range whose elemement type is some char");
+            }
+        }
+    }
+}
+
+template parseAnyChar(size_t line = 0, string file = "")
+{
+    alias parseAnyChar = parseCharRange!(dchar.min, dchar.max, line, file);
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(parseCharRange!('a', 'z'), kind)(conv!"hoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == 'h');
+                                         assert(nextInput.source   == conv!"oge");
+                                         assert(nextInput.position == 1);
+                                         assert(nextInput.line     == 0);
+            }
+
+            with(parse!(parseCharRange!(dchar.min, dchar.max), kind)(conv!"\nhoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == '\n');
+                                         assert(nextInput.source   == conv!"hoge");
+                                         assert(nextInput.position == 1);
+                                         assert(nextInput.line     == 1);
+            }
+
+            with(parse!(parseCharRange!('a', 'z'), kind)(conv!""))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'a ~ z' expected");
+                static if(kind.hasError) assert(error.position == 0);
+            }
+
+            with(parse!(parseCharRange!('a', 'z'), kind)(conv!"鬱"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'a ~ z' expected");
+                static if(kind.hasError) assert(error.position == 0);
+            }
+
+            assertThrown!UnsupportedInputTypeException(parse!(parseCharRange!('a', 'z'), kind)([1, 0]));
+
+            static assert(!__traits(compiles, parse!(parseCharRange!('z', 'a'), kind)(conv!"")));
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template parseSpaces()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ None };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateNone!
+            (
+                combinateMore0!
+                (
+                    combinateChoice!
+                    (
+                        parseString!" ",
+                        parseString!"\n",
+                        parseString!"\t",
+                        parseString!"\r",
+                        parseString!"\f"
+                    )
+                )
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+alias skip = parseSpaces;
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template parseGetLine()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ size_t };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            Result result;
+
+            result.match = true;
+            result.nextInput = input;
+
+            static if(kind.hasValue)
+            {
+                result.value = input.line;
+            }
+
+            return result;
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(parseGetLine!(), kind)(conv!""))
+            {
+                                         assert(match              == true);
+                                         assert(nextInput.source   == conv!"");
+                                         assert(nextInput.position == 0);
+                                         assert(nextInput.line     == 0);
+                static if(kind.hasValue) assert(value              == 0);
+            }
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template parseGetCallerLine()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ size_t };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            Result result;
+
+            result.match = true;
+            result.nextInput = input;
+
+            static if(kind.hasValue)
+            {
+                result.value = caller.line;
+            }
+
+            return result;
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(parseGetCallerLine!(), kind)(conv!""))
+            {
+                                         assert(match              == true);
+                                         assert(nextInput.source   == conv!"");
+                                         assert(nextInput.position == 0);
+                                         assert(nextInput.line     == 0);
+                static if(kind.hasValue) assert(value              == __LINE__ - 6);
+            }
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template parseGetCallerFile()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ string };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            Result result;
+
+            result.match = true;
+            result.nextInput = input;
+
+            static if(kind.hasValue)
+            {
+                result.value = caller.file;
+            }
+
+            return result;
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(parseGetCallerFile!(), kind)(conv!""))
+            {
+                                         assert(match              == true);
+                                         assert(nextInput.source   == conv!"");
+                                         assert(nextInput.position == 0);
+                                         assert(nextInput.line     == 0);
+                static if(kind.hasValue) assert(value              == __FILE__);
+            }
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template combinateChangeError(alias parser, string errorMsg)
+{
+    template build(alias kind, SrcType)
+    {
+        static if(kind.hasError)
+        {
+            mixin MAKE_RESULT!q{ getParseResultType!(parser.build!(kind, SrcType)) };
+
+            Result parse(Input!SrcType input, in Caller caller)
+            {
+                Result result;
+
+                with(parser.build!(ParserKind!(kind.hasValue, false), SrcType).parse(input, caller))
+                {
+                    if(!match)
+                    {
+                        result.error.msg      = errorMsg;
+                        result.error.position = input.position;
+                    }
+
+                    result.match     = match;
+                    result.nextInput = nextInput;
+
+                    static if(kind.hasValue)
+                    {
+                        result.value = value;
+                    }
+                }
+
+                return result;
+            }
+        }
+        else
+        {
+            alias parse = parser.build!(kind, SrcType).parse;
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(combinateChangeError!(parseString!"hoge", "エラーだよ！！"), kind)(conv!"hoge"))
+            {
+                assert(match              == true);
+                assert(nextInput.source   == conv!"");
+                assert(nextInput.position == 4);
+            }
+
+            with(parse!(combinateChangeError!(parseString!"hoge", "エラーだよ！！"), kind)(conv!"fuga"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "エラーだよ！！");
+                static if(kind.hasError) assert(error.position == 0);
+            }
+
+            with(parse!(combinateChangeError!(combinateSequence!(parseString!"hoge", parseString!"fuga"), "エラーだよ！！"), kind)(conv!"hoge"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "エラーだよ！！");
+                static if(kind.hasError) assert(error.position == 0);
+            }
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template combinateUnTuple(alias parser)
+{
+    template build(alias kind, SrcType)
+    {
+        static if(kind.hasValue)
+        {
+            static if(getParseResultType!(parser.build!(kind, SrcType)).length == 1)
+            {
+                mixin MAKE_RESULT!q{ getParseResultType!(parser.build!(kind, SrcType)).Types[0] };
+
+                Result parse(Input!SrcType input, in Caller caller)
+                {
+                    Result result;
+
+                    with(parser.build!(kind, SrcType).parse(input, caller))
+                    {
+                        static if(kind.hasError)
+                        {
+                            result.error = error;
+                        }
+
+                        if(match)
+                        {
                             result.match = true;
-                            static if(is(R == string)){
-                                result.value = input.source[0..idx];
-                            }else{
-                                result.value = c.to!string();
-                            }
-                            result.next.source = input.source[idx..$];
-                            result.next.line = c == '\n' ? input.line + 1 : input.line;
-                            result.next.position = input.position + 1;
-                            result.next.state = input.state;
-                            return result;
-                        }else{
-                            if(low == dchar.min && high == dchar.max){
-                                result.error = Error("any char expected but '" ~ c.to!string() ~ "' found", input.position, input.line);
-                            }else{
-                                result.error = Error("'" ~ low.to!string() ~ "' ~ '" ~ high.to!string() ~ "' expected but '" ~ c.to!string() ~ "' found", input.position, input.line);
-                            }
-                        }
-                    }else{
-                        if(low == dchar.min && high == dchar.max){
-                            result.error = Error("any char expected but EOF found", input.position, input.line);
-                        }else{
-                            result.error = Error("'" ~ low.to!string() ~ "' ~ '" ~ high.to!string() ~ "' expected but EOF found", input.position, input.line);
+                            result.nextInput = nextInput;
+                            result.value = value[0];
                         }
                     }
-                }else static if(isCharRange!R){
-                    if(!input.source.empty){
-                        size_t advance;
-                        dchar c = decode(input.source, advance);
-                        if(low <= c && c <= high){
-                            result.match = true;
-                            result.value = c.to!string();
-                            result.next.source = input.source;
-                            result.next.line = c == '\n' ? input.line + 1 : input.line;
-                            result.next.position = input.position + 1;
-                            result.next.state = input.state;
-                            return result;
-                        }else{
-                            if(low == dchar.min && high == dchar.max){
-                                result.error = Error("any char is expected but '" ~ c.to!string() ~ "' found", input.position, input.line);
-                            }else{
-                                result.error = Error("'" ~ low.to!string() ~ "' ~ '" ~ high.to!string() ~ "' expected but '" ~ c.to!string() ~ "' found", input.position, input.line);
-                            }
-                        }
-                    }else{
-                        if(low == dchar.min && high == dchar.max){
-                            result.error = Error("any char expected but EOF found", input.position, input.line);
-                        }else{
-                            result.error = Error("'" ~ low.to!string() ~ "' ~ '" ~ high.to!string() ~ "' expected but EOF found", input.position, input.line);
-                        }
-                    }
-                }else{
-                    throw new Exception("");
-                }
-                return result;
-            }
-        }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(parseCharRange!('a', 'z').parse(makeInput(conv!"hoge") , new CallerInfo(0, "")) == makeParseResult(true, "h", makeInput(conv!"oge" , 1)), conv.stringof);
-                    assert(parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput(conv!"\U00012345hoge"), new CallerInfo(0, "")) == makeParseResult(true, "\U00012345", makeInput(conv!"hoge", 1)), conv.stringof);
-                    assert(parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput(conv!"hello world"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(conv!""), Error("'\u0100' ~ '\U0010FFFF' expected but 'h' found")), conv.stringof);
-                }
-
-                try{
-                    scope(success) assert(false);
-                    auto result = parseCharRange!('\u0100', '\U0010FFFF').parse(makeInput([0, 0]), new CallerInfo(0, ""));
-                }catch(Exception ex){}
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-        template parseAnyChar(){
-            alias parseCharRange!(dchar.min, dchar.max) parseAnyChar;
-        }
-
-        alias parseAnyChar any;
-
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(parseAnyChar!().parse(makeInput("hoge"), new CallerInfo(0, "")) == makeParseResult(true, "h", makeInput("oge", 1)), conv.stringof);
-                    assert(parseAnyChar!().parse(makeInput("\U00012345"), new CallerInfo(0, "")) == makeParseResult(true, "\U00012345", makeInput("", 1)), conv.stringof);
-                    assert(parseAnyChar!().parse(makeInput("\nhoge"), new CallerInfo(0, "")) == makeParseResult(true, "\n", makeInput("hoge", 1, 2)), conv.stringof);
-                    assert(parseAnyChar!().parse(makeInput(""), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("any char expected but EOF found")), conv.stringof);
-                }
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-    // parseString
-        template staticConvertString(alias string str, T){
-            static if(is(T == string)){
-                enum staticConvertString = str;
-            }else static if(is(T == wstring)){
-                enum staticConvertString = cast(wstring)str;
-            }else static if(is(T == dstring)){
-                enum staticConvertString = cast(dstring)str;
-            }else static if(isCharRange!T){
-                static if(is(Unqual!(ElementType!T) == char)){
-                    enum staticConvertString = str;
-                }else static if(is(Unqual!(ElementType!T) == wchar)){
-                    enum staticConvertString = cast(wstring)str;
-                }else static if(is(Unqual!(ElementType!T) == dchar)){
-                    enum staticConvertString = cast(dstring)str;
-                }else{
-                    static assert(false);
-                }
-            }else{
-                static assert(false);
-            }
-        }
-
-        debug(ctpg) unittest{
-            static assert(staticConvertString!("foobar", string) == "foobar");
-            static assert(staticConvertString!("foobar", wstring) == "foobar"w);
-            static assert(staticConvertString!("foobar", dstring) == "foobar"d);
-            static assert(staticConvertString!("foobar", TestRange!char) == "foobar");
-            static assert(staticConvertString!("foobar", TestRange!wchar) == "foobar"w);
-            static assert(staticConvertString!("foobar", TestRange!dchar) == "foobar"d);
-        }
-
-        size_t countLines(string str){
-            typeof(return) lines;
-            foreach(c; str){
-                if(c == '\n'){
-                    ++lines;
-                }
-            }
-            return lines;
-        }
-
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(countLines("これ\nとこれ") == 1);
-                assert(countLines("これ\nとこれ\nとさらにこれ") == 2);
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-        template parseString(alias string str){
-            static assert(str.length);
-            alias string ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                //auto input = _input; // Somehow this parser doesn't work well without this line.
-                enum lines = str.countLines();
-                enum advances = (cast(dstring)str).length;
-                size_t idx;
-                typeof(return) result;
-                static if(isSomeString!R){
-                    enum convertedString = staticConvertString!(str, R);
-                    if(input.source.length < convertedString.length){
-                        result.error = Error(text("'", str, "' expected but EOF found"), input.position, input.line);
-                    }else if(convertedString != input.source[0..convertedString.length]){
-                        result.error = Error(text("'", str, "' expected but '", input.source.decode(idx), "' found"), input.position, input.line);
-                    }else{
-                        result.match = true;
-                        result.value = str;
-                        result.next.source = input.source[convertedString.length..$];
-                        result.next.line = input.line + lines;
-                        result.next.position = input.position + advances;
-                        result.next.state = input.state;
-                    }
-                }else static if(isCharRange!R){
-                    enum convertedString = staticConvertString!(str, R);
-                    auto saved = input.source.save;
-                    foreach(i, c; convertedString){
-                        if(input.source.empty){
-                            result.error = Error("'" ~ str ~ "' expected but EOF found", input.position, input.line);
-                            goto Lerror;
-                        }else if(c != input.source.front){
-                            result.error = Error("'" ~ str ~ "' expected but '" ~ saved.decode(idx).to!string() ~ "' found", input.position, input.line);
-                            goto Lerror;
-                        }else{
-                            input.source.popFront;
-                        }
-                    }
-                    result.match = true;
-                    result.value = str;
-                    result.next.source = input.source;
-                    result.next.line = input.line + lines;
-                    result.next.position = input.position + advances;
-                    result.next.state = input.state;
-
-                    Lerror:{}
-                }else{
-                    throw new Exception("");
-                }
-                return result;
-            }
-        }
-
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(parseString!"hello".parse(makeInput(conv!"hello world"), new CallerInfo(0, "")) == makeParseResult(true, "hello", makeInput(conv!" world", 5)));
-                    assert(parseString!"hello".parse(makeInput(conv!"hello"), new CallerInfo(0, "")) == makeParseResult(true, "hello", makeInput(conv!"", 5)));
-                    assert(parseString!"表が怖い".parse(makeInput(conv!"表が怖い噂のソフト"), new CallerInfo(0, "")) == makeParseResult(true, "表が怖い", makeInput(conv!"噂のソフト", 4)));
-                    assert(parseString!"hello".parse(makeInput(conv!"hllo world"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(conv!""), Error("'hello' expected but 'h' found", 0)));
-                }
-
-                try{
-                    scope(success) assert(false);
-                    auto result = parseString!"hello".parse(makeInput([0, 0]), new CallerInfo(0, ""));
-                }catch(Exception ex){}
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-    // parseEOF
-        template parseEOF(){
-            alias None ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                typeof(return) result;
-                if(input.source.empty){
-                    result.match = true;
-                    result.next.source = input.source;
-                    result.next.line = input.line;
-                    result.next.position = input.position;
-                    result.next.state = input.state;
-                }else{
-                    size_t idx;
-                    static if(isSomeString!R || isCharRange!R){
-                        result.error = Error("EOF expected but '" ~ input.source.decode(idx).to!string() ~ "' found", input.position, input.line);
-                    }else{
-                        result.error = Error("EOF expected but '" ~ input.source.front.to!string() ~ "' found", input.position, input.line);
-                    }
-                }
-                return result;
-            }
-        }
-
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(parseEOF!().parse(makeInput(conv!""), new CallerInfo(0, "")) == makeParseResult(true, None.init, makeInput(conv!"", 0)), conv.stringof);
-                    assert(parseEOF!().parse(makeInput(conv!"hoge"), new CallerInfo(0, "")) == makeParseResult(false, None.init, makeInput(conv!""), Error("EOF expected but 'h' found")), conv.stringof);
-                    assert(parseEOF!().parse(makeInput(conv!"鬱hoge"), new CallerInfo(0, "")) == makeParseResult(false, None.init, makeInput(conv!""), Error("EOF expected but '鬱' found")), conv.stringof);
-                }
-                assert(parseEOF!().parse(makeInput([0, 1, 2]), new CallerInfo(0, "")) == makeParseResult(false, None.init, makeInput([0][0..0]), Error("EOF expected but '0' found")));
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-// combinators
-    // combinateUnTuple
-        template combinateUnTuple(alias parser){
-            static if(isTuple!(ParserType!parser) && ParserType!parser.Types.length == 1){
-                alias ParserType!parser.Types[0] ResultType;
-                static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                    typeof(return) result;
-                    auto r = parser.parse(input, info);
-                    result.match = r.match;
-                    result.value = r.value[0];
-                    result.next = r.next;
-                    result.error = r.error;
                     return result;
                 }
-            }else{
-                alias parser combinateUnTuple;
+            }
+            else
+            {
+                alias parse = parser.build!(kind, SrcType).parse;
+            }
+        }
+        else
+        {
+            alias parse = parser.build!(kind, SrcType).parse;
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(combinateUnTuple!(TestParser!(tuple("hoge", "fuga"))), kind)(conv!"input"))
+            {
+                                         assert(match            == true);
+                static if(kind.hasValue) assert(value            == tuple("hoge", "fuga"));
+                                         assert(nextInput.source == conv!"input");
+            }
+
+            with(parse!(combinateUnTuple!(TestParser!(tuple("hoge"))), kind)(conv!"input"))
+            {
+                                         assert(match            == true);
+                static if(kind.hasValue) assert(value            == "hoge");
+                                         assert(nextInput.source == conv!"input");
             }
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(combinateUnTuple!(TestParser!int).parse(makeInput(conv!""), new CallerInfo(0, "")) == makeParseResult(false, 0, makeInput(conv!"")));
-                    assert(combinateUnTuple!(TestParser!long).parse(makeInput(conv!""), new CallerInfo(0, "")) == makeParseResult(false, 0L, makeInput(conv!"")));
-                    assert(combinateUnTuple!(TestParser!string).parse(makeInput(conv!""), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(conv!"")));
-                    assert(combinateUnTuple!(TestParser!wstring).parse(makeInput(conv!""), new CallerInfo(0, "")) == makeParseResult(false, ""w, makeInput(conv!"")));
-                    assert(combinateUnTuple!(TestParser!dstring).parse(makeInput(conv!""), new CallerInfo(0, "")) == makeParseResult(false, ""d, makeInput(conv!"")));
-                    assert(combinateUnTuple!(TestParser!(Tuple!int)).parse(makeInput(conv!""), new CallerInfo(0, "")) == makeParseResult(false, 0, makeInput(conv!"")));
-                    assert(combinateUnTuple!(TestParser!(Tuple!(int, int))).parse(makeInput(conv!""), new CallerInfo(0, "")) == makeParseResult(false, tuple(0, 0), makeInput(conv!"")));
-                    assert(combinateUnTuple!(TestParser!(Tuple!(Tuple!int))).parse(makeInput(conv!""), new CallerInfo(0, "")) == makeParseResult(false, tuple(0), makeInput(conv!"")));
-                    assert(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int)))).parse(makeInput(conv!""), new CallerInfo(0, "")) == makeParseResult(false, tuple(0, 0), makeInput(conv!"")));
-                    assert(combinateUnTuple!(TestParser!(Tuple!(Tuple!(int, int), int))).parse(makeInput(conv!""), new CallerInfo(0, "")) == makeParseResult(false, tuple(tuple(0, 0), 0), makeInput(conv!"")));
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template combinateSequence(parsers...)
+{
+    static assert(parsers.length > 0);
+
+    template build(alias kind, SrcType)
+    {
+        static if(parsers.length == 1)
+        {
+            alias T = getParseResultType!(parsers[0].build!(kind, SrcType));
+
+            static if(is(T == None)) mixin MAKE_RESULT!q{ Tuple!() };
+            else                     mixin MAKE_RESULT!q{ Tuple!T  };
+
+            Result parse(Input!SrcType input, in Caller caller)
+            {
+                Result result;
+
+                auto head = parsers[0].build!(kind, SrcType).parse(input, caller);
+
+                static if(kind.hasError)
+                {
+                    result.error = head.error;
                 }
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
 
-    // combinateSequence
-        template flatTuple(T){
-            static if(isTuple!T){
-                alias T.Types flatTuple;
-            }else{
-                alias T flatTuple;
+                if(!head.match)
+                {
+                    return result;
+                }
+
+                result.match     = true;
+                result.nextInput = head.nextInput;
+
+                static if(kind.hasValue && !is(T == None))
+                {
+                    result.value = tuple(head.value);
+                }
+
+                return result;
+            }
+        }
+        else static if(parsers.length > 1)
+        {
+            alias T = getParseResultType!(parsers[0].build!(kind, SrcType));
+
+            static if(is(T == None)) mixin MAKE_RESULT!q{           getParseResultType!(combinateSequence!(parsers[1..$]).build!(kind, SrcType)) };
+            else                     mixin MAKE_RESULT!q{ Tuple!(T, getParseResultType!(combinateSequence!(parsers[1..$]).build!(kind, SrcType)).Types) };
+
+            Result parse(Input!SrcType input, in Caller caller)
+            {
+                Result result;
+
+                auto head = parsers[0].build!(kind, SrcType).parse(input, caller);
+
+                static if(kind.hasError)
+                {
+                    result.error = head.error;
+                }
+
+                if(!head.match)
+                {
+                    return result;
+                }
+
+                auto tail = combinateSequence!(parsers[1..$]).build!(kind, SrcType).parse(head.nextInput, caller);
+
+                static if(kind.hasError)
+                {
+                    if(result.error.position <=  tail.error.position)
+                    {
+                        result.error = tail.error;
+                    }
+                }
+
+                if(!tail.match)
+                {
+                    return result;
+                }
+
+                result.match = true;
+                result.nextInput = tail.nextInput;
+
+                static if(kind.hasValue)
+                {
+                    static if(is(T == None)) result.value =                   tail.value;
+                    else                     result.value = tuple(head.value, tail.value.field);
+                }
+
+                return result;
+            }
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(combinateSequence!(parseString!"hoge", parseString!"fuga"), kind)(conv!"hogefugahoge"))
+            {
+                                         assert(match            == true);
+                static if(kind.hasValue) assert(value            == tuple("hoge", "fuga"));
+                                         assert(nextInput.source == conv!"hoge");
+            }
+
+            with(parse!(combinateSequence!(parseString!"hoge", parseString!"fuga"), kind)(conv!"hoge"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'fuga' expected");
+                static if(kind.hasError) assert(error.position == 4);
+            }
+
+            with(parse!(combinateSequence!(parseString!"hoge", parseString!"fuga"), kind)(conv!"fuga"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'hoge' expected");
+                static if(kind.hasError) assert(error.position == 0);
+            }
+
+            with(parse!(combinateSequence!(parseString!"hoge", TestParser!(None()), parseString!"fuga"), kind)(conv!"hogefuga"))
+            {
+                                         assert(match            == true);
+                static if(kind.hasValue) assert(value            == tuple("hoge", "fuga"));
+                                         assert(nextInput.source == conv!"");
             }
         }
 
-        debug(ctpg) unittest{
-            static assert(is(flatTuple!(string) == string));
-            static assert(is(flatTuple!(Tuple!(string)) == TypeTuple!string));
-            static assert(is(flatTuple!(Tuple!(Tuple!(string))) == TypeTuple!(Tuple!string)));
-        }
+        return true;
+    }
 
-        template CombinateSequenceImplType(parsers...){
-            alias Tuple!(staticMap!(flatTuple, staticMap!(ParserType, parsers))) CombinateSequenceImplType;
-        }
+    static assert(test());
+    test();
+}
 
-        debug(ctpg) unittest{
-            static assert(is(CombinateSequenceImplType!(TestParser!string, TestParser!string) == Tuple!(string, string)));
-            static assert(is(CombinateSequenceImplType!(TestParser!int, TestParser!long) == Tuple!(int, long)));
-            static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(int, long)), TestParser!uint) == Tuple!(int, long, uint)));
-            static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(int, long)), TestParser!(Tuple!(uint, ulong))) == Tuple!(int, long, uint, ulong)));
-            static assert(is(CombinateSequenceImplType!(TestParser!(Tuple!(Tuple!(byte, short), long)), TestParser!(Tuple!(uint, ulong))) == Tuple!(Tuple!(byte, short), long, uint, ulong)));
-        }
 
-        template combinateSequence(parsers...){
-            alias combinateUnTuple!(combinateSequenceImpl!(parsers)) combinateSequence;
-        }
+template combinateChoice(parsers...)
+{
+    static assert(parsers.length > 0);
 
-        template combinateSequenceImpl(parsers...){
-            alias CombinateSequenceImplType!(parsers) ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                typeof(return) result;
-                static if(parsers.length == 1){
-                    auto r = parsers[0].parse(input, info);
-                    if(r.match){
-                        result.match = true;
-                        static if(isTuple!(ParserType!(parsers[0]))){
-                            result.value = r.value;
-                        }else{
-                            result.value = tuple(r.value);
-                        }
-                        result.next = r.next;
-                    }else{
-                        result.error = r.error;
+    template build(alias kind, SrcType)
+    {
+        static if(parsers.length == 1)
+        {
+            mixin MAKE_RESULT!q{ getParseResultType!(parsers[0].build!(kind, SrcType)) };
+
+            Result parse(Input!SrcType input, in Caller caller)
+            {
+                Result result;
+
+                auto head = parsers[0].build!(kind, SrcType).parse(input, caller);
+
+                static if(kind.hasError)
+                {
+                    result.error = head.error;
+                }
+
+                if(head.match)
+                {
+                    result.match = true;
+                    result.nextInput = head.nextInput;
+
+                    static if(kind.hasValue)
+                    {
+                        result.value = head.value;
                     }
-                }else{
-                    auto r1 = parsers[0].parse(input, info);
-                    if(r1.match){
-                        auto r2 = combinateSequenceImpl!(parsers[1..$]).parse(r1.next, info);
-                        if(r2.match){
-                            result.match = true;
-                            static if(isTuple!(ParserType!(parsers[0]))){
-                                result.value = tuple(r1.value.field, r2.value.field);
-                            }else{
-                                result.value = tuple(r1.value, r2.value.field);
-                            }
-                            result.next = r2.next;
-                        }
-                        result.error = r1.error.position > r2.error.position ? r1.error : r2.error;
-                    }else{
+                }
+
+
+                return result;
+            }
+        }
+        else static if(parsers.length > 1)
+        {
+            mixin MAKE_RESULT!q{ CommonType!(getParseResultType!(parsers[0].build!(kind, SrcType)), getParseResultType!(combinateChoice!(parsers[1..$]).build!(kind, SrcType))) };
+
+            Result parse(Input!SrcType input, in Caller caller)
+            {
+                Result result;
+
+                auto head = parsers[0].build!(kind, SrcType).parse(input.save, caller);
+
+                static if(kind.hasError)
+                {
+                    result.error = head.error;
+                }
+
+                if(head.match)
+                {
+                    result.match = true;
+                    result.nextInput = head.nextInput;
+
+                    static if(kind.hasValue)
+                    {
+                        result.value = head.value;
+                    }
+
+                    return result;
+                }
+
+                auto tail = combinateChoice!(parsers[1..$]).build!(kind, SrcType).parse(input, caller);
+
+                static if(kind.hasError)
+                {
+                    if(result.error.position <= tail.error.position)
+                    {
+                        result.error = tail.error;
+                    }
+                }
+
+                if(tail.match)
+                {
+                    result.match = true;
+                    result.nextInput = tail.nextInput;
+
+                    static if(kind.hasValue)
+                    {
+                        result.value = tail.value;
+                    }
+                }
+
+                return result;
+            }
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(combinateChoice!(parseString!"hoge", parseString!"fuga"), kind)(conv!"hoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == "hoge");
+                                         assert(nextInput.source   == conv!"");
+                                         assert(nextInput.position == 4);
+            }
+
+            with(parse!(combinateChoice!(parseString!"hoge", parseString!"fuga"), kind)(conv!"fuga"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == "fuga");
+                                         assert(nextInput.source   == conv!"");
+                                         assert(nextInput.position == 4);
+            }
+
+            with(parse!(combinateChoice!(parseString!"hoge", parseString!"fuga"), kind)(conv!"piyo"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'fuga' expected");
+                static if(kind.hasError) assert(error.position == 0);
+            }
+
+            with(parse!(combinateChoice!(combinateSequence!(parseString!"hoge", parseString!"piyo"), parseString!"fuga"), ParserKind!(false, kind.hasError))(conv!"hoge"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'piyo' expected");
+                static if(kind.hasError) assert(error.position == 4);
+            }
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template combinateMore(size_t n, alias parser, alias sep = success!())
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ getParseResultType!(parser.build!(kind, SrcType))[] };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            Result result;
+            size_t size = 1;
+            Input!SrcType next = input.save;
+
+            auto head = parser.build!(kind, SrcType).parse(next, caller);
+
+            static if(kind.hasError)
+            {
+                result.error = head.error;
+            }
+
+            if(!head.match)
+            {
+                if(n == 0)
+                {
+                    result.match = true;
+                    result.nextInput = input;
+                }
+
+                return result;
+            }
+
+            static if(kind.hasValue)
+            {
+                result.value ~= head.value;
+            }
+
+            next = head.nextInput.save;
+
+            while(true)
+            {
+                auto r1 = sep.build!(ParserKind!(false, kind.hasError), SrcType).parse(next, caller);
+
+                static if(kind.hasError)
+                {
+                    if(result.error.position <= r1.error.position)
+                    {
                         result.error = r1.error;
                     }
                 }
-                return result;
-            }
-        }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(combinateSequence!(parseString!("hello"), parseString!("world")).parse(makeInput(conv!"helloworld"), new CallerInfo(0, "")) == makeParseResult(true, tuple("hello", "world"), makeInput(conv!"", 10)));
-                    assert(combinateSequence!(combinateSequence!(parseString!("hello"), parseString!("world")), parseString!"!").parse(makeInput(conv!"helloworld!"), new CallerInfo(0, "")) == makeParseResult(true, tuple("hello", "world", "!"), makeInput(conv!"", 11)));
-                    assert(combinateSequence!(parseString!("hello"), parseString!("world")).parse(makeInput(conv!"hellovvorld"), new CallerInfo(0, "")) == makeParseResult(false, tuple("", ""), makeInput(conv!""), Error("'world' expected but 'v' found", 5)));
-                    assert(combinateSequence!(parseString!("hello"), parseString!("world"), parseString!("!")).parse(makeInput(conv!"helloworld?"), new CallerInfo(0, "")) == makeParseResult(false, tuple("", "", ""), makeInput(conv!""), Error("'!' expected but '?' found", 10)));
-                }
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
+                if(r1.match)
+                {
+                    auto r2 = parser.build!(kind, SrcType).parse(r1.nextInput, caller);
 
-    // combinateChoice
-        template CommonParserType(parsers...){
-            alias CommonType!(staticMap!(ParserType, parsers)) CommonParserType;
-        }
-
-        debug(ctpg) unittest{
-            static assert(is(CommonParserType!(TestParser!string, TestParser!string) == string));
-            static assert(is(CommonParserType!(TestParser!int, TestParser!long) == long));
-            static assert(is(CommonParserType!(TestParser!byte, TestParser!short, TestParser!int) == int));
-            static assert(is(CommonParserType!(TestParser!string, TestParser!int) == void));
-        }
-
-        template combinateChoice(parsers...) if(!is(typeof(parsers[0]) == size_t) && !is(typeof(parsers[1]) == string)) {
-            alias combinateChoice!(0, "", parsers) combinateChoice;
-        }
-
-        template combinateChoice(size_t line, string file, parsers...){
-            alias CommonParserType!(parsers) ResultType;
-            static if(is(ResultType == void)){
-                static if(line){
-                    pragma(msg, file ~ "(" ~ toStringNow!line ~ "): Error: types of parsers: '" ~ staticMap!(ParserType, parsers).stringof[1..$-1] ~ "' should have a common convertible type");
-                }else{
-                    pragma(msg, __FILE__ ~ "(" ~ toStringNow!__LINE__ ~ "): Error: types of parsers: '" ~ staticMap!(ParserType, parsers).stringof[1..$-1] ~ "' should have a common convertible type");
-                }
-                static assert(false);
-            }
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                static assert(parsers.length > 0);
-                static if(parsers.length == 1){
-                    return parsers[0].parse(input, info);
-                }else{
-                    auto r1 = parsers[0].parse(input.save, info);
-                    if(r1.match){
-                        return r1;
-                    }
-                    auto r2 = combinateChoice!(parsers[1..$]).parse(input, info);
-                    if(r2.match){
-                        return r2;
-                    }
-                    typeof(return) result;
-                    result.error = r1.error.position > r2.error.position ? r1.error : r2.error;
-                    return result;
-                }
-            }
-        }
-
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(combinateChoice!(parseString!"h", parseString!"w").parse(makeInput(conv!"hw"), new CallerInfo(0, "")) == makeParseResult(true, "h", makeInput(conv!"w", 1))); 
-                    assert(combinateChoice!(parseString!"h", parseString!"w").parse(makeInput(conv!"w"), new CallerInfo(0, "")) == makeParseResult(true, "w", makeInput(conv!"", 1)));
-                    assert(combinateChoice!(parseString!"h", parseString!"w").parse(makeInput(conv!""), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(conv!""), Error("'w' expected but EOF found", 0)));
-                    assert(combinateChoice!(combinateSequence!(parseString!"h", parseString!"w"), combinateSequence!(parseString!"w", parseString!"h")).parse(makeInput(conv!"h"), new CallerInfo(0, "")) == makeParseResult(false, tuple("", ""), makeInput(conv!""), Error("'w' expected but EOF found", 1)));
-                }
-                //assert(combinateChoice!(parseString!"h", combinateSequence!(parseString!"w", parseString!"w")).parse(makeInput(testRange("w"d)), new CallerInfo(0, "")) == makeParseResult(true, "w", makeInput(testRange(""d), 1)));
-                //assert(combinateChoice!(__LINE__, "foo/bar.d", parseString!"h", combinateSequence!(parseString!"w", parseString!"w")).parse(makeInput(testRange("w"d)), new CallerInfo(0, "")) == makeParseResult(true, "w", makeInput(testRange(""d), 1)));
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-    // combinateMore
-        template combinateMore(int n, alias parser, alias sep){
-            alias ParserType!(parser)[] ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                typeof(return) result;
-                Input!R next = input;
-                while(true){
-                    auto input1 = next.save;
-                    auto r1 = parser.parse(input1, info);
-                    if(r1.match){
-                        result.value ~= r1.value;
-                        next = r1.next;
-                        auto input2 = next.save;
-                        auto r2 = sep.parse(input2, info);
-                        if(r2.match){
-                            next = r2.next;
-                        }else{
+                    static if(kind.hasError)
+                    {
+                        if(result.error.position <= r2.error.position)
+                        {
                             result.error = r2.error;
-                            break;
                         }
-                    }else{
-                        result.error = r1.error;
-                        if(result.value.length < n){
+                    }
+
+                    if(r2.match)
+                    {
+                        static if(kind.hasValue)
+                        {
+                            result.value ~= r2.value;
+                        }
+
+                        ++size;
+                        next = r2.nextInput;
+                    } 
+                    else
+                    {
+                        if(size < n)
+                        {
                             return result;
-                        }else{
-                            break;
+                        }
+
+                        break;
+                    }
+                }
+                else
+                {
+                    if(size < n)
+                    {
+                        return result;
+                    }
+
+                    break;
+                }
+            }
+
+            result.match = true;
+            result.nextInput = next;
+
+            return result;
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(combinateMore!(0, parseString!"hoge", parseString!","), kind)(conv!""))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == []);
+                                         assert(nextInput.source   == conv!"");
+                                         assert(nextInput.position == 0);
+            }
+
+            with(parse!(combinateMore!(0, parseString!"hoge", parseString!","), kind)(conv!"hoge,hoge,hoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == ["hoge", "hoge", "hoge"]);
+                                         assert(nextInput.source   == conv!"");
+                                         assert(nextInput.position == 14);
+            }
+
+            with(parse!(combinateMore!(0, parseString!"hoge", parseString!","), kind)(conv!"hoge,hoge,hoge,"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == ["hoge", "hoge", "hoge"]);
+                                         assert(nextInput.source   == conv!",");
+                                         assert(nextInput.position == 14);
+            }
+
+            with(parse!(combinateMore!(4, parseString!"hoge", parseString!","), kind)(conv!"hoge,hoge,hoge"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "',' expected");
+                static if(kind.hasError) assert(error.position == 14);
+            }
+
+            with(parse!(combinateMore!(4, parseString!"hoge", parseString!","), kind)(conv!"hoge,hoge,hoge,"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'hoge' expected");
+                static if(kind.hasError) assert(error.position == 15);
+            }
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template combinateMore0(alias parser, alias sep = success!())
+{
+    alias combinateMore0 = combinateMore!(0, parser, sep);
+}
+
+
+template combinateMore1(alias parser, alias sep = success!())
+{
+    alias combinateMore1 = combinateMore!(1, parser, sep);
+}
+
+
+template combinateOption(alias parser)
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Option!(getParseResultType!(parser.build!(kind, SrcType))) };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            Result result;
+            result.match = true;
+
+            with(parser.build!(kind, SrcType).parse(input.save, caller))
+            {
+                static if(kind.hasError)
+                {
+                    result.error = error;
+                }
+
+                if(match)
+                {
+                    result.nextInput = nextInput;
+
+                    static if(kind.hasValue)
+                    {
+                        result.value.value = value;
+                        result.value.some = true;
+                    }
+                }
+                else
+                {
+                    result.nextInput = input;
+                }
+            }
+
+            return result;
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(combinateOption!(parseString!"hoge"), kind)(conv!"fuga"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value.some         == false);
+                                         assert(nextInput.source   == conv!"fuga");
+                                         assert(nextInput.position == 0);
+            }
+
+            with(parse!(combinateOption!(parseString!"hoge"), kind)(conv!"hoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value.some         == true);
+                static if(kind.hasValue) assert(value        == "hoge");
+                                         assert(nextInput.source   == conv!"");
+            }
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template combinateNone(alias parser)
+{
+    template build(alias kind, SrcType)
+    {
+        static if(kind.hasValue)
+        {
+            alias Result = ParseResult!(kind, SrcType, None);
+
+            Result parse(Input!SrcType input, in Caller caller)
+            {
+                Result result;
+
+                with(parser.build!(kind, SrcType).parse(input, caller))
+                {
+                    static if(kind.hasError)
+                    {
+                        result.error = error;
+                    }
+
+                    result.match = match;
+
+                    if(match)
+                    {
+                        result.nextInput = nextInput;
+                    }
+                }
+
+                return result;
+            }
+        }
+        else
+        {
+            alias parse = parser.build!(kind, SrcType).parse;
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(combinateNone!(parseString!"hoge"), kind)(conv!"hoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == None());
+                                         assert(nextInput.source   == conv!"");
+                                         assert(nextInput.position == 4);
+            }
+
+            with(parse!(combinateNone!(parseString!"hoge"), kind)(conv!"fuga"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'hoge' expected");
+                static if(kind.hasError) assert(error.position == 0);
+            }
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template combinateAndPred(alias parser)
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ None };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            Result result;
+            result.nextInput = input;
+
+            with(parser.build!(ParserKind!(false, kind.hasError), SrcType).parse(input.save, caller))
+            {
+                static if(kind.hasError)
+                {
+                    result.error = error;
+                }
+
+                result.match = match;
+            }
+
+            return result;
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(combinateAndPred!(parseString!"hoge"), kind)(conv!"hoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == None());
+                                         assert(nextInput.source   == conv!"hoge");
+                                         assert(nextInput.position == 0);
+            }
+
+            with(parse!(combinateAndPred!(parseString!"hoge"), kind)(conv!"fuga"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'hoge' expected");
+                static if(kind.hasError) assert(error.position == 0);
+            }
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template combinateNotPred(alias parser)
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ None };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            Result result;
+            result.nextInput = input;
+
+            with(parser.build!(ParserKind!(false, false), SrcType).parse(input.save, caller))
+            {
+                static if(kind.hasError)
+                {
+                    result.error.msg = "failure expected";
+                    result.error.position = input.position;
+                }
+
+                result.match = !match;
+            }
+
+            return result;
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(combinateNotPred!(parseString!"hoge"), kind)(conv!"fuga"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == None());
+                                         assert(nextInput.source   == conv!"fuga");
+                                         assert(nextInput.position == 0);
+            }
+
+            with(parse!(combinateNotPred!(parseString!"hoge"), kind)(conv!"hoge"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "failure expected");
+                static if(kind.hasError) assert(error.position == 0);
+            }
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template combinateConvert(alias parser, alias converter, size_t line = 0, string file = "")
+{
+    template build(alias kind, SrcType)
+    {
+        static if(kind.hasValue)
+        {
+            alias T = getParseResultType!(parser.build!(kind, SrcType));
+
+                 static if(is(converter == class ) && __traits(compiles, new converter(T.init.field))) alias ConverterType = converter;
+            else static if(is(converter == class ) && __traits(compiles, new converter(T.init      ))) alias ConverterType = converter;
+            else static if(is(converter == struct) && __traits(compiles,     converter(T.init.field))) alias ConverterType = converter;
+            else static if(is(converter == struct) && __traits(compiles,     converter(T.init      ))) alias ConverterType = converter;
+            else static if(                           __traits(compiles,     converter(T.init.field))) alias ConverterType = typeof(converter(T.init.field));
+            else static if(                           __traits(compiles,     converter(T.init      ))) alias ConverterType = typeof(converter(T.init      ));
+            else                                                                                       alias ConverterType = void;
+
+            static if(is(ConverterType == void))
+            {
+                debug(ctpgSuppressErrorMsg) {} else pragma(msg, file ~ "(" ~ line.to!string() ~ "): Error: Cannot call '" ~ converter.stringof ~ "' using '>>' with types: " ~ T.stringof);
+                static assert(false);
+            }
+
+            mixin MAKE_RESULT!q{ ConverterType };
+
+            static Result parse(Input!SrcType input, in Caller caller)
+            {
+                Result result;
+
+                with(parser.build!(kind, SrcType).parse(input, caller))
+                {
+                    static if(kind.hasError)
+                    {
+                        result.error = error;
+                    }
+
+                    if(match)
+                    {
+                        result.match = true;
+                        result.nextInput = nextInput;
+
+                        static if(kind.hasValue)
+                        {
+                                 static if(is(converter == class ) && __traits(compiles, new converter(T.init.field))) result.value = new converter(value.field);
+                            else static if(is(converter == class ) && __traits(compiles, new converter(T.init      ))) result.value = new converter(value      );
+                            else static if(                           __traits(compiles,     converter(T.init.field))) result.value =     converter(value.field);
+                            else static if(                           __traits(compiles,     converter(T.init      ))) result.value =     converter(value      );
                         }
                     }
                 }
-                result.match = true;
-                result.next = next;
+
                 return result;
             }
         }
-
-        template combinateMore0(alias parser, alias sep = success!()){
-            alias combinateMore!(0, parser, sep) combinateMore0;
+        else
+        {
+            alias parse = parser.build!(kind, SrcType).parse;
         }
+    }
+}
 
-        template combinateMore1(alias parser, alias sep = success!()){
-            alias combinateMore!(1, parser, sep) combinateMore1;
+debug(ctpg) unittest
+{
+    static struct Struct
+    {
+        size_t len;
+
+        this(string str)
+        {
+            len = str.length;
         }
+    }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(combinateMore0!(parseString!"w").parse(makeInput(conv!"www w"), new CallerInfo(0, "")) == makeParseResult(true, ["w", "w", "w"], makeInput(conv!" w", 3), Error("'w' expected but ' ' found", 3)));
-                    assert(combinateMore0!(parseString!"w").parse(makeInput(conv!" w"), new CallerInfo(0, "")) == makeParseResult(true, [""][0..0], makeInput(conv!" w"), Error("'w' expected but ' ' found", 0)));
-                    assert(combinateMore0!(combinateSequence!(parseString!"w", parseString!"h")).parse(makeInput(conv!"whwhw"), new CallerInfo(0, "")) == makeParseResult(true, [tuple("w", "h"), tuple("w", "h")], makeInput(conv!"w", 4), Error("'h' expected but EOF found", 5)));
-                    assert(combinateMore1!(parseString!"w").parse(makeInput(conv!"www w"), new CallerInfo(0, "")) == makeParseResult(true, ["w", "w", "w"], makeInput(conv!" w", 3), Error("'w' expected but ' ' found", 3)));
-                    assert(combinateMore1!(parseString!"w").parse(makeInput(conv!" w"), new CallerInfo(0, "")) == makeParseResult(false, [""][0..0], makeInput(conv!""), Error("'w' expected but ' ' found", 0)));
-                }
-                return true;
-            };
-            static assert(dg());
-            dg();
+    static class Class
+    {
+        size_t len;
+
+        this(string str)
+        {
+            len = str.length;
         }
+    }
+    
+    static size_t Function(string str)
+    {
+        return str.length;
+    }
 
-    // combinateOption
-        template combinateOption(alias parser){
-            alias Option!(ParserType!parser) ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                typeof(return) result;
-                result.match = true;
-                auto r = parser.parse(input.save, info);
-                if(r.match){
-                    result.value.value = r.value;
-                    result.value.some = true;
-                    result.next = r.next;
-                }else{
-                    result.next = input;
-                }
-                return result;
+    static size_t TemplateFunction(T)(T str)
+    {
+        return str.length;
+    }
+
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(combinateConvert!(parseString!"hoge", Struct), kind)(conv!"hogee"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value.len          == 4);
+                                         assert(nextInput.source   == conv!"e");
+                                         assert(nextInput.position == 4);
             }
-        }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(combinateOption!(parseString!"w").parse(makeInput(conv!"w"), new CallerInfo(0, "")) == makeParseResult(true, makeOption(true, "w"), makeInput(conv!"", 1)));
-                    assert(combinateOption!(parseString!"w").parse(makeInput(conv!"hoge"), new CallerInfo(0, "")) == makeParseResult(true, makeOption(false, ""), makeInput(conv!"hoge", 0)));
-                }
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-    // combinateNone
-        template combinateNone(alias parser){
-            alias None ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                typeof(return) result;
-                auto r = parser.parse(input, info);
-                if(r.match){
-                    result.match = true;
-                    result.next = r.next;
-                }else{
-                    result.error = r.error;
-                }
-                return result;
+            with(parse!(combinateConvert!(parseString!"hoge", Struct), kind)(conv!"!!!!"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'hoge' expected");
+                static if(kind.hasError) assert(error.position == 0);
             }
-        }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")).parse(makeInput(conv!"(w)"), new CallerInfo(0, "")) == makeParseResult(true, "w", makeInput(conv!"", 3)));
-                    assert(combinateSequence!(combinateNone!(parseString!"("), parseString!"w", combinateNone!(parseString!")")).parse(makeInput(conv!"(w}"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(conv!""), Error("')' expected but '}' found", 2)));
-                    assert(combinateNone!(parseString!"w").parse(makeInput(conv!"a"), new CallerInfo(0, "")) == makeParseResult(false, None.init, makeInput(conv!""), Error("'w' expected but 'a' found")));
-                }
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-    // combinateAndPred
-        template combinateAndPred(alias parser){
-            alias None ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                typeof(return) result;
-                result.next = input;
-                auto r = parser.parse(input.save, info);
-                result.match = r.match;
-                result.error = r.error;
-                return result;
+            with(parse!(combinateConvert!(parseString!"hoge", Class), kind)(conv!"hogee"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value.len          == 4);
+                                         assert(nextInput.source   == conv!"e");
+                                         assert(nextInput.position == 4);
             }
-        }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(combinateAndPred!(parseString!"w").parse(makeInput(conv!"www"), new CallerInfo(0, "")) == makeParseResult(true, None.init, makeInput(conv!"www", 0)));
-                    assert(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w")).parse(makeInput(conv!"www"), new CallerInfo(0, "")) == makeParseResult(true, "w", makeInput(conv!"ww", 1)));
-                    assert(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))).parse(makeInput(conv!"www"), new CallerInfo(0, "")) == makeParseResult(true, ["w", "w"], makeInput(conv!"w", 2), Error("'w' expected but EOF found", 3)));
-                    assert(combinateMore1!(combinateSequence!(parseString!"w", combinateAndPred!(parseString!"w"))).parse(makeInput(conv!"w"), new CallerInfo(0, "")) == makeParseResult(false, [""][0..0], makeInput(conv!""), Error("'w' expected but EOF found", 1)));
-                }
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-    // combinateNotPred
-        template combinateNotPred(alias parser){
-            alias None ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                typeof(return) result;
-                result.next = input;
-                auto r = parser.parse(input.save, info);
-                result.match = !r.match;
-                if(result.match){
-                    result.error = r.error;
-                }else{
-                    result.error = Error("Expected failure", input.position, input.line);
-                }
-                return result;
+            with(parse!(combinateConvert!(parseString!"hoge", Class), kind)(conv!"!!!!"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'hoge' expected");
+                static if(kind.hasError) assert(error.position == 0);
             }
-        }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(combinateMore1!(combinateSequence!(parseString!"w", combinateNotPred!(parseString!"s"))).parse(makeInput(conv!"wwws"), new CallerInfo(0, "")) == makeParseResult(true, ["w", "w"], makeInput(conv!"ws", 2), Error("Expected failure", 3)));
-                }
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-    // combinateConvert
-        template CombinateConvertType(alias converter, T){
-            static if(__traits(compiles, new converter(T.init.field))){
-                alias converter CombinateConvertType;
-            }else static if(__traits(compiles, new converter(T.init))){
-                alias converter CombinateConvertType;
-            }else static if(__traits(compiles, converter(T.init.field))){
-                alias typeof(converter(T.init.field)) CombinateConvertType;
-            }else static if(__traits(compiles, converter(T.init))){
-                alias typeof(converter(T.init)) CombinateConvertType;
-            }else{
-                alias void CombinateConvertType;
+            with(parse!(combinateConvert!(parseString!"hoge", Function), kind)(conv!"hogee"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == 4);
+                                         assert(nextInput.source   == conv!"e");
+                                         assert(nextInput.position == 4);
             }
-        }
 
-        debug(ctpg) unittest{
-            static class C1{ this(string){} }
-            static class C2{ this(string, int){} }
-            static struct S1{ string str;}
-            static struct S2{ string str; int i;}
-            static int f1(string){ return 0; }
-            static int f2(string, int){ return 0; }
-            static int t1(T)(T){ return 0; }
-            static int t2(T, U)(T, U){ return 0; }
-
-            static assert(is(CombinateConvertType!(C1, string) == C1));
-            static assert(is(CombinateConvertType!(C1, double) == void));
-            static assert(is(CombinateConvertType!(C2, Tuple!(string, int)) == C2));
-            static assert(is(CombinateConvertType!(C2, Tuple!(string, double)) == void));
-            static assert(is(CombinateConvertType!(S1, string) == S1));
-            static assert(is(CombinateConvertType!(S1, int) == void));
-            static assert(is(CombinateConvertType!(S2, Tuple!(string, int)) == S2));
-            static assert(is(CombinateConvertType!(S2, Tuple!(string, double)) == void));
-            static assert(is(CombinateConvertType!(f1, string) == int));
-            static assert(is(CombinateConvertType!(f1, Tuple!(string, string)) == void));
-            static assert(is(CombinateConvertType!(f2, Tuple!(string, int)) == int));
-            static assert(is(CombinateConvertType!(f2, Tuple!(string, double)) == void));
-            static assert(is(CombinateConvertType!(t1, string) == int));
-            static assert(is(CombinateConvertType!(t1, void) == void));
-            static assert(is(CombinateConvertType!(t2, Tuple!(string, int)) == int));
-            static assert(is(CombinateConvertType!(t2, Tuple!(string, int, int)) == void));
-        }
-
-        template combinateConvert(alias parser, alias converter){
-            alias combinateConvert!(0, "", parser, converter) combinateConvert;
-        }
-
-        template combinateConvert(size_t line, string file, alias parser, alias converter){
-            alias CombinateConvertType!(converter, ParserType!parser) ResultType;
-            static if(is(ResultType == void)){
-                static if(line){
-                    pragma(msg, file ~ "(" ~ toStringNow!line ~ "): Error: cannot call " ~ converter.stringof ~ " using '>>' with types: " ~ ParserType!parser.stringof);
-                }else{
-                    pragma(msg, __FILE__ ~ "(" ~ toStringNow!__LINE__ ~ "): Error: cannot call " ~ converter.stringof ~ " using '>>' with types: " ~ ParserType!parser.stringof);
-                }
-                static assert(false);
+            with(parse!(combinateConvert!(parseString!"hoge", Function), kind)(conv!"!!!!"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'hoge' expected");
+                static if(kind.hasError) assert(error.position == 0);
             }
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                typeof(return) result;
-                auto r = parser.parse(input, info);
-                if(r.match){
-                    result.match = true;
-                    static if(__traits(compiles, converter(r.value.field))){
-                        result.value = converter(r.value.field);
-                    }else static if(__traits(compiles, new converter(r.value.field))){
-                        result.value = new converter(r.value.field);
-                    }else static if(__traits(compiles, converter(r.value))){
-                        result.value = converter(r.value);
-                    }else static if(__traits(compiles, new converter(r.value))){
-                        result.value = new converter(r.value);
-                    }else{
-                        static assert(false);
-                    }
-                    result.next = r.next;
-                }
-                result.error = r.error;
-                return result;
+
+            with(parse!(combinateConvert!(parseString!"hoge", TemplateFunction), kind)(conv!"hogee"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == 4);
+                                         assert(nextInput.source   == conv!"e");
+                                         assert(nextInput.position == 4);
             }
-        }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }).parse(makeInput(conv!"www"), new CallerInfo(0, "")) == makeParseResult(true, cast(size_t)3, makeInput(conv!"", 3), Error("'w' expected but EOF found", 3)));
-                    assert(combinateConvert!(combinateMore1!(parseString!"w"), function(string[] ws){ return ws.length; }).parse(makeInput(conv!"a"), new CallerInfo(0, "")) == makeParseResult(false, cast(size_t)0, makeInput(conv!""), Error("'w' expected but 'a' found", 0)));
-                }
-                //assert(combinateConvert!(10, "hoge/fuga.d", combinateMore1!(parseString!"w"), function(string ws){ return ws.length; }).parse(makeInput(testRange("a")), new CallerInfo(0, "")) == makeParseResult(false, cast(size_t)0, makeInput(testRange("")), Error(q{"w"})));
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-    // combinateConvertWithState
-        template CombinateConvertWithStateType(alias converter, T){
-            static if(__traits(compiles, new converter(T.init.field, StateType.init))){
-                alias converter CombinateConvertWithStateType;
-            }else static if(__traits(compiles, new converter(T.init, StateType.init))){
-                alias converter CombinateConvertWithStateType;
-            }else static if(__traits(compiles, converter(T.init.field, StateType.init))){
-                alias typeof(converter(T.init.field, StateType.init)) CombinateConvertWithStateType;
-            }else static if(__traits(compiles, converter(T.init, StateType.init))){
-                alias typeof(converter(T.init, StateType.init)) CombinateConvertWithStateType;
-            }else{
-                alias void CombinateConvertWithStateType;
+            with(parse!(combinateConvert!(parseString!"hoge", TemplateFunction), kind)(conv!"!!!!"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'hoge' expected");
+                static if(kind.hasError) assert(error.position == 0);
             }
-        }
 
-        debug(ctpg) unittest{
-            static class C1{ this(string, StateType){} }
-            static class C2{ this(string, int, StateType){} }
-            static struct S1{ string str; StateType state; }
-            static struct S2{ string str; int i; StateType state; }
-            static int f1(string, StateType){ return 0; }
-            static int f2(string, int, StateType){ return 0; }
-            static int t1(T)(T, StateType){ return 0; }
-            static int t2(T, U)(T, U, StateType){ return 0; }
-
-            static assert(is(CombinateConvertWithStateType!(C1, string) == C1));
-            static assert(is(CombinateConvertWithStateType!(C1, int) == void));
-            static assert(is(CombinateConvertWithStateType!(C2, Tuple!(string, int)) == C2));
-            static assert(is(CombinateConvertWithStateType!(C2, Tuple!(string, double)) == void));
-            static assert(is(CombinateConvertWithStateType!(S1, string) == S1));
-            static assert(is(CombinateConvertWithStateType!(S2, Tuple!(string, int)) == S2));
-            static assert(is(CombinateConvertWithStateType!(S2, Tuple!(string, double)) == void));
-            static assert(is(CombinateConvertWithStateType!(f1, string) == int));
-            static assert(is(CombinateConvertWithStateType!(f2, Tuple!(string, int)) == int));
-            static assert(is(CombinateConvertWithStateType!(f2, Tuple!(string, double)) == void));
-            static assert(is(CombinateConvertWithStateType!(t1, string) == int));
-            static assert(is(CombinateConvertWithStateType!(t1, void) == void));
-            static assert(is(CombinateConvertWithStateType!(t2, Tuple!(string, int)) == int));
-            static assert(is(CombinateConvertWithStateType!(t2, Tuple!(string, int, int)) == void));
-        }
-
-        template combinateConvertWithState(alias parser, alias converter){
-            alias combinateConvertWithState!(0, "", parser, converter) combinateConvertWithState;
-        }
-
-        template combinateConvertWithState(size_t line, string file, alias parser, alias converter){
-            alias CombinateConvertWithStateType!(converter, ParserType!parser) ResultType;
-            static if(is(ResultType == void)){
-                static if(line){
-                    pragma(msg, file ~ "(" ~ toStringNow!line ~ "): Error: cannot call " ~ converter.stringof ~ " using '>>>' with types: " ~ ParserType!parser.stringof);
-                }else{
-                    pragma(msg, __FILE__ ~ "(" ~ toStringNow!__LINE__ ~ "): Error: cannot call " ~ converter.stringof ~ " using '>>>' with types: " ~ ParserType!parser.stringof);
-                }
-                static assert(false);
+            with(parse!(combinateConvert!(parseString!"hoge", (x) => x.length), kind)(conv!"hogee"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == 4);
+                                         assert(nextInput.source   == conv!"e");
+                                         assert(nextInput.position == 4);
             }
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                typeof(return) result;
-                auto r = parser.parse(input, info);
-                if(r.match){
-                    result.match = true;
-                    static if(__traits(compiles, converter(r.value.field, input.state))){
-                        result.value = converter(r.value.field, input.state);
-                    }else static if(__traits(compiles, new converter(r.value.field, input.state))){
-                        result.value = new converter(r.value.field, input.state);
-                    }else static if(__traits(compiles, converter(r.value, input.state))){
-                        result.value = converter(r.value, input.state);
-                    }else static if(__traits(compiles, new converter(r.value, input.state))){
-                        result.value = new converter(r.value, input.state);
-                    }
-                    result.next = r.next;
-                }
-                result.error = r.error;
-                return result;
+
+            with(parse!(combinateConvert!(parseString!"hoge", (x) => x.length), kind)(conv!"!!!!"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'hoge' expected");
+                static if(kind.hasError) assert(error.position == 0);
             }
-        }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(combinateConvertWithState!(combinateMore1!(parseString!"w"), function(string[] ws, StateType state){ return ws.length; }).parse(makeInput(conv!"www"), new CallerInfo(0, "")) == makeParseResult(true, cast(size_t)3, makeInput(conv!"", 3), Error("'w' expected but EOF found", 3)));
-                    assert(combinateConvertWithState!(combinateMore1!(parseString!"w"), function(string[] ws, StateType state){ return ws.length; }).parse(makeInput(conv!"a"), new CallerInfo(0, "")) == makeParseResult(false, cast(size_t)0, makeInput(conv!""), Error("'w' expected but 'a' found", 0)));
-                }
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-    // combinateCheck
-        template isValidChecker(alias checker, T){
-            static if(is(typeof(checker(T.init.field)) == bool)){
-                immutable isValidChecker = true;
-            }else static if(is(typeof(checker(T.init)) == bool)){
-                immutable isValidChecker = true;
-            }else{
-                immutable isValidChecker = false;
+            with(parse!(combinateConvert!(parseString!"hoge", (x){ return x.length; }), kind)(conv!"hogee"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == 4);
+                                         assert(nextInput.source   == conv!"e");
+                                         assert(nextInput.position == 4);
             }
-        }
 
-        debug(ctpg) unittest{
-            static bool f1(string){ return true; }
-            static bool f2(string, int){ return true; }
-            static string f3(string){ return ""; }
-            static bool t1(T)(T){ return true; }
-            static bool t2(T, U)(T, U){ return true; }
-            static string t3(T)(T){ return ""; }
-
-            static assert( isValidChecker!(f1, string));
-            static assert(!isValidChecker!(f1, int));
-            static assert( isValidChecker!(f2, Tuple!(string, int)));
-            static assert(!isValidChecker!(f2, Tuple!(string, string)));
-            static assert(!isValidChecker!(f3,  string));
-            static assert(!isValidChecker!(f3,  int));
-            static assert( isValidChecker!(t1, int));
-            static assert( isValidChecker!(t2, Tuple!(string, int)));
-            static assert(!isValidChecker!(t2, Tuple!(string, int, int)));
-            static assert(!isValidChecker!(t3, int));
-        }
-
-        template combinateCheck(alias parser, alias checker){
-            alias combinateCheck!(0, "", parser, checker) combinateCheck;
-        }
-
-        template combinateCheck(size_t line, string file, alias parser, alias checker){
-            alias ParserType!parser ResultType;
-            static if(!isValidChecker!(checker, ResultType)){
-                static if(line){
-                    pragma(msg, file ~ "(" ~ toStringNow!line ~ "): Error: cannot call " ~ checker.stringof ~ " using '>>?' with types: " ~ ParserType!parser.stringof);
-                }else{
-                    pragma(msg, __FILE__ ~ "(" ~ toStringNow!__LINE__ ~ "): Error: cannot call " ~ checker.stringof ~ " using '>>?' with types: " ~ ParserType!parser.stringof);
-                }
-                static assert(false);
+            with(parse!(combinateConvert!(parseString!"hoge", (x){ return x.length; }), kind)(conv!"!!!!"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'hoge' expected");
+                static if(kind.hasError) assert(error.position == 0);
             }
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                typeof(return) result;
-                auto r = parser.parse(input, info);
-                if(r.match){
-                    if(checker(r.value)){
-                        result = r;
-                    }else{
-                        result.error = Error("passing check", input.position, input.line);
-                    }
-                }else{
-                    result.error = r.error;
-                }
-                return result;
-            }
+
+            static if(kind.hasValue) static assert(!__traits(compiles, parse!(combinateConvert!(parseString!"hoge", (size_t x){ return x; }), kind)(conv!"hoge")));
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }).parse(makeInput(conv!"wwwww"), new CallerInfo(0, "")) == makeParseResult(true, ["w", "w", "w", "w", "w"], makeInput(conv!"", 5), Error("'w' expected but EOF found", 5)));
-                    assert(combinateCheck!(combinateMore0!(parseString!"w"), function(string[] ws){ return ws.length == 5; }).parse(makeInput(conv!"wwww"), new CallerInfo(0, "")) == makeParseResult(false, [""][0..0], makeInput(conv!""), Error("passing check", 0)));
-                }
-                return true;
-            };
-            static assert(dg());
-            dg();
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template combinateCheck(alias parser, alias checker, size_t line = 0, string file = "")
+{
+    template build(alias kind, SrcType)
+    {
+        alias T = getParseResultType!(parser.build!(ParserKind!(true, kind.hasError), SrcType));
+
+        static if(!__traits(compiles, checker(T.init.field)) && !__traits(compiles, checker(T.init)))
+        {
+            debug(ctpgSuppressErrorMsg) {} else pragma(msg, file ~ "(" ~ line.to!string() ~ "): Error: Cannot call '" ~ checker.stringof ~ "' using '>?' with types: " ~ T.stringof);
+            static assert(false);
+        }
+        else static if(!is(typeof(checker(T.init.field)) == bool) && !is(typeof(checker(T.init)) == bool))
+        {
+            debug(ctpgSuppressErrorMsg) {} else pragma(msg, file ~ "(" ~ line.to!string() ~ "): Error: '" ~ checker.stringof ~ "' does not return bool");
+            static assert(false);
         }
 
-    // combinateChangeState
-        template combinateChangeState(alias parser){
-            alias None ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                typeof(return) result;
-                auto r = parser.parse(input, info);
-                if(r.match){
-                    result.match = true;
-                    result.next.source = r.next.source;
-                    result.next.position = r.next.position;
-                    result.next.line = r.next.line;
-                    result.next.state = r.value;
-                }
-                result.error = r.error;
-                return result;
-            }
-        }
+        mixin MAKE_RESULT!q{ T };
 
-        version(none) debug(ctpg) unittest{
-            enum dg = {
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            Result result;
+
+            with(parser.build!(ParserKind!(true, kind.hasError), SrcType).parse(input, caller))
+            {
+                static if(kind.hasError)
                 {
-                    auto r = combinateChangeState!(parseString!"hoge").parse(makeInput("hoge"), new CallerInfo(0, ""));
-                    assert(r.next.input == "");
-                    assert(r.next.state == "hoge");
+                    result.error = error;
                 }
+
+                if(match)
                 {
-                    auto r = combinateSequence!(combinateChangeState!(parseString!"hoge"), combinateChangeState!(parseString!"piyo")).parse(makeInput("hogepiyo"), new CallerInfo(0, ""));
-                    assert(r.next.input == "");
-                    assert(r.next.state == "piyo");
-                }
-                return true;
-            };
-            dg();
-            static assert(dg());
-        }
+                         static if(is(typeof(checker(T.init.field)) == bool)) result.match = checker(value.field);
+                    else static if(is(typeof(checker(T.init      )) == bool)) result.match = checker(value      );
 
-    // combinateMemoize
-        template combinateMemoize(alias parser){
-            alias ParserType!parser ResultType;
-            ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                if(!__ctfe){
-                //static if(false){
-                    static typeof(return)[Input!R] memo;
-                    auto p = input in memo;
-                    if(p){
-                        return *p;
+                    if(result.match)
+                    {
+                        result.nextInput = nextInput;
+
+                        static if(kind.hasValue)
+                        {
+                            result.value = value;
+                        }
                     }
-                    auto result = parser.parse(input, info);
-                    memo[input] = result;
-                    return result;
-                }else{
-                    return parser.parse(input, info);
+                    else
+                    {
+                        static if(kind.hasError)
+                        {
+                            result.error.msg = "passing check expected";
+                            result.error.position = input.position;
+                        }
+                    }
                 }
+            }
+
+            return result;
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool Function(string str)
+    {
+        return str.length == 4;
+    }
+
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(combinateCheck!(parseString!"hoge", Function), kind)(conv!"hoge!"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == "hoge");
+                                         assert(nextInput.source   == conv!"!");
+                                         assert(nextInput.position == 4);
+            }
+
+            with(parse!(combinateCheck!(parseString!"hoge!", Function), kind)(conv!"hoge!"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "passing check expected");
+                static if(kind.hasError) assert(error.position == 0);
+            }
+
+            with(parse!(combinateCheck!(parseString!"hoge", Function), kind)(conv!"fuga"))
+            {
+                                         assert(match          == false);
+                static if(kind.hasError) assert(error.msg      == "'hoge' expected");
+                static if(kind.hasError) assert(error.position == 0);
+            }
+
+            static assert(!__traits(compiles, parse!(combinateCheck!(parseString!"hoge", (int    i  ){ return false; }), kind)(conv!"hoge")));
+            static assert(!__traits(compiles, parse!(combinateCheck!(parseString!"hoge", (string str){ return 0;     }), kind)(conv!"hoge")));
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template combinateInputSlice(alias parser, size_t line = 0, string file = "")
+{
+    template build(alias kind, SrcType)
+    {
+        static if(kind.hasValue)
+        {
+            static if(!isArray!SrcType && !hasSlicing!SrcType)
+            {
+                debug(ctpgSuppressErrorMsg) {} else pragma(msg, file ~ "(" ~ line.to!string() ~ "): Error: Input type should be sliceable");
+                static assert(false);
+            }
+
+            alias Result = ParseResult!(kind, SrcType, SrcType);
+
+            Result parse(Input!SrcType input, in Caller caller)
+            {
+                Result result;
+
+                with(parser.build!(ParserKind!(false, kind.hasError), SrcType).parse(input.save, caller))
+                {
+                    static if(kind.hasError)
+                    {
+                        result.error = error;
+                    }
+
+                    if(match)
+                    {
+                        result.match = true;
+                        result.nextInput = nextInput;
+
+                        static if(kind.hasValue)
+                        {
+                            result.value = input.source[0 .. nextInput.position - input.position];
+                        }
+                    }
+                }
+
+                return result;
+            }
+        }
+        else
+        {
+            alias parse = parser.build!(kind, SrcType).parse;
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(combinateInputSlice!(combinateSequence!(parseString!"hoge", parseString!"fuga")), kind)(conv!"hogefugapiyo"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == conv!"hogefuga");
+                                         assert(nextInput.source   == conv!"piyo");
+                                         assert(nextInput.position == 8);
+            }
+
+            static if(kind.hasValue) static assert(!__traits(compiles, parse!(combinateInputSlice!(parseString!"hoge"), kind)(0)));
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template combinateMemoize(alias parser)
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ getParseResultType!(parser.build!(kind, SrcType)) };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            if(!__ctfe)
+            {
+                static typeof(return)[Input!SrcType] memo;
+
+                auto p = input in memo;
+                if(p)
+                {
+                    return *p;
+                }
+
+                auto result = parser.build!(kind, SrcType).parse(input, caller);
+                memo[input] = result;
+
+                return result;
+            }
+            else
+            {
+                return parser.build!(kind, SrcType).parse(input, caller);
+            }
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(combinateMemoize!(parseString!"hoge"), kind)(conv!"hogehoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == "hoge");
+                                         assert(nextInput.source   == conv!"hoge");
+                                         assert(nextInput.position == 4);
+                                         assert(nextInput.line     == 0);
+            }
+
+            with(parse!(combinateMemoize!(parseString!"hoge"), kind)(conv!"hogehoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == "hoge");
+                                         assert(nextInput.source   == conv!"hoge");
+                                         assert(nextInput.position == 4);
+                                         assert(nextInput.line     == 0);
+            }
+
+            with(parse!(combinateMemoize!(parseString!"\n\nhoge"), kind)(conv!"\n\nhogehoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == "\n\nhoge");
+                                         assert(nextInput.source   == conv!"hoge");
+                                         assert(nextInput.position == 6);
+                                         assert(nextInput.line     == 2);
+            }
+
+            with(parse!(combinateMemoize!(parseString!"\n\nhoge"), kind)(conv!"\n\nhogehoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == "\n\nhoge");
+                                         assert(nextInput.source   == conv!"hoge");
+                                         assert(nextInput.position == 6);
+                                         assert(nextInput.line     == 2);
             }
         }
 
-        debug(ctpg) unittest{
-            alias combinateMemoize!(combinateConvert!(parseString!"str", (str){ "This message should be showed twice.".writeln(); return 0; })) p;
-            combinateSequence!(combinateAndPred!p, p).parse(makeInput("str"), new CallerInfo(0, ""));
-            combinateSequence!(combinateAndPred!p, p).parse(makeInput("str".testRange()), new CallerInfo(0, ""));
-        }
+        return true;
+    }
 
-    // combinateSkip
-        template combinateSkip(alias parser, alias skip){
-            alias ParserType!parser ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                auto skipped = combinateMemoize!skip.parse(input.save, info);
-                if(skipped.match){
-                    return parser.parse(skipped.next, info);
-                }else{
-                    return parser.parse(input, info);
-                }
+    static assert(test());
+    test();
+}
+
+
+template combinateSkip(alias skip, alias parser)
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ getParseResultType!(parser.build!(kind, SrcType)) };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            auto skipped = skip.build!(ParserKind!(false, kind.hasError), SrcType).parse(input.save, caller);
+
+            if(skipped.match)
+            {
+                return parser.build!(kind, SrcType).parse(skipped.nextInput, caller);
+            }
+            else
+            {
+                return parser.build!(kind, SrcType).parse(input, caller);
+            }
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(combinateSkip!(parseString!"\n", parseString!"hoge"), kind)(conv!"hogehoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == "hoge");
+                                         assert(nextInput.source   == conv!"hoge");
+                                         assert(nextInput.position == 4);
+                                         assert(nextInput.line     == 0);
+            }
+
+            with(parse!(combinateSkip!(parseString!"\n\n", parseString!"hoge"), kind)(conv!"\n\nhogehoge"))
+            {
+                                         assert(match              == true);
+                static if(kind.hasValue) assert(value              == "hoge");
+                                         assert(nextInput.source   == conv!"hoge");
+                                         assert(nextInput.position == 6);
+                                         assert(nextInput.line     == 2);
             }
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(combinateSkip!(parseString!"foo", parseString!" ").parse(makeInput(conv!" foo"), new CallerInfo(0, "")) == makeParseResult(true, "foo", makeInput(conv!"", 4)));
-                    assert(combinateSkip!(parseString!"foo", parseString!" ").parse(makeInput(conv!"foo"), new CallerInfo(0, "")) == makeParseResult(true, "foo", makeInput(conv!"", 3)));
-                    assert(combinateSkip!(parseString!"foo", parseString!"foo").parse(makeInput(conv!"foo"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(conv!""), Error("'foo' expected but EOF found", 3)));
-                }
-                return true;
-            };
-            static assert(dg());
-            dg();
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        foreach(conv; convs) foreach(kind; ParserKinds)
+        {
+            with(parse!(root!(), ParserKind!(false, kind.hasError))(conv!"aaa"))
+            {
+                assert(match              == true);
+                assert(nextInput.source   == conv!"");
+                assert(nextInput.position == 3);
+            }
+
+            with(parse!(root!(), ParserKind!(false, kind.hasError))(conv!"aaaa"))
+            {
+                assert(match              == true);
+                assert(nextInput.source   == conv!"aaa");
+                assert(nextInput.position == 1);
+            }
         }
 
-// useful parser
-    // parseEscapeSequence
-        template parseEscapeSequence(){
-            alias combinateConvert!(
-                combinateSequence!(
-                    parseString!"\\",
-                    combinateChoice!(
-                        combinateConvert!(
-                            combinateSequence!(
-                                parseString!"u",
-                                parseAnyChar!(),
-                                parseAnyChar!(),
-                                parseAnyChar!(),
-                                parseAnyChar!()
-                            ),
-                            flat
+        return true;
+    };
+
+    static assert(test());
+    test();
+}
+
+
+struct DLex
+{
+    static:
+
+
+    template Identifier()
+    {
+        template build(alias kind, SrcType)
+        {
+            mixin MAKE_RESULT!q{ SrcType };
+
+            Result parse(Input!SrcType input, in Caller caller)
+            {
+                return combinateInputSlice!
+                (
+                    combinateSequence!
+                    (
+                        combinateChoice!
+                        (
+                            parseCharRange!('a', 'z'),
+                            parseCharRange!('A', 'Z'),
+                            parseString!"_",
                         ),
-                        combinateConvert!(
-                            combinateSequence!(
-                                parseString!"U",
-                                parseAnyChar!(),
-                                parseAnyChar!(),
-                                parseAnyChar!(),
-                                parseAnyChar!(),
-                                parseAnyChar!(),
-                                parseAnyChar!(),
-                                parseAnyChar!(),
-                                parseAnyChar!()
-                            ),
-                            flat
-                        ),
-                        combinateChoice!(
-                            parseString!"'",
-                            parseString!"\"",
-                            parseString!"?",
-                            parseString!"\\",
-                            parseString!"a",
-                            parseString!"b",
-                            parseString!"f",
-                            parseString!"n",
-                            parseString!"r",
-                            parseString!"t",
-                            parseString!"v"
+                        combinateMore0!
+                        (
+                            combinateChoice!
+                            (
+                                parseCharRange!('a', 'z'),
+                                parseCharRange!('A', 'Z'),
+                                parseCharRange!('0', '9'),
+                                parseString!"_",
+                            )
                         )
                     )
-                ),
-                flat
-            ) parseEscapeSequence;
+                ).build!(kind, SrcType).parse(input, caller);
+            }
         }
+    }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(parseEscapeSequence!().parse(makeInput(conv!`\"hoge`), new CallerInfo(0, "")) == makeParseResult(true, `\"`, makeInput(conv!"hoge", 2)));
-                    assert(parseEscapeSequence!().parse(makeInput(conv!`\U0010FFFFhoge`), new CallerInfo(0, "")) == makeParseResult(true, `\U0010FFFF`, makeInput(conv!"hoge", 10)));
-                    assert(parseEscapeSequence!().parse(makeInput(conv!`\u10FFhoge`), new CallerInfo(0, "")) == makeParseResult(true, `\u10FF`, makeInput(conv!"hoge", 6)));
-                    assert(parseEscapeSequence!().parse(makeInput(conv!`\nhoge`), new CallerInfo(0, "")) == makeParseResult(true, `\n`, makeInput(conv!"hoge", 2)));
-                    assert(parseEscapeSequence!().parse(makeInput(conv!"鬱hoge"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(conv!""), Error("'\\' expected but '鬱' found", 0)));
+    debug(ctpg) unittest
+    {
+        static bool test()
+        {
+            foreach(conv; convs) foreach(kind; ParserKinds)
+            {
+                with(parse!(Identifier!(), kind)(conv!"_ab0="))
+                {
+                                             assert(match              == true);
+                                             assert(nextInput.source   == conv!"=");
+                                             assert(nextInput.position == 4);
+                                             assert(nextInput.line     == 0);
+                    static if(kind.hasValue) assert(value              == conv!"_ab0");
                 }
+            }
 
-                try{
-                    scope(success) assert(false);
-                    auto result = parseEscapeSequence!().parse(makeInput([0, 0][]), new CallerInfo(0, ""));
-                }catch(Exception ex){}
-                return true;
-            };
-            static assert(dg());
-            dg();
+            return true;
         }
 
-    // parseSpaces
-        template parseSpaces(){
-            alias combinateNone!(combinateMore0!(combinateChoice!(parseString!" ", parseString!"\n", parseString!"\t", parseString!"\r", parseString!"\f"))) parseSpaces;
+        static assert(test());
+        test();
+    }
+
+
+    template StringLiteral()
+    {
+        template build(alias kind, SrcType)
+        {
+            mixin MAKE_RESULT!q{ SrcType };
+
+            Result parse(Input!SrcType input, in Caller caller)
+            {
+                return combinateInputSlice!
+                (
+                    combinateChoice!
+                    (
+                        WysiwygString!(),
+                        AlternateWysiwygString!(),
+                        DoubleQuotedString!()
+                    )
+                ).build!(kind, SrcType).parse(input, caller);
+            }
+        }
+    }
+
+    debug(ctpg) unittest
+    {
+        static bool test()
+        {
+            foreach(conv; convs) foreach(kind; ParserKinds)
+            {
+            }
+
+            return true;
         }
 
-        alias parseSpaces ss;
-        alias parseSpaces defaultSkip;
+        static assert(test());
+        test();
+    }
 
-        debug(ctpg) unittest{
-            static assert(is(parseSpaces!().ResultType));
-            enum dg = {
-                foreach(conv; convs){
-                    assert(parseSpaces!().parse(makeInput(conv!"\t \rhoge"), new CallerInfo(0, "")) == makeParseResult(true, None.init, makeInput(conv!"hoge", 3)));
-                    assert(parseSpaces!().parse(makeInput(conv!"hoge"), new CallerInfo(0, "")) == makeParseResult(true, None.init, makeInput(conv!"hoge", 0)));
-                }
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
 
-    // parseIdent
-        template parseIdent(){
-            alias combinateConvert!(
-                combinateSequence!(
-                    combinateChoice!(
-                        parseString!"_",
-                        parseCharRange!('a','z'),
-                        parseCharRange!('A','Z')
-                    ),
-                    combinateMore0!(parseIdentChar!())
-                ),
-                flat
-            ) parseIdent;
-        }
+    template WysiwygString()
+    {
+        template build(alias kind, SrcType)
+        {
+            mixin MAKE_RESULT!q{ SrcType };
 
-        alias parseIdent ident_p;
-
-        private template parseIdentChar(){
-            alias combinateChoice!(
-                parseString!"_",
-                parseCharRange!('a','z'),
-                parseCharRange!('A','Z'),
-                parseCharRange!('0','9')
-            ) parseIdentChar;
-        }
-
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(parseIdent!().parse(makeInput(conv!"hoge"), new CallerInfo(0, "")) == makeParseResult(true, "hoge", makeInput(conv!"", 4)));
-                    assert(parseIdent!().parse(makeInput(conv!"_0"), new CallerInfo(0, "")) == makeParseResult(true, "_0", makeInput(conv!"", 2)));
-                    assert(parseIdent!().parse(makeInput(conv!"0"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(conv!""), Error("'A' ~ 'Z' expected but '0' found")));
-                    assert(parseIdent!().parse(makeInput(conv!"あ"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(conv!""), Error("'A' ~ 'Z' expected but 'あ' found")));
-                }
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-    // parseStringLiteral
-        template parseStringLiteral(){
-            alias combinateChoice!(
-                combinateConvert!(
-                    combinateSequence!(
-                        parseString!"\"",
-                        combinateMore0!(
-                            combinateSequence!(
-                                combinateNotPred!(parseString!"\""),
-                                combinateChoice!(
-                                    parseEscapeSequence!(),
-                                    parseAnyChar!()
-                                )
-                            )
-                        ),
-                        parseString!"\""
-                    ),
-                    flat
-                ),
-                combinateConvert!(
-                    combinateSequence!(
+            static Result parse(Input!SrcType input, in Caller caller)
+            {
+                return combinateInputSlice!
+                (
+                    combinateSequence!
+                    (
                         parseString!"r\"",
-                        combinateMore0!(
-                            combinateSequence!(
-                                combinateNotPred!(parseString!"\""),
-                                parseAnyChar!()
+                        combinateMore0!
+                        (
+                            combinateSequence!
+                            (
+                                combinateNotPred!
+                                (
+                                    parseString!"\""
+                                ),
+                                parseCharRange!(dchar.min, dchar.max)
                             )
                         ),
                         parseString!"\""
-                    ),
-                    flat
-                ),
-                combinateConvert!(
-                    combinateSequence!(
+                    )
+                ).build!(kind, SrcType).parse(input, caller);
+            }
+        }
+    }
+
+    debug(ctpg) unittest
+    {
+        static bool test()
+        {
+            foreach(conv; convs) foreach(kind; ParserKinds)
+            {
+            }
+
+            return true;
+        }
+
+        static assert(test());
+        test();
+    }
+
+
+    template AlternateWysiwygString()
+    {
+        template build(alias kind, SrcType)
+        {
+            mixin MAKE_RESULT!q{ SrcType };
+
+            static Result parse(Input!SrcType input, in Caller caller)
+            {
+                return combinateInputSlice!
+                (
+                    combinateSequence!
+                    (
                         parseString!"`",
-                        combinateMore0!(
-                            combinateSequence!(
-                                combinateNotPred!(parseString!"`"),
-                                parseAnyChar!()
+                        combinateMore0!
+                        (
+                            combinateSequence!
+                            (
+                                combinateNotPred!
+                                (
+                                    parseString!"`"
+                                ),
+                                parseCharRange!(dchar.min, dchar.max)
                             )
                         ),
                         parseString!"`"
-                    ),
-                    flat
-                )
-            ) parseStringLiteral;
-        }
-
-        alias parseStringLiteral strLit_p;
-
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(parseStringLiteral!().parse(makeInput(conv!"\"表が怖い噂のソフト\""), new CallerInfo(0, "")) == makeParseResult(true, "\"表が怖い噂のソフト\"", makeInput(conv!"", 11), Error("Expected failure", 10)));
-                    assert(parseStringLiteral!().parse(makeInput(conv!`r"表が怖い噂のソフト"`), new CallerInfo(0, "")) == makeParseResult(true, `r"表が怖い噂のソフト"`, makeInput(conv!"", 12), Error("Expected failure", 11)));
-                    assert(parseStringLiteral!().parse(makeInput(conv!"`表が怖い噂のソフト`"), new CallerInfo(0, "")) == makeParseResult(true, q{`表が怖い噂のソフト`}, makeInput(conv!"", 11), Error("Expected failure", 10)));
-                }
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-    // parseIntLiteral
-        template parseIntLiteral(){
-            alias combinateChoice!(
-                combinateConvert!(
-                    combinateNone!(parseString!"0"),
-                    function() => 0
-                ),
-                combinateConvert!(
-                    combinateSequence!(
-                        parseCharRange!('1', '9'),
-                        combinateMore0!(parseCharRange!('0', '9'))
-                    ),
-                    function(string head, string[] tails){
-                        int result = head[0] - '0';
-                        foreach(c; tails){
-                            result = result * 10 + c[0] - '0';
-                        }
-                        return result;
-                    }
-                )
-            ) parseIntLiteral;
-        }
-
-        alias parseIntLiteral intLit_p;
-
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(parseIntLiteral!().parse(makeInput(conv!"3141"), new CallerInfo(0, "")) == makeParseResult(true, 3141, makeInput(conv!"", 4)));
-                    assert(parseIntLiteral!().parse(makeInput(conv!"0"), new CallerInfo(0, "")) == makeParseResult(true, 0, makeInput(conv!"", 1)));
-                    assert(parseIntLiteral!().parse(makeInput(conv!"0123"), new CallerInfo(0, "")) == makeParseResult(true, 0, makeInput(conv!"123", 1)));
-                }
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-// getters
-    // getLine
-        template getLine(){
-            alias size_t ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                return makeParseResult(true, input.line, input, Error.init);
+                    )
+                ).build!(kind, SrcType).parse(input, caller);
             }
         }
-
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(combinateSequence!(parseSpaces!(), getLine!()).parse(makeInput(conv!"\n\n"), new CallerInfo(0, "")) == makeParseResult(true, cast(size_t)3, makeInput(conv!"", 2, 3)));
-                }
-
-                try{
-                    scope(failure) assert(true);
-                    auto result = combinateSequence!(parseSpaces!(), getLine!()).parse(makeInput([0, 0]), new CallerInfo(0, ""));
-                }catch(Exception ex){}
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-    // getCallerLine
-        template getCallerLine(){
-            alias size_t ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                return makeParseResult(true, info.line, input, Error.init);
-            }
-        }
-
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(getCallerLine!().parse(makeInput(conv!""), new CallerInfo(__LINE__, "")) == makeParseResult(true, cast(size_t)__LINE__, makeInput(conv!"", 0)));
-                }
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-    // getCallerFile
-        template getCallerFile(){
-            alias string ResultType;
-            static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){
-                return makeParseResult(true, info.file, input, Error.init);
-            }
-        }
-
-        debug(ctpg) unittest{
-            enum dg = {
-                foreach(conv; convs){
-                    assert(getCallerFile!().parse(makeInput(conv!""), new CallerInfo(0, __FILE__)) == makeParseResult(true, __FILE__, makeInput(conv!"", 0)));
-                }
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
-
-string generateParsers(size_t callerLine = __LINE__, string callerFile = __FILE__)(string src){
-    auto parsed = src.parse!(defs, callerLine, callerFile)();
-    if(parsed.match){
-        return parsed.value;
-    }else{
-        return "pragma(msg, __FILE__ ~ `(" ~ (parsed.error.line + callerLine - 1).to!string() ~ "): Error: " ~ parsed.error.msg ~ "`);static assert(false);";
     }
-}
 
-auto parse(alias fun, size_t callerLine = __LINE__, string callerFile = __FILE__, Range)(Range input, StateType state = StateType.init) if(isParser!(fun!())){
-    return fun!().parse(Input!Range(input, 0, 1, state), new CallerInfo(callerLine, callerFile));
-}
+    debug(ctpg) unittest
+    {
+        static bool test()
+        {
+            foreach(conv; convs) foreach(kind; ParserKinds)
+            {
+            }
 
-// parsers of DSL
-    // arch
-        template arch(string open, string close){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        parseString!open,
-                        combinateMore0!(
-                            combinateChoice!(
-                                arch!(open, close),
-                                combinateSequence!(
-                                    combinateNotPred!(
-                                        parseString!close
-                                    ),
-                                    combinateChoice!(
-                                        parseAnyChar!(),
-                                        parseStringLiteral!()
-                                    )
+            return true;
+        }
+
+        static assert(test());
+        test();
+    }
+
+
+    template DoubleQuotedString()
+    {
+        template build(alias kind, SrcType)
+        {
+            mixin MAKE_RESULT!q{ SrcType };
+
+            static Result parse(Input!SrcType input, in Caller caller)
+            {
+                return combinateInputSlice!
+                (
+                    combinateSequence!
+                    (
+                        parseString!"\"",
+                        combinateMore0!
+                        (
+                            combinateSequence!
+                            (
+                                combinateNotPred!
+                                (
+                                    parseString!"\""
+                                ),
+                                combinateChoice!
+                                (
+                                    EscapeSequence!(),
+                                    parseCharRange!(dchar.min, dchar.max)
                                 )
                             )
                         ),
-                        parseString!close
-                    ),
-                    flat
-                ).parse(input, info);
+                        parseString!"\""
+                    )
+                ).build!(kind, SrcType).parse(input, caller);
+            }
+        }
+    }
+
+    debug(ctpg) unittest
+    {
+        static bool test()
+        {
+            foreach(conv; convs) foreach(kind; ParserKinds)
+            {
+            }
+
+            return true;
+        }
+
+        static assert(test());
+        test();
+    }
+
+
+    template EscapeSequence()
+    {
+        template build(alias kind, SrcType)
+        {
+            mixin MAKE_RESULT!q{ SrcType };
+
+            static Result parse(Input!SrcType input, in Caller caller)
+            {
+                return combinateInputSlice!
+                (
+                    combinateChoice!
+                    (
+                        parseString!`\'`,
+                        parseString!`\"`,
+                        parseString!`\?`,
+                        parseString!`\\`,
+                        parseString!`\a`,
+                        parseString!`\b`,
+                        parseString!`\f`,
+                        parseString!`\n`,
+                        parseString!`\r`,
+                        parseString!`\t`,
+                        parseString!`\v`,
+                        parseString!"\u0000",
+                        parseString!"\u001A",
+                    )
+                ).build!(kind, SrcType).parse(input, caller);
+            }
+        }
+    }
+
+    debug(ctpg) unittest
+    {
+        static bool test()
+        {
+            foreach(conv; convs) foreach(kind; ParserKinds)
+            {
+            }
+
+            return true;
+        }
+
+        static assert(test());
+        test();
+    }
+}
+
+
+auto parse(alias parser, alias kind = ParserKind!(true, true), SrcType)(SrcType src, size_t line = __LINE__ , string file = __FILE__) if(__traits(compiles, parser.build))
+{
+    return parser.build!(kind, SrcType).parse(Input!SrcType(src), Caller(line, file));
+}
+
+auto parse(alias parser, alias kind = ParserKind!(true, true), SrcType)(SrcType src, size_t line = __LINE__ , string file = __FILE__) if(__traits(compiles, parser!().build))
+{
+    return parser!().build!(kind, SrcType).parse(Input!SrcType(src), Caller(line, file));
+}
+
+
+string genParsers(string src, size_t line = __LINE__ , string file = __FILE__)
+{
+    /+
+        パスの順番どうしよう？
+        生成オプションの中に「スキップをメモ化」ってのがあるから、生成オプション適応を先にやると、どれがスキップだかわからなくなって困る。
+            SKIPを置き換えるんじゃなくて残して、SKIPの下にスキップパーサを入れるみたいな構造なら、どれがスキップパーサか分かる。
+            それなら、別にapplyMemoizeSkipを先にやる必要はなくなる
+        うーん、単純にスキップをメモ化だけを単独で最初にやっちゃうって方法がいいかな
+        てか、それぞれの生成オプションごとに関数を用意してやるのがいいのかも知れない
+        てか、生成オプションの渡し方とかどうするんですかね・・・
+        うーん、オプションもDSLの中に書いてもらおうかなぁ・・・
+        結局、生成オプションごとに関数を作ることにした。オプションはDSL内に書いてもらう
+        古いctpgの実装だと、リテラルはskip!(memoize!(literal))ってなってるから、
+        適応の順番はskip->memoizeになる
+    +/
+    /+ 
+        applySetSkipする前と後のSKIPは別にするべきなのかどうかみたいな話
+        ・別にするべき
+            ・前と後で意味合いが変わる。同じだと紛らわしい
+            ・childrenにスキップパーサを追加する必要がある
+        ・同じにするべき
+            ・前と後で、同時に出ることはないから
+            ・別にすると名前空間が汚れる
+        これは、別の方がいいかも知れない
+        SKIPとSKIP_WITHにした。
+    +/ 
+    /+
+
+    +/
+        
+    auto parsed = src.parse!(defs, ParserKind!(true, true))(line, file);
+
+    if(parsed.match)
+    {
+        Node code = parsed.value
+            .applySkipLiteral()
+            .applyMemoizeSkip(true)
+            .applyMemoizeLiteral(false)
+            .applyMemoizeNonterminal()
+            .expandSkip()
+            .removeMemoizeDuplicates()
+            .removeSkipWithDuplicates()
+        ;
+
+        version(ctpgPrintGeneratedCode)
+        {
+            return code.generate() ~ "pragma(msg, \"\n======== " ~ file ~ "(" ~ line.to!string ~ ") =========\n\n\"q{" ~ code.toString() ~ "}\"\n\n=====================\n\n\"q{" ~ code.generate() ~ "});";
+        }
+        else
+        {
+            return code.generate();
+        }
+    }
+    else
+    {
+        return "pragma(msg,\"" ~ file ~ "(" ~ (line + src[0 .. parsed.error.position].count('\n') + 1).to!string() ~ "): Error: " ~ parsed.error.msg ~ "\");static assert(false);";
+    }
+}
+
+alias generateParsers = genParsers;
+
+
+private:
+
+enum TokenType
+{
+    UNDEFINED,
+
+    // 単一トークン
+    CONVERTER,
+    ID,
+    DOLLAR,
+    TEMPLATE_INSTANCE,
+    NONTERMINAL,
+    RANGE_ONE_CHAR,
+    RANGE_CHAR_RANGE,
+    RANGE,
+    STRING,
+
+    // 再帰的なトークン
+    EXCLAM,
+    ANPERSAND,
+    ASCIICIRCUM,
+    ASTERISK,
+    PLUS,
+    QUESTION,
+    SEQUENCE,
+    LEFT_SHIFT,
+    LEFT_QUESTION,
+    SLASH,
+    DEFINITION,
+    DEFINITIONS,
+
+    // 構文定義内で使える@トークン
+    SKIP,// SET_SKIPで指定されたスキップパーサでスキップする
+    SKIP_WITH, // これ自身が指定したスキップパーサでスキップする
+    SET_SKIP, // スキップパーサを設定する
+    MEMOIZE, // メモ化する
+
+    SKIP_LITERAL_TRUE,
+    SKIP_LITERAL_FALSE,
+    MEMOIZE_SKIP_TRUE,
+    MEMOIZE_SKIP_FALSE,
+    MEMOIZE_LITERAL_TRUE,
+    MEMOIZE_LITERAL_FALSE,
+    MEMOIZE_NONTERMINAL_TRUE,
+    MEMOIZE_NONTERMINAL_FALSE,
+
+    // 構文定義外で使える@トークン
+    GLOBAL_SET_SKIP,
+
+    GLOBAL_SKIP_LITERAL_TRUE,
+    GLOBAL_SKIP_LITERAL_FALSE,
+    GLOBAL_MEMOIZE_SKIP_TRUE,
+    GLOBAL_MEMOIZE_SKIP_FALSE,
+    GLOBAL_MEMOIZE_LITERAL_TRUE,
+    GLOBAL_MEMOIZE_LITERAL_FALSE,
+    GLOBAL_MEMOIZE_NONTERMINAL_TRUE,
+    GLOBAL_MEMOIZE_NONTERMINAL_FALSE,
+}
+
+struct Token
+{
+    TokenType type;
+    string text_;
+
+    string text() @property 
+    {
+        return text_.length == 0 ? type.to!string() : text_;
+    }
+
+    void text(string text_) @property
+    {
+        this.text_ = text_;
+    }
+}
+
+
+struct Node
+{
+    Token token;
+    Node[] children;
+
+    size_t line;
+    string file;
+
+    string toString(string indent = "", bool last = true)
+    {
+        string res;
+        size_t lastIndex = children.length - 1;
+
+        res = indent ~ "+-[" ~ token.text ~ "]\n";
+        foreach(i, child; children)
+        {
+            //if(i == children.length - 1)
+            if(i == lastIndex)
+            {
+                res ~= child.toString(indent ~ (last ? "   " : "|  "), true);
+            }
+            else
+            {
+                res ~= child.toString(indent ~ (last ? "   " : "|  "), false);
             }
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(arch!("(", ")").parse(makeInput("(a(i(u)e)o())"), new CallerInfo(0, "")) == makeParseResult(true, "(a(i(u)e)o())", makeInput("", 13), Error("Expected failure", 12)));
-                assert(arch!("[", "]").parse(makeInput("[a[i[u]e]o[]]"), new CallerInfo(0, "")) == makeParseResult(true, "[a[i[u]e]o[]]", makeInput("", 13), Error("Expected failure", 12)));
-                assert(arch!("{", "}").parse(makeInput("{a{i{u}e}o{}}"), new CallerInfo(0, "")) == makeParseResult(true, "{a{i{u}e}o{}}", makeInput("", 13), Error("Expected failure", 12)));
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
+        return res;
+    }
+}
 
-    // func
-        template func(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        combinateOption!(
-                            combinateSequence!(
-                                arch!("(", ")"),
-                                parseSpaces!()
-                            )
-                        ),
-                        arch!("{", "}")
+
+// SKIP_LITERAL_TRUEな場所にLITERALがあったらSKIPの下に入れる
+// これ、普通にchildren[n].token.typeじゃなくてnode.token.typeでswitchした方がいいな・・・
+// 後で試す
+// 試したら、普通にテスト通った。ただ、デフォルト引数が使えなくなった。
+// auto refな引数のデフォルト値にrvalueを設定したいでござる。なぜ出来ないのか。
+// ふつうにDEFINITIONSを特別扱いして、デフォルト値を復活させた。
+Node applySkipLiteral(Node node, bool isSkipLiteral = true)
+{
+    final switch(node.token.type)
+    {
+        case TokenType.DOLLAR:
+        case TokenType.RANGE:
+        case TokenType.STRING:
+            if(isSkipLiteral)
+            {
+                Node skipNode;
+                skipNode.token.type = TokenType.SKIP;
+                skipNode.children ~= node;
+
+                node = skipNode;
+            }
+            break;
+
+        case TokenType.SKIP_LITERAL_TRUE:
+            node = node.children[0].applySkipLiteral(true);
+            break;
+
+        case TokenType.SKIP_LITERAL_FALSE:
+            node = node.children[0].applySkipLiteral(false);
+            break;
+
+
+        case TokenType.DEFINITIONS:
+            foreach(ref child; node.children)
+            {
+                switch(child.token.type)
+                {
+                    case TokenType.GLOBAL_SKIP_LITERAL_TRUE:
+                        isSkipLiteral = true;
+                        break;
+
+                    case TokenType.GLOBAL_SKIP_LITERAL_FALSE:
+                        isSkipLiteral = false;
+                        break;
+
+                    default:
+                        child = child.applySkipLiteral(isSkipLiteral);
+                }
+            }
+            break;
+
+        case TokenType.DEFINITION:
+        case TokenType.SLASH:
+        case TokenType.LEFT_QUESTION:
+        case TokenType.LEFT_SHIFT:
+        case TokenType.SEQUENCE:
+        case TokenType.QUESTION:
+        case TokenType.PLUS:
+        case TokenType.ASTERISK:
+        case TokenType.ASCIICIRCUM:
+        case TokenType.ANPERSAND:
+        case TokenType.EXCLAM:
+
+        case TokenType.SKIP:
+        case TokenType.MEMOIZE:
+
+        case TokenType.MEMOIZE_SKIP_TRUE:
+        case TokenType.MEMOIZE_SKIP_FALSE:
+        case TokenType.MEMOIZE_LITERAL_TRUE:
+        case TokenType.MEMOIZE_LITERAL_FALSE:
+        case TokenType.MEMOIZE_NONTERMINAL_TRUE:
+        case TokenType.MEMOIZE_NONTERMINAL_FALSE:
+            foreach(ref child; node.children)
+            {
+                child = child.applySkipLiteral(isSkipLiteral);
+            }
+            break;
+
+        case TokenType.SKIP_WITH:
+        case TokenType.SET_SKIP:
+            node.children[1] = node.children[1].applySkipLiteral(isSkipLiteral);
+            break;
+
+        case TokenType.GLOBAL_SKIP_LITERAL_TRUE:
+        case TokenType.GLOBAL_SKIP_LITERAL_FALSE:
+            assert(false);
+
+        case TokenType.UNDEFINED:
+        case TokenType.CONVERTER:
+        case TokenType.ID:
+        case TokenType.TEMPLATE_INSTANCE:
+        case TokenType.NONTERMINAL:
+        case TokenType.RANGE_ONE_CHAR:
+        case TokenType.RANGE_CHAR_RANGE:
+
+        case TokenType.GLOBAL_SET_SKIP:
+
+        case TokenType.GLOBAL_MEMOIZE_SKIP_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_SKIP_FALSE:
+        case TokenType.GLOBAL_MEMOIZE_LITERAL_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_LITERAL_FALSE:
+        case TokenType.GLOBAL_MEMOIZE_NONTERMINAL_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_NONTERMINAL_FALSE:
+    }
+
+    return node;
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.DOLLAR))
+                ])
+            ]).applySkipLiteral()
+
+            ==
+
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SKIP),
+                    [
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_SKIP_LITERAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.DOLLAR))
+                ])
+            ]).applySkipLiteral()
+
+            ==
+
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_SKIP_LITERAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.DOLLAR))
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_SKIP_LITERAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SKIP_LITERAL_TRUE),
+                    [
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ])
+            ]).applySkipLiteral()
+
+            ==
+
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_SKIP_LITERAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SKIP),
+                    [
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_SKIP_LITERAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.DOLLAR))
+                ]),
+                Node(Token(TokenType.GLOBAL_SKIP_LITERAL_TRUE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.DOLLAR))
+                ])
+            ]).applySkipLiteral()
+
+            ==
+
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_SKIP_LITERAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.DOLLAR))
+                ]),
+                Node(Token(TokenType.GLOBAL_SKIP_LITERAL_TRUE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SKIP),
+                    [
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SET_SKIP),
+                    [
+                        Node(Token(TokenType.DOLLAR)),
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ])
+            ]).applySkipLiteral()
+
+            ==
+
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SET_SKIP),
+                    [
+                        Node(Token(TokenType.DOLLAR)),
+                        Node(Token(TokenType.SKIP),
+                        [
+                            Node(Token(TokenType.DOLLAR))
+                        ])
+                    ])
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SKIP_WITH),
+                    [
+                        Node(Token(TokenType.DOLLAR)),
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ])
+            ]).applySkipLiteral()
+
+            ==
+
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SKIP_WITH),
+                    [
+                        Node(Token(TokenType.DOLLAR)),
+                        Node(Token(TokenType.SKIP),
+                        [
+                            Node(Token(TokenType.DOLLAR))
+                        ])
+                    ])
+                ])
+            ])
+        );
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+// MEMOIZE_SKIP_TRUEな場所にある
+// SET_SKIPやSKIP_WITHで指定されてるスキップパーサをMEMOIZEする
+Node applyMemoizeSkip(Node node, bool isMemoizeSkip = true)
+{
+    final switch(node.token.type)
+    {
+        case TokenType.SET_SKIP:
+        case TokenType.SKIP_WITH:
+            node.children[1] = node.children[1].applyMemoizeSkip(isMemoizeSkip);
+            goto case;
+
+        case TokenType.GLOBAL_SET_SKIP:
+            if(isMemoizeSkip)
+            {
+                Node memoizeNode;
+                memoizeNode.token.type = TokenType.MEMOIZE;
+                memoizeNode.children ~= node.children[0];
+                node.children[0] = memoizeNode;
+            }
+            break;
+
+        case TokenType.MEMOIZE_SKIP_TRUE:
+            node = node.children[0].applyMemoizeSkip(true);
+            break;
+
+        case TokenType.MEMOIZE_SKIP_FALSE:
+            node = node.children[0].applyMemoizeSkip(false);
+            break;
+
+        case TokenType.DEFINITIONS:
+            foreach(ref child; node.children)
+            {
+                switch(child.token.type)
+                {
+                    case TokenType.GLOBAL_MEMOIZE_SKIP_TRUE:
+                        isMemoizeSkip = true;
+                        break;
+
+                    case TokenType.GLOBAL_MEMOIZE_SKIP_FALSE:
+                        isMemoizeSkip = false;
+                        break;
+
+                    default:
+                        child = child.applyMemoizeSkip(isMemoizeSkip);
+                }
+            }
+            break;
+
+        case TokenType.DEFINITION:
+        case TokenType.SLASH:
+        case TokenType.LEFT_QUESTION:
+        case TokenType.LEFT_SHIFT:
+        case TokenType.SEQUENCE:
+        case TokenType.QUESTION:
+        case TokenType.PLUS:
+        case TokenType.ASTERISK:
+        case TokenType.ASCIICIRCUM:
+        case TokenType.ANPERSAND:
+        case TokenType.EXCLAM:
+
+        case TokenType.SKIP:
+        case TokenType.MEMOIZE:
+
+        case TokenType.SKIP_LITERAL_TRUE:
+        case TokenType.SKIP_LITERAL_FALSE:
+        case TokenType.MEMOIZE_LITERAL_TRUE:
+        case TokenType.MEMOIZE_LITERAL_FALSE:
+        case TokenType.MEMOIZE_NONTERMINAL_TRUE:
+        case TokenType.MEMOIZE_NONTERMINAL_FALSE:
+            foreach(ref child; node.children)
+            {
+                child = child.applyMemoizeSkip(isMemoizeSkip);
+            }
+            break;
+
+        case TokenType.GLOBAL_MEMOIZE_SKIP_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_SKIP_FALSE:
+            assert(false);
+
+        case TokenType.UNDEFINED:
+        case TokenType.CONVERTER:
+        case TokenType.ID:
+        case TokenType.DOLLAR:
+        case TokenType.TEMPLATE_INSTANCE:
+        case TokenType.NONTERMINAL:
+        case TokenType.RANGE_ONE_CHAR:
+        case TokenType.RANGE_CHAR_RANGE:
+        case TokenType.RANGE:
+        case TokenType.STRING:
+
+        case TokenType.GLOBAL_SKIP_LITERAL_TRUE:
+        case TokenType.GLOBAL_SKIP_LITERAL_FALSE:
+        case TokenType.GLOBAL_MEMOIZE_LITERAL_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_LITERAL_FALSE:
+        case TokenType.GLOBAL_MEMOIZE_NONTERMINAL_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_NONTERMINAL_FALSE:
+    }
+
+    return node;
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS), 
+            [
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SET_SKIP),
+                    [
+                        Node(Token(TokenType.DOLLAR)),
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ])
+            ]).applyMemoizeSkip()
+
+            == 
+
+            Node(Token(TokenType.DEFINITIONS), 
+            [
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SET_SKIP),
+                    [
+                        Node(Token(TokenType.MEMOIZE),
+                        [
+                            Node(Token(TokenType.DOLLAR))
+                        ]),
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS), 
+            [
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SET_SKIP),
+                    [
+                        Node(Token(TokenType.DOLLAR)),
+                        Node(Token(TokenType.SET_SKIP),
+                        [
+                            Node(Token(TokenType.DOLLAR)),
+                            Node(Token(TokenType.DOLLAR))
+                        ])
+                    ])
+                ])
+            ]).applyMemoizeSkip()
+
+            == 
+
+            Node(Token(TokenType.DEFINITIONS), 
+            [
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SET_SKIP),
+                    [
+                        Node(Token(TokenType.MEMOIZE),
+                        [
+                            Node(Token(TokenType.DOLLAR))
+                        ]),
+                        Node(Token(TokenType.SET_SKIP),
+                        [
+                            Node(Token(TokenType.MEMOIZE),
+                            [
+                                Node(Token(TokenType.DOLLAR))
+                            ]),
+                            Node(Token(TokenType.DOLLAR))
+                        ])
+                    ])
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS), 
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_SKIP_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SET_SKIP),
+                    [
+                        Node(Token(TokenType.DOLLAR)),
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ])
+            ]).applyMemoizeSkip()
+
+            == 
+
+            Node(Token(TokenType.DEFINITIONS), 
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_SKIP_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SET_SKIP),
+                    [
+                        Node(Token(TokenType.DOLLAR)),
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS), 
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_SKIP_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.MEMOIZE_SKIP_TRUE),
+                    [
+                        Node(Token(TokenType.SET_SKIP),
+                        [
+                            Node(Token(TokenType.DOLLAR)),
+                            Node(Token(TokenType.DOLLAR))
+                        ])
+                    ])
+                ])
+            ]).applyMemoizeSkip()
+
+            == 
+
+            Node(Token(TokenType.DEFINITIONS), 
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_SKIP_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SET_SKIP),
+                    [
+                        Node(Token(TokenType.MEMOIZE),
+                        [
+                            Node(Token(TokenType.DOLLAR))
+                        ]),
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS), 
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_SKIP_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SET_SKIP),
+                    [
+                        Node(Token(TokenType.DOLLAR)),
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ]),
+                Node(Token(TokenType.GLOBAL_MEMOIZE_SKIP_TRUE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SET_SKIP),
+                    [
+                        Node(Token(TokenType.DOLLAR)),
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ]),
+            ]).applyMemoizeSkip()
+
+            == 
+
+            Node(Token(TokenType.DEFINITIONS), 
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_SKIP_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SET_SKIP),
+                    [
+                        Node(Token(TokenType.DOLLAR)),
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ]),
+                Node(Token(TokenType.GLOBAL_MEMOIZE_SKIP_TRUE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.SET_SKIP),
+                    [
+                        Node(Token(TokenType.MEMOIZE),
+                        [
+                            Node(Token(TokenType.DOLLAR))
+                        ]),
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ]),
+            ])
+        );
+        return true;
+    }
+
+    static assert(test());
+}
+
+
+// MEMOIZE_LITERAL_TRUEな場所にLITERALがあったらMEMOIZEの下に入れる
+Node applyMemoizeLiteral(Node node, bool isMemoizeLiteral = true)
+{
+    final switch(node.token.type)
+    {
+        case TokenType.DOLLAR:
+        case TokenType.RANGE:
+        case TokenType.STRING:
+            if(isMemoizeLiteral)
+            {
+                Node memoizeNode;
+                memoizeNode.token.type = TokenType.MEMOIZE;
+                memoizeNode.children ~= node;
+
+                node = memoizeNode;
+            }
+            break;
+
+        case TokenType.MEMOIZE_LITERAL_TRUE:
+            node = node.children[0].applyMemoizeLiteral(true);
+            break;
+
+        case TokenType.MEMOIZE_LITERAL_FALSE:
+            node = node.children[0].applyMemoizeLiteral(false);
+            break;
+
+        case TokenType.DEFINITIONS:
+            foreach(ref child; node.children)
+            {
+                switch(child.token.type)
+                {
+                    case TokenType.GLOBAL_MEMOIZE_LITERAL_TRUE:
+                        isMemoizeLiteral = true;
+                        break;
+
+                    case TokenType.GLOBAL_MEMOIZE_LITERAL_FALSE:
+                        isMemoizeLiteral = false;
+                        break;
+
+                    default:
+                        child = child.applyMemoizeLiteral(isMemoizeLiteral);
+                }
+            }
+            break;
+
+        case TokenType.DEFINITION:
+        case TokenType.SLASH:
+        case TokenType.LEFT_QUESTION:
+        case TokenType.LEFT_SHIFT:
+        case TokenType.SEQUENCE:
+        case TokenType.QUESTION:
+        case TokenType.PLUS:
+        case TokenType.ASTERISK:
+        case TokenType.ASCIICIRCUM:
+        case TokenType.ANPERSAND:
+        case TokenType.EXCLAM:
+
+        case TokenType.SKIP:
+        case TokenType.SKIP_WITH:
+        case TokenType.SET_SKIP:
+        case TokenType.MEMOIZE:
+
+        case TokenType.SKIP_LITERAL_TRUE:
+        case TokenType.SKIP_LITERAL_FALSE:
+        case TokenType.MEMOIZE_SKIP_TRUE:
+        case TokenType.MEMOIZE_SKIP_FALSE:
+        case TokenType.MEMOIZE_NONTERMINAL_TRUE:
+        case TokenType.MEMOIZE_NONTERMINAL_FALSE:
+
+        case TokenType.GLOBAL_SET_SKIP:
+            foreach(ref child; node.children)
+            {
+                child = child.applyMemoizeLiteral(isMemoizeLiteral);
+            }
+            break;
+
+        case TokenType.GLOBAL_MEMOIZE_LITERAL_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_LITERAL_FALSE:
+            assert(false);
+
+        case TokenType.UNDEFINED:
+        case TokenType.CONVERTER:
+        case TokenType.ID:
+        case TokenType.TEMPLATE_INSTANCE:
+        case TokenType.NONTERMINAL:
+        case TokenType.RANGE_ONE_CHAR:
+        case TokenType.RANGE_CHAR_RANGE:
+
+        case TokenType.GLOBAL_SKIP_LITERAL_TRUE:
+        case TokenType.GLOBAL_SKIP_LITERAL_FALSE:
+        case TokenType.GLOBAL_MEMOIZE_SKIP_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_SKIP_FALSE:
+        case TokenType.GLOBAL_MEMOIZE_NONTERMINAL_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_NONTERMINAL_FALSE:
+    }
+
+    return node;
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.DOLLAR))
+                ])
+            ]).applyMemoizeLiteral()
+
+            ==
+
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.MEMOIZE),
+                    [
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_LITERAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.DOLLAR))
+                ])
+            ]).applyMemoizeLiteral()
+
+            ==
+
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_LITERAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.DOLLAR))
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_LITERAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.MEMOIZE_LITERAL_TRUE),
+                    [
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ])
+            ]).applyMemoizeLiteral()
+
+            ==
+
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_LITERAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.MEMOIZE),
+                    [
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_LITERAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.DOLLAR))
+                ]),
+                Node(Token(TokenType.GLOBAL_MEMOIZE_LITERAL_TRUE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.DOLLAR))
+                ])
+            ]).applyMemoizeLiteral()
+
+            ==
+
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_LITERAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.DOLLAR))
+                ]),
+                Node(Token(TokenType.GLOBAL_MEMOIZE_LITERAL_TRUE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.MEMOIZE),
+                    [
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_SET_SKIP),
+                [
+                    Node(Token(TokenType.DOLLAR))
+                ]),
+                Node(Token(TokenType.GLOBAL_MEMOIZE_LITERAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.DOLLAR))
+                ])
+            ]).applyMemoizeLiteral()
+
+            ==
+
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_SET_SKIP),
+                [
+                    Node(Token(TokenType.MEMOIZE),
+                    [
+                        Node(Token(TokenType.DOLLAR))
+                    ])
+                ]),
+                Node(Token(TokenType.GLOBAL_MEMOIZE_LITERAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.DOLLAR))
+                ])
+            ])
+        );
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+// MEMOIZE_NONTERMINAL_TRUEな場所にNONTERMINALがあったらMEMOIZEの下に入れる
+Node applyMemoizeNonterminal(Node node, bool isMemoizeNonterminal = true)
+{
+    final switch(node.token.type)
+    {
+        case TokenType.NONTERMINAL:
+            if(isMemoizeNonterminal)
+            {
+                Node memoizeNode;
+
+                memoizeNode.token.type = TokenType.MEMOIZE;
+                memoizeNode.children ~= node;
+
+                node = memoizeNode;
+            }
+            break;
+
+        case TokenType.MEMOIZE_NONTERMINAL_TRUE:
+            node = node.children[0].applyMemoizeNonterminal(true);
+            break;
+
+        case TokenType.MEMOIZE_NONTERMINAL_FALSE:
+            node = node.children[0].applyMemoizeNonterminal(false);
+            break;
+
+        case TokenType.DEFINITIONS:
+            foreach(ref child; node.children)
+            {
+                switch(child.token.type)
+                {
+                    case TokenType.GLOBAL_MEMOIZE_NONTERMINAL_TRUE:
+                        isMemoizeNonterminal = true;
+                        break;
+
+                    case TokenType.GLOBAL_MEMOIZE_NONTERMINAL_FALSE:
+                        isMemoizeNonterminal = false;
+                        break;
+
+                    default:
+                        child = child.applyMemoizeNonterminal(isMemoizeNonterminal);
+                }
+            }
+            break;
+
+        case TokenType.DEFINITION:
+        case TokenType.SLASH:
+        case TokenType.LEFT_QUESTION:
+        case TokenType.LEFT_SHIFT:
+        case TokenType.SEQUENCE:
+        case TokenType.QUESTION:
+        case TokenType.PLUS:
+        case TokenType.ASTERISK:
+        case TokenType.ASCIICIRCUM:
+        case TokenType.ANPERSAND:
+        case TokenType.EXCLAM:
+
+        case TokenType.SKIP:
+        case TokenType.SKIP_WITH:
+        case TokenType.SET_SKIP:
+        case TokenType.MEMOIZE:
+
+        case TokenType.SKIP_LITERAL_TRUE:
+        case TokenType.SKIP_LITERAL_FALSE:
+        case TokenType.MEMOIZE_SKIP_TRUE:
+        case TokenType.MEMOIZE_SKIP_FALSE:
+        case TokenType.MEMOIZE_LITERAL_TRUE:
+        case TokenType.MEMOIZE_LITERAL_FALSE:
+
+        case TokenType.GLOBAL_SET_SKIP:
+            foreach(ref child; node.children)
+            {
+                child = child.applyMemoizeNonterminal(isMemoizeNonterminal);
+            }
+            break;
+
+        case TokenType.GLOBAL_MEMOIZE_NONTERMINAL_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_NONTERMINAL_FALSE:
+            assert(false);
+
+        case TokenType.UNDEFINED:
+        case TokenType.CONVERTER:
+        case TokenType.ID:
+        case TokenType.DOLLAR:
+        case TokenType.TEMPLATE_INSTANCE:
+        case TokenType.RANGE_ONE_CHAR:
+        case TokenType.RANGE_CHAR_RANGE:
+        case TokenType.RANGE:
+        case TokenType.STRING:
+
+        case TokenType.GLOBAL_SKIP_LITERAL_TRUE:
+        case TokenType.GLOBAL_SKIP_LITERAL_FALSE:
+        case TokenType.GLOBAL_MEMOIZE_SKIP_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_SKIP_FALSE:
+        case TokenType.GLOBAL_MEMOIZE_LITERAL_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_LITERAL_FALSE:
+    }
+
+    return node;
+}
+
+debug(ctpg) unittest
+{
+    bool test()
+    {
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.NONTERMINAL))
+                ])
+            ]).applyMemoizeNonterminal()
+
+            ==
+
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.MEMOIZE),
+                    [
+                        Node(Token(TokenType.NONTERMINAL))
+                    ])
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_NONTERMINAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.NONTERMINAL))
+                ])
+            ]).applyMemoizeNonterminal()
+
+            ==
+
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_NONTERMINAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.NONTERMINAL))
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_NONTERMINAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.MEMOIZE_NONTERMINAL_TRUE),
+                    [
+                        Node(Token(TokenType.NONTERMINAL))
+                    ])
+                ])
+            ]).applyMemoizeNonterminal()
+
+            ==
+
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_NONTERMINAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.MEMOIZE),
+                    [
+                        Node(Token(TokenType.NONTERMINAL))
+                    ])
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_NONTERMINAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.NONTERMINAL))
+                ]),
+                Node(Token(TokenType.GLOBAL_MEMOIZE_NONTERMINAL_TRUE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.NONTERMINAL))
+                ])
+            ]).applyMemoizeNonterminal()
+
+            ==
+
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_MEMOIZE_NONTERMINAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.NONTERMINAL))
+                ]),
+                Node(Token(TokenType.GLOBAL_MEMOIZE_NONTERMINAL_TRUE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.MEMOIZE),
+                    [
+                        Node(Token(TokenType.NONTERMINAL))
+                    ])
+                ])
+            ])
+        );
+
+        assert
+        (
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_SET_SKIP),
+                [
+                    Node(Token(TokenType.NONTERMINAL))
+                ]),
+                Node(Token(TokenType.GLOBAL_MEMOIZE_NONTERMINAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.NONTERMINAL))
+                ])
+            ]).applyMemoizeNonterminal()
+
+            ==
+
+            Node(Token(TokenType.DEFINITIONS),
+            [
+                Node(Token(TokenType.GLOBAL_SET_SKIP),
+                [
+                    Node(Token(TokenType.MEMOIZE),
+                    [
+                        Node(Token(TokenType.NONTERMINAL))
+                    ])
+                ]),
+                Node(Token(TokenType.GLOBAL_MEMOIZE_NONTERMINAL_FALSE)),
+                Node(Token(TokenType.DEFINITION),
+                [
+                    Node(Token(TokenType.TEMPLATE_INSTANCE)),
+                    Node(Token(TokenType.ID)),
+                    Node(Token(TokenType.NONTERMINAL))
+                ])
+            ])
+        );
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+// SET_SKIPで指定されたスキップパーサでSKIPをSKIP_WITHに置換する
+Node expandSkip(Node node, Node skip = Node.init)
+{
+    final switch(node.token.type)
+    {
+        case TokenType.SKIP:
+            if(skip.token.type != TokenType.UNDEFINED)
+            {
+                Node skipWithNode;
+
+                skipWithNode.token.type = TokenType.SKIP_WITH;
+                skipWithNode.children ~= skip;
+                skipWithNode.children ~= node.children[0];
+
+                node = skipWithNode;
+            }
+            else
+            {
+                node = node.children[0];
+            }
+            break;
+
+        case TokenType.SET_SKIP:
+            node = node.children[1].expandSkip(node.children[0]);
+            break;
+
+        case TokenType.SKIP_WITH:
+            node.children[1] = node.children[1].expandSkip(skip);
+
+        case TokenType.DEFINITIONS:
+            foreach(ref child; node.children)
+            {
+                switch(child.token.type)
+                {
+                    case TokenType.GLOBAL_SET_SKIP:
+                        skip = child.children[0];
+                        break;
+
+                    default:
+                        child = child.expandSkip(skip);
+                }
+            }
+            break;
+
+        case TokenType.DEFINITION:
+        case TokenType.SLASH:
+        case TokenType.LEFT_QUESTION:
+        case TokenType.LEFT_SHIFT:
+        case TokenType.SEQUENCE:
+        case TokenType.QUESTION:
+        case TokenType.PLUS:
+        case TokenType.ASTERISK:
+        case TokenType.ASCIICIRCUM:
+        case TokenType.ANPERSAND:
+        case TokenType.EXCLAM:
+
+        case TokenType.MEMOIZE:
+
+        case TokenType.SKIP_LITERAL_TRUE:
+        case TokenType.SKIP_LITERAL_FALSE:
+        case TokenType.MEMOIZE_SKIP_TRUE:
+        case TokenType.MEMOIZE_SKIP_FALSE:
+        case TokenType.MEMOIZE_LITERAL_TRUE:
+        case TokenType.MEMOIZE_LITERAL_FALSE:
+        case TokenType.MEMOIZE_NONTERMINAL_TRUE:
+        case TokenType.MEMOIZE_NONTERMINAL_FALSE:
+            foreach(ref child; node.children)
+            {
+                child = child.expandSkip(skip);
+            }
+            break;
+
+        case TokenType.UNDEFINED:
+        case TokenType.GLOBAL_SET_SKIP:
+            assert(false);
+
+        case TokenType.CONVERTER:
+        case TokenType.ID:
+        case TokenType.DOLLAR:
+        case TokenType.TEMPLATE_INSTANCE:
+        case TokenType.NONTERMINAL:
+        case TokenType.RANGE_ONE_CHAR:
+        case TokenType.RANGE_CHAR_RANGE:
+        case TokenType.RANGE:
+        case TokenType.STRING:
+
+        case TokenType.GLOBAL_SKIP_LITERAL_TRUE:
+        case TokenType.GLOBAL_SKIP_LITERAL_FALSE:
+        case TokenType.GLOBAL_MEMOIZE_SKIP_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_SKIP_FALSE:
+        case TokenType.GLOBAL_MEMOIZE_LITERAL_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_LITERAL_FALSE:
+        case TokenType.GLOBAL_MEMOIZE_NONTERMINAL_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_NONTERMINAL_FALSE:
+    }
+
+    return node;
+}
+
+debug(ctpg) unittest
+{
+    bool test()
+    {
+        with(TokenType)
+        {
+            // GLOBAL_SET_SKIPが動く
+            assert (
+                Node(Token(DEFINITIONS),
+                [
+                    Node(Token(GLOBAL_SET_SKIP),
+                    [
+                        Node(Token(STRING))
+                    ]),
+                    Node(Token(DEFINITION),
+                    [
+                        Node(Token(TEMPLATE_INSTANCE)),
+                        Node(Token(ID)),
+                        Node(Token(SKIP),
+                        [
+                            Node(Token(DOLLAR))
+                        ])
+                    ])
+                ]).expandSkip()
+
+                == 
+
+                Node(Token(DEFINITIONS),
+                [
+                    Node(Token(GLOBAL_SET_SKIP),
+                    [
+                        Node(Token(STRING))
+                    ]),
+                    Node(Token(DEFINITION),
+                    [
+                        Node(Token(TEMPLATE_INSTANCE)),
+                        Node(Token(ID)),
+                        Node(Token(SKIP_WITH),
+                        [
+                            Node(Token(STRING)),
+                            Node(Token(DOLLAR))
+                        ])
+                    ])
+                ])
+            );
+
+            // 最も近いGLOBAL_SET_SKIPが優先される
+            assert (
+                Node(Token(DEFINITIONS),
+                [
+                    Node(Token(GLOBAL_SET_SKIP),
+                    [
+                        Node(Token(STRING, "1"))
+                    ]),
+                    Node(Token(DEFINITION),
+                    [
+                        Node(Token(TEMPLATE_INSTANCE)),
+                        Node(Token(ID)),
+                        Node(Token(SKIP),
+                        [
+                            Node(Token(DOLLAR))
+                        ])
+                    ]),
+                    Node(Token(GLOBAL_SET_SKIP),
+                    [
+                        Node(Token(STRING, "2"))
+                    ]),
+                    Node(Token(DEFINITION),
+                    [
+                        Node(Token(TEMPLATE_INSTANCE)),
+                        Node(Token(ID)),
+                        Node(Token(SKIP),
+                        [
+                            Node(Token(DOLLAR))
+                        ])
+                    ])
+                ]).expandSkip()
+
+                == 
+
+                Node(Token(DEFINITIONS),
+                [
+                    Node(Token(GLOBAL_SET_SKIP),
+                    [
+                        Node(Token(STRING, "1"))
+                    ]),
+                    Node(Token(DEFINITION),
+                    [
+                        Node(Token(TEMPLATE_INSTANCE)),
+                        Node(Token(ID)),
+                        Node(Token(SKIP_WITH),
+                        [
+                            Node(Token(STRING, "1")),
+                            Node(Token(DOLLAR))
+                        ])
+                    ]),
+                    Node(Token(GLOBAL_SET_SKIP),
+                    [
+                        Node(Token(STRING, "2"))
+                    ]),
+                    Node(Token(DEFINITION),
+                    [
+                        Node(Token(TEMPLATE_INSTANCE)),
+                        Node(Token(ID)),
+                        Node(Token(SKIP_WITH),
+                        [
+                            Node(Token(STRING, "2")),
+                            Node(Token(DOLLAR))
+                        ])
+                    ])
+                ])
+            );
+
+            // SET_SKIPが動く
+            assert (
+                Node(Token(DEFINITIONS),
+                [
+                    Node(Token(DEFINITION),
+                    [
+                        Node(Token(TEMPLATE_INSTANCE)),
+                        Node(Token(ID)),
+                        Node(Token(SET_SKIP),
+                        [
+                            Node(Token(STRING)),
+                            Node(Token(SKIP),
+                            [
+                                Node(Token(DOLLAR))
+                            ])
+                        ])
+                    ])
+                ]).expandSkip()
+
+                == 
+
+                Node(Token(DEFINITIONS),
+                [
+                    Node(Token(DEFINITION),
+                    [
+                        Node(Token(TEMPLATE_INSTANCE)),
+                        Node(Token(ID)),
+                        Node(Token(SKIP_WITH),
+                        [
+                            Node(Token(STRING)),
+                            Node(Token(DOLLAR))
+                        ])
+                    ])
+                ])
+            );
+
+            // 最も近いSET_SKIPが優先される
+            assert (
+                Node(Token(DEFINITIONS),
+                [
+                    Node(Token(DEFINITION),
+                    [
+                        Node(Token(TEMPLATE_INSTANCE)),
+                        Node(Token(ID)),
+                        Node(Token(SET_SKIP),
+                        [
+                            Node(Token(STRING, "1")),
+                            Node(Token(SEQUENCE),
+                            [
+                                Node(Token(SKIP),
+                                [
+                                    Node(Token(DOLLAR))
+                                ]),
+                                Node(Token(SET_SKIP),
+                                [
+                                    Node(Token(STRING, "2")),
+                                    Node(Token(SKIP),
+                                    [
+                                        Node(Token(DOLLAR))
+                                    ])
+                                ])
+                            ]),
+                        ])
+                    ])
+                ]).expandSkip()
+
+                == 
+
+                Node(Token(DEFINITIONS),
+                [
+                    Node(Token(DEFINITION),
+                    [
+                        Node(Token(TEMPLATE_INSTANCE)),
+                        Node(Token(ID)),
+                        Node(Token(SEQUENCE),
+                        [
+                            Node(Token(SKIP_WITH),
+                            [
+                                Node(Token(STRING, "1")),
+                                Node(Token(DOLLAR))
+                            ]),
+                            Node(Token(SKIP_WITH),
+                            [
+                                Node(Token(STRING, "2")),
+                                Node(Token(DOLLAR))
+                            ])
+                        ])
+                    ])
+                ])
+            );
+
+            // GLOBAL_SET_SKIPよりもSET_SKIPが優先される
+            assert (
+                Node(Token(DEFINITIONS),
+                [
+                    Node(Token(GLOBAL_SET_SKIP),
+                    [
+                        Node(Token(STRING, "global"))
+                    ]),
+                    Node(Token(DEFINITION),
+                    [
+                        Node(Token(TEMPLATE_INSTANCE)),
+                        Node(Token(ID)),
+                        Node(Token(SET_SKIP),
+                        [
+                            Node(Token(STRING, "local")),
+                            Node(Token(SKIP),
+                            [
+                                Node(Token(DOLLAR))
+                            ])
+                        ])
+                    ])
+                ]).expandSkip()
+
+                == 
+
+                Node(Token(DEFINITIONS),
+                [
+                    Node(Token(GLOBAL_SET_SKIP),
+                    [
+                        Node(Token(STRING, "global"))
+                    ]),
+                    Node(Token(DEFINITION),
+                    [
+                        Node(Token(TEMPLATE_INSTANCE)),
+                        Node(Token(ID)),
+                        Node(Token(SKIP_WITH),
+                        [
+                            Node(Token(STRING, "local")),
+                            Node(Token(DOLLAR))
+                        ])
+                    ])
+                ])
+            );
+
+        }
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+// MEMOIZEの重複を消す
+Node removeMemoizeDuplicates(Node node)
+{
+    final switch(node.token.type) with(TokenType)
+    {
+        case MEMOIZE:
+            if(node.children[0].token.type == MEMOIZE)
+            {
+                node = node.children[0].removeMemoizeDuplicates();
+            }
+            break;
+
+        case DEFINITIONS:
+        case DEFINITION:
+        case SLASH:
+        case LEFT_QUESTION:
+        case LEFT_SHIFT:
+        case SEQUENCE:
+        case QUESTION:
+        case PLUS:
+        case ASTERISK:
+        case ASCIICIRCUM:
+        case ANPERSAND:
+        case EXCLAM:
+
+        case SKIP:
+        case SET_SKIP:
+        case SKIP_WITH:
+
+        case SKIP_LITERAL_TRUE:
+        case SKIP_LITERAL_FALSE:
+        case MEMOIZE_SKIP_TRUE:
+        case MEMOIZE_SKIP_FALSE:
+        case MEMOIZE_LITERAL_TRUE:
+        case MEMOIZE_LITERAL_FALSE:
+        case MEMOIZE_NONTERMINAL_TRUE:
+        case MEMOIZE_NONTERMINAL_FALSE:
+
+        case TokenType.GLOBAL_SET_SKIP:
+            foreach(ref child; node.children)
+            {
+                child = child.removeMemoizeDuplicates();
+            }
+            break;
+
+        case UNDEFINED:
+        case CONVERTER:
+        case ID:
+        case DOLLAR:
+        case TEMPLATE_INSTANCE:
+        case NONTERMINAL:
+        case RANGE_ONE_CHAR:
+        case RANGE_CHAR_RANGE:
+        case RANGE:
+        case STRING:
+
+        case GLOBAL_SKIP_LITERAL_TRUE:
+        case GLOBAL_SKIP_LITERAL_FALSE:
+        case GLOBAL_MEMOIZE_SKIP_TRUE:
+        case GLOBAL_MEMOIZE_SKIP_FALSE:
+        case GLOBAL_MEMOIZE_LITERAL_TRUE:
+        case GLOBAL_MEMOIZE_LITERAL_FALSE:
+        case GLOBAL_MEMOIZE_NONTERMINAL_TRUE:
+        case GLOBAL_MEMOIZE_NONTERMINAL_FALSE:
+    }
+    return node;
+}
+
+debug(ctpg) unittest
+{
+    bool test()
+    {
+        with(TokenType)
+        {
+            // MEMOIZEの重複が消される
+            assert (
+                Node(Token(MEMOIZE),
+                [
+                    Node(Token(MEMOIZE),
+                    [
+                        Node(Token(STRING))
+                    ])
+                ]).removeMemoizeDuplicates()
+
+                == 
+
+                Node(Token(MEMOIZE),
+                [
+                    Node(Token(STRING))
+                ])
+            );
+
+            // スキップパーサ内のMEMOIZEが消される
+            assert (
+                Node(Token(SKIP_WITH),
+                [
+                    Node(Token(MEMOIZE),
+                    [
+                        Node(Token(MEMOIZE),
+                        [
+                            Node(Token(STRING))
+                        ])
+                    ]),
+                    Node(Token(STRING))
+                ]).removeMemoizeDuplicates()
+
+                == 
+
+                Node(Token(SKIP_WITH),
+                [
+                    Node(Token(MEMOIZE),
+                    [
+                        Node(Token(STRING))
+                    ]),
+                    Node(Token(STRING))
+                ])
+            );
+        }
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+// SKIP_WITHの重複を消す
+Node removeSkipWithDuplicates(Node node)
+{
+    final switch(node.token.type) with(TokenType)
+    {
+        case SKIP_WITH:
+            if(node.children[1].token.type == SKIP_WITH && node.children[0] == node.children[1].children[0])
+            {
+                node = node.children[1].removeSkipWithDuplicates();
+            }
+            break;
+
+        case DEFINITIONS:
+        case DEFINITION:
+        case SLASH:
+        case LEFT_QUESTION:
+        case LEFT_SHIFT:
+        case SEQUENCE:
+        case QUESTION:
+        case PLUS:
+        case ASTERISK:
+        case ASCIICIRCUM:
+        case ANPERSAND:
+        case EXCLAM:
+
+        case SKIP:
+        case SET_SKIP:
+        case MEMOIZE:
+
+        case SKIP_LITERAL_TRUE:
+        case SKIP_LITERAL_FALSE:
+        case MEMOIZE_SKIP_TRUE:
+        case MEMOIZE_SKIP_FALSE:
+        case MEMOIZE_LITERAL_TRUE:
+        case MEMOIZE_LITERAL_FALSE:
+        case MEMOIZE_NONTERMINAL_TRUE:
+        case MEMOIZE_NONTERMINAL_FALSE:
+
+        case TokenType.GLOBAL_SET_SKIP:
+            foreach(ref child; node.children)
+            {
+                child = child.removeSkipWithDuplicates();
+            }
+            break;
+
+        case UNDEFINED:
+        case CONVERTER:
+        case ID:
+        case DOLLAR:
+        case TEMPLATE_INSTANCE:
+        case NONTERMINAL:
+        case RANGE_ONE_CHAR:
+        case RANGE_CHAR_RANGE:
+        case RANGE:
+        case STRING:
+
+        case GLOBAL_SKIP_LITERAL_TRUE:
+        case GLOBAL_SKIP_LITERAL_FALSE:
+        case GLOBAL_MEMOIZE_SKIP_TRUE:
+        case GLOBAL_MEMOIZE_SKIP_FALSE:
+        case GLOBAL_MEMOIZE_LITERAL_TRUE:
+        case GLOBAL_MEMOIZE_LITERAL_FALSE:
+        case GLOBAL_MEMOIZE_NONTERMINAL_TRUE:
+        case GLOBAL_MEMOIZE_NONTERMINAL_FALSE:
+    }
+    return node;
+}
+
+debug(ctpg) unittest
+{
+    bool test()
+    {
+        with(TokenType)
+        {
+            // スキップパーサが等しいSKIP_WITHの重複が消される
+            assert (
+                Node(Token(SKIP_WITH),
+                [
+                    Node(Token(STRING)),
+                    Node(Token(SKIP_WITH),
+                    [
+                        Node(Token(STRING)),
+                        Node(Token(DOLLAR))
+                    ])
+                ]).removeSkipWithDuplicates()
+
+                == 
+
+                Node(Token(SKIP_WITH),
+                [
+                    Node(Token(STRING)),
+                    Node(Token(DOLLAR))
+                ])
+            );
+
+            // スキップパーサが等しくないSKIP_WITHの重複は消されない
+            assert (
+                Node(Token(SKIP_WITH),
+                [
+                    Node(Token(STRING, "a")),
+                    Node(Token(SKIP_WITH),
+                    [
+                        Node(Token(STRING, "b")),
+                        Node(Token(DOLLAR))
+                    ])
+                ]).removeSkipWithDuplicates()
+
+                == 
+
+                Node(Token(SKIP_WITH),
+                [
+                    Node(Token(STRING, "a")),
+                    Node(Token(SKIP_WITH),
+                    [
+                        Node(Token(STRING, "b")),
+                        Node(Token(DOLLAR))
+                    ])
+                ])
+            );
+        }
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+// NodeからmixinされるD言語のコードを生成する
+string generate(Node node)
+{
+    string code;
+
+    final switch(node.token.type)
+    {
+        case TokenType.DEFINITIONS:
+            foreach(child; node.children)
+            {
+                if(child.token.type == TokenType.DEFINITION)
+                {
+                    code ~= child.generate();
+                }
+            }
+            break;
+
+        case TokenType.DEFINITION:
+            code =
+            "template " ~ node.children[1].token.text ~ "()"
+            "{"
+                "template build(alias kind, SrcType)"
+                "{"
+                    "static if(kind.hasValue)"
+                    "{"
+                        "#line " ~ node.children[0].line.to!string() ~ "\n"
+                        "alias Result = ParseResult!(kind, SrcType, " ~ node.children[0].token.text ~ ");"
+                    "}"
+                    "else"
+                    "{"
+                        "alias Result = ParseResult!(kind, SrcType);"
+                    "}"
+                    "static Result parse(Input!SrcType input, in Caller caller)"
+                    "{"
+                        "static if(!is(typeof(" ~ node.children[2].generate() ~ ".build!(kind, SrcType).parse(input, caller)) : Result))"
+                        "{"
+                            "pragma(msg, `" ~ node.children[1].file ~ "(" ~ node.children[1].line.to!string() ~ "): '" ~ node.children[1].token.text ~ "' should return '" ~ node.children[0].token.text ~ "', not '` ~ getParseResultType!(" ~ node.children[2].generate() ~ ".build!(kind, SrcType)).stringof ~ `'`);"
+                            "static assert(false);"
+                        "}"
+                        "return " ~ node.children[2].generate() ~ ".build!(kind, SrcType).parse(input, caller);"
+                    "}"
+                "}"
+            "}";
+            break;
+
+        case TokenType.SLASH:
+            foreach(child; node.children)
+            {
+                code ~= child.generate() ~ ",";
+            }
+            code = "combinateChoice!(" ~ code ~ ")";
+            break;
+
+        case TokenType.LEFT_SHIFT:
+            code = "combinateConvert!(" ~ node.children[0].generate() ~ ",#line " ~ node.children[1].line.to!string() ~ "\n" ~ node.children[1].token.text ~ "," ~ node.line.to!string() ~ ",`" ~ node.file ~ "`)";
+            break;
+
+        case TokenType.LEFT_QUESTION:
+            code = "combinateCheck!(" ~ node.children[0].generate() ~ ",#line " ~ node.children[1].line.to!string() ~ "\n" ~ node.children[1].token.text ~ "," ~ node.line.to!string() ~ ",`" ~ node.file ~ "`)";
+            break;
+
+        case TokenType.SEQUENCE:
+            foreach(child; node.children)
+            {
+                code ~= child.generate() ~ ",";
+            }
+            code = "combinateUnTuple!(combinateSequence!(" ~ code ~ "))";
+            break;
+
+        case TokenType.QUESTION:
+            code = "combinateOption!(" ~ node.children[0].generate() ~ ")";
+            break;
+
+        case TokenType.ASTERISK:
+            if(node.children.length == 2)
+            {
+                code = "combinateMore0!(" ~ node.children[0].generate() ~ "," ~ node.children[1].generate() ~ ")";
+            }
+            else
+            {
+                code = "combinateMore0!(" ~ node.children[0].generate() ~ ")";
+            }
+            break;
+
+        case TokenType.PLUS:
+            if(node.children.length == 2)
+            {
+                code = "combinateMore1!(" ~ node.children[0].generate() ~ "," ~ node.children[1].generate() ~ ")";
+            }
+            else
+            {
+                code = "combinateMore1!(" ~ node.children[0].generate() ~ ")";
+            }
+            break;
+
+        case TokenType.EXCLAM:
+            code = "combinateNone!(" ~ node.children[0].generate() ~ ")";
+            break;
+
+        case TokenType.ANPERSAND:
+            code = "combinateAnd!(" ~ node.children[0].generate() ~ ")";
+            break;
+
+        case TokenType.ASCIICIRCUM:
+            code = "combinateNot!(" ~ node.children[0].generate() ~ ")";
+            break;
+
+        case TokenType.SKIP_WITH:
+            code = "combinateSkip!(" ~ node.children[0].generate() ~ "," ~ node.children[1].generate() ~ ")";
+            break;
+
+        case TokenType.MEMOIZE:
+            code = "combinateMemoize!(" ~ node.children[0].generate() ~ ")";
+            break;
+
+        case TokenType.DOLLAR:
+            code = "parseEOF!()";
+            break;
+
+        case TokenType.RANGE:
+            switch(node.children[0].token.type)
+            {
+                case TokenType.RANGE_CHAR_RANGE:
+                    code = "parseCharRange!('" ~ node.children[0].children[0].token.text ~ "','" ~ node.children[0].children[1].token.text ~ "')";
+                    break;
+
+                case TokenType.RANGE_ONE_CHAR:
+                    code = "parseCharRange!('" ~ node.children[0].token.text ~ "','" ~ node.children[0].token.text ~ "')";
+                    break;
+
+                default: assert(false);
+            }
+            break;
+
+        case TokenType.STRING:
+            code = "parseString!(" ~ node.token.text ~ ")";
+            break;
+
+        case TokenType.NONTERMINAL:
+            code = "#line " ~ node.line.to!string() ~ "\n" ~ node.token.text ~ "!()";
+            break;
+
+        case TokenType.UNDEFINED:
+        case TokenType.CONVERTER:
+        case TokenType.ID:
+        case TokenType.TEMPLATE_INSTANCE:
+        case TokenType.RANGE_ONE_CHAR:
+        case TokenType.RANGE_CHAR_RANGE:
+
+        case TokenType.SKIP:
+        case TokenType.SET_SKIP:
+
+        case TokenType.MEMOIZE_SKIP_TRUE:
+        case TokenType.MEMOIZE_SKIP_FALSE:
+        case TokenType.SKIP_LITERAL_TRUE:
+        case TokenType.SKIP_LITERAL_FALSE:
+        case TokenType.MEMOIZE_LITERAL_TRUE:
+        case TokenType.MEMOIZE_LITERAL_FALSE:
+        case TokenType.MEMOIZE_NONTERMINAL_TRUE:
+        case TokenType.MEMOIZE_NONTERMINAL_FALSE:
+
+        case TokenType.GLOBAL_SET_SKIP:
+
+        case TokenType.GLOBAL_SKIP_LITERAL_TRUE:
+        case TokenType.GLOBAL_SKIP_LITERAL_FALSE:
+        case TokenType.GLOBAL_MEMOIZE_SKIP_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_SKIP_FALSE:
+        case TokenType.GLOBAL_MEMOIZE_LITERAL_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_LITERAL_FALSE:
+        case TokenType.GLOBAL_MEMOIZE_NONTERMINAL_TRUE:
+        case TokenType.GLOBAL_MEMOIZE_NONTERMINAL_FALSE:
+            assert(false);
+    }
+
+    return code;
+}
+
+
+// 自動でnodeのlineとfileをセットするようにするコンビネータ
+template combinateSetInfo(alias parser)
+{
+    template build(alias kind, SrcType)
+    {
+        static if(is(getParseResultType!(parser.build!(kind, SrcType)) == Node))
+        {
+            mixin MAKE_RESULT!q{ Node };
+
+            Result parse(Input!SrcType input, in Caller caller)
+            {
+                return combinateConvert!
+                (
+                    combinateSequence!
+                    (
+                        parseGetLine!(),
+                        parseGetCallerLine!(),
+                        parseGetCallerFile!(),
+                        parser
                     ),
-                    function(Option!string arch, string brace) => arch.some ? "function" ~ arch ~ brace : "function()" ~ brace
-                ).parse(input, info);
+                    (size_t line, size_t callerLine, string callerFile, Node node)
+                    {
+                        node.line = callerLine + line + 1;
+                        node.file = callerFile;
+
+                        return node;
+                    }
+                ).build!(kind, SrcType).parse(input, caller);
             }
         }
+        else
+        {
+            static assert(false);
+        }
+    }
+}
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(func!().parse(makeInput(
-                    "(int num, string code){"
-                        "string res;"
-                        "foreach(staticNum; 0..num){"
-                            "foreach(c;code){"
-                                "if(c == '@'){"
-                                    "res ~= to!string(staticNum);"
-                                "}else{"
-                                    "res ~= c;"
-                                "}"
-                            "}"
-                        "}"
-                        "return res;"
-                    "}"),
-                    new CallerInfo(0, "")) == makeParseResult(true,
-                    "function(int num, string code){"
-                        "string res;"
-                        "foreach(staticNum; 0..num){"
-                            "foreach(c;code){"
-                                "if(c == '@'){"
-                                    "res ~= to!string(staticNum);"
-                                "}else{"
-                                    "res ~= c;"
-                                "}"
-                            "}"
-                        "}"
-                        "return res;"
-                    "}", makeInput("", 148))
-                );
-                return true;
-            };
-            static assert(dg());
-            dg();
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(combinateSetInfo!(TestParser!(Node())), ParserKind!(true, true))(""))
+        {
+            assert(match == true);
+            assert(value.line == __LINE__ - 2);
+            assert(value.file == __FILE__);
         }
 
-    // id
-        template id(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        combinateChoice!(
-                            parseCharRange!('A','Z'),
-                            parseCharRange!('a','z'),
-                            parseString!"_"
-                        ),
-                        combinateMore0!(
-                            combinateChoice!(
-                                parseCharRange!('0','9'),
-                                parseCharRange!('A','Z'),
-                                parseCharRange!('a','z'),
-                                parseString!"_"
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+// パーサが返した文字列と、引数のtokenTypeを使ってNodeを作るコンビネータ
+template combinateMakeNode(alias parser, TokenType tokenType)
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateSetInfo!
+            (
+                combinateConvert!
+                (
+                    parser,
+                    (string token) => Node(Token(tokenType, token))
+                )
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+
+template arch(string open, string close)
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ string };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateInputSlice!
+            (
+                combinateSequence!
+                (
+                    parseString!open,
+                    combinateMore0!
+                    (
+                        combinateChoice!
+                        (
+                            arch!(open, close),
+                            combinateSequence!
+                            (
+                                combinateNotPred!
+                                (
+                                    parseString!close
+                                ),
+                                combinateChoice!
+                                (
+                                    DLex.StringLiteral!(),
+                                    parseCharRange!(dchar.min, dchar.max)
+                                )
                             )
                         )
                     ),
-                    flat
-                ).parse(input, info);
-            }
+                    parseString!close
+                )
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(arch!("(", ")"), ParserKind!(true, true))("((a(b)c)d(e))f"))
+        {
+            assert(match              == true);
+            assert(nextInput.source   == "f");
+            assert(value              == "((a(b)c)d(e))");
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(id!().parse(makeInput("A"), new CallerInfo(0, "")) == makeParseResult(true, "A", makeInput("", 1)));
-                assert(id!().parse(makeInput("int"), new CallerInfo(0, "")) == makeParseResult(true, "int", makeInput("", 3)));
-                assert(id!().parse(makeInput("0"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'_' expected but '0' found", 0)));
-                return true;
-            };
-            static assert(dg());
-            dg();
+        with(parse!(arch!("(", ")"), ParserKind!(true, true))("((a(b)c)d(e)"))
+        {
+            assert(match          == false);
+            assert(error.position == 12);
+            assert(error.msg      == "')' expected");
         }
 
-    // nonterminal
-        template nonterminal(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvertWithState!(
-                    combinateSequence!(
-                        getCallerLine!(),
-                        getLine!(),
-                        id!()
-                    ),
-                    function(size_t callerLine, size_t line, string id, StateType state)
-                    =>
-                    state[1].length ? " #line " ~ (callerLine + line - 1).to!string() ~ "\ncombinateSkip!(combinateMemoize!(" ~ id ~ "!())," ~ state[1] ~ ")" : " #line " ~ (callerLine + line - 1).to!string() ~ "\ncombinateMemoize!(" ~ id ~ "!())"
-                ).parse(input, info);
-            }
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template func()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateMakeNode!
+            (
+                combinateInputSlice!
+                (
+                    combinateSequence!
+                    (
+                        combinateOption!
+                        (
+                            arch!("(", ")")
+                        ),
+                        arch!("{", "}")
+                    )
+                ),
+                TokenType.CONVERTER
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(func!(), ParserKind!(true, true))(q"<(a, b, c){ return "{}" ~ r"{}" ~ `{}` ~ a ~ b ~ c; }>"))
+        {
+            assert(match                 == true);
+            assert(value.token.type            == TokenType.CONVERTER);
+            assert(value.token.text           == q"<(a, b, c){ return "{}" ~ r"{}" ~ `{}` ~ a ~ b ~ c; }>");
+            assert(value.children.length == 0);
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(nonterminal!().parse(makeInput("A"), new CallerInfo(__LINE__, "")) == makeParseResult(true, " #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(A!())", makeInput("", 1)));
-                assert(nonterminal!().parse(makeInput("int"), new CallerInfo(__LINE__, "")) == makeParseResult(true, " #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(int!())", makeInput("", 3)));
-                return true;
-            };
-            static assert(dg());
-            dg();
+        with(parse!(func!(), ParserKind!(true, true))(q"<(a, b, c{ return "{}" ~ r"{}" ~ `{}` ~ a ~ b ~ c; }>"))
+        {
+            assert(match == false);
+            assert(error.msg == "')' expected");
+            assert(error.position == 51);
         }
 
-    // typeName
-        template typeName(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        combinateChoice!(
+        with(parse!(func!(), ParserKind!(true, true))(q"<(a, b, c){ return "{}" ~ r"{}" ~ `{}` ~ a ~ b ~ c; >"))
+        {
+            assert(match == false);
+            assert(error.msg == "'}' expected");
+            assert(error.position == 51);
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template id()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!string input, in Caller caller)
+        {
+            return combinateMakeNode!
+            (
+                combinateChangeError!
+                (
+                    DLex.Identifier!(),
+                    "identifier expected"
+                ),
+                TokenType.ID
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(id!(), ParserKind!(true, true))("_ab0="))
+        {
+            assert(match                 == true);
+            assert(nextInput.source      == "=");
+            assert(value.token.type            == TokenType.ID);
+            assert(value.token.text           == "_ab0");
+            assert(value.children.length == 0);
+        }
+
+        with(parse!(id!(), ParserKind!(true, true))("__hogehoge12345678"))
+        {
+            assert(match                 == true);
+            assert(value.token.type            == TokenType.ID);
+            assert(value.token.text           == "__hogehoge12345678");
+            assert(value.children.length == 0);
+        }
+
+        with(parse!(id!(), ParserKind!(true, true))("ああ"))
+        {
+            assert(match          == false);
+            assert(error.msg      == "identifier expected");
+            assert(error.position == 0);
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template nonterminal()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!string input, in Caller caller)
+        {
+            return combinateMakeNode!
+            (
+                combinateChangeError!
+                (
+                    DLex.Identifier!(),
+                    "identifier expected"
+                ),
+                TokenType.NONTERMINAL
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(nonterminal!(), ParserKind!(true, true))("_ab0="))
+        {
+            assert(match                 == true);
+            assert(nextInput.source      == "=");
+            assert(value.token.type            == TokenType.NONTERMINAL);
+            assert(value.token.text           == "_ab0");
+            assert(value.children.length == 0);
+        }
+
+        with(parse!(nonterminal!(), ParserKind!(true, true))("__hogehoge12345678"))
+        {
+            assert(match                 == true);
+            assert(value.token.type            == TokenType.NONTERMINAL);
+            assert(value.token.text           == "__hogehoge12345678");
+            assert(value.children.length == 0);
+        }
+
+        with(parse!(nonterminal!(), ParserKind!(true, true))("ああ"))
+        {
+            assert(match          == false);
+            assert(error.msg      == "identifier expected");
+            assert(error.position == 0);
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template typeName()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateMakeNode!
+            (
+                combinateInputSlice!
+                (
+                    combinateSequence!
+                    (
+                        combinateChoice!
+                        (
                             parseCharRange!('A','Z'),
                             parseCharRange!('a','z'),
                             parseString!"_"
                         ),
-                        parseSpaces!(),
-                        combinateMore0!(
-                            combinateChoice!(
+                        combinateMore0!
+                        (
+                            combinateChoice!
+                            (
                                 parseCharRange!('0','9'),
                                 parseCharRange!('A','Z'),
                                 parseCharRange!('a','z'),
                                 parseString!"_",
-                                parseString!",",
                                 parseString!"!",
                                 arch!("(", ")"),
                                 arch!("[", "]")
                             )
                         )
-                    ),
-                    flat
-                ).parse(input, info);
-            }
+                    )
+                ),
+                TokenType.TEMPLATE_INSTANCE
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(typeName!(), ParserKind!(true, true))("hoge"))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.TEMPLATE_INSTANCE);
+            assert(value.token.text == "hoge");
+            assert(value.children.length == 0);
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(typeName!().parse(makeInput("int"), new CallerInfo(0, "")) == makeParseResult(true, "int", makeInput("", 3)));
-                assert(typeName!().parse(makeInput("Tuple!(string, int)"), new CallerInfo(0, "")) == makeParseResult(true, "Tuple!(string, int)", makeInput("", 19)));
-                assert(typeName!().parse(makeInput("int[]"), new CallerInfo(0, "")) == makeParseResult(true, "int[]", makeInput("", 5)));
-                return true;
-            };
-            static assert(dg());
-            dg();
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template eofLit()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!string input, in Caller caller)
+        {
+            return combinateMakeNode!
+            (
+                parseString!"$",
+                TokenType.DOLLAR
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(eofLit!(), ParserKind!(true, true))("$"))
+        {
+            assert(match                 == true);
+            assert(value.token.type            == TokenType.DOLLAR);
+            assert(value.token.text           == "$");
+            assert(value.children.length == 0);
         }
 
-    // eofLit
-        template eofLit(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateNone!(
-                        parseString!"$"
-                    ),
-                    function() => "parseEOF!()"
-                ).parse(input, info);
-            }
+        with(parse!(eofLit!(), ParserKind!(true, true))("hoge"))
+        {
+            assert(match          == false);
+            assert(error.msg      == "'$' expected");
+            assert(error.position == 0);
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(eofLit!().parse(makeInput("$"), new CallerInfo(0, "")) == makeParseResult(true, "parseEOF!()", makeInput("", 1)));
-                assert(eofLit!().parse(makeInput("#"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'$' expected but '#' found", 0)));
-                return true;
-            };
-            static assert(dg());
-            dg();
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template rangeLitOneChar()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateMakeNode!
+            (
+                combinateInputSlice!
+                (
+                    parseCharRange!(dchar.min, dchar.max),
+                ),
+                TokenType.RANGE_ONE_CHAR
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(rangeLitOneChar!(), ParserKind!(true, true))("a"))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.RANGE_ONE_CHAR);
+            assert(value.token.text == "a");
+            assert(value.children.length == 0);
         }
 
-    // rangeLit
-        template rangeLit(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        combinateNone!(
-                            parseString!"["
+        with(parse!(rangeLitOneChar!(), ParserKind!(true, true))("鬱"))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.RANGE_ONE_CHAR);
+            assert(value.token.text == "鬱");
+            assert(value.children.length == 0);
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template rangeLitCharRange()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateSetInfo!
+            (
+                combinateConvert!
+                (
+                    combinateUnTuple!
+                    (
+                        combinateSequence!
+                        (
+                            rangeLitOneChar!(),
+                            combinateNone!
+                            (
+                                parseString!"-"
+                            ),
+                            rangeLitOneChar!()
                         ),
-                        combinateMore1!(
-                            combinateSequence!(
-                                combinateNotPred!(
-                                    parseString!"]"
-                                ),
-                                combinateChoice!(
-                                    charRange!(),
-                                    oneChar!()
+                    ),
+                    (Node begin, Node end) => Node(Token(TokenType.RANGE_CHAR_RANGE, "-"), [begin, end])
+                )
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(rangeLitCharRange!(), ParserKind!(true, true))("a-z"))
+        {
+            assert(match                             == true);
+            assert(value.token.type                        == TokenType.RANGE_CHAR_RANGE);
+            assert(value.token.text                       == "-");
+            assert(value.children.length             == 2);
+            assert(value.children[0].token.type            == TokenType.RANGE_ONE_CHAR);
+            assert(value.children[0].token.text           == "a");
+            assert(value.children[0].children.length == 0);
+            assert(value.children[1].token.type            == TokenType.RANGE_ONE_CHAR);
+            assert(value.children[1].token.text           == "z");
+            assert(value.children[1].children.length == 0);
+        }
+
+        with(parse!(rangeLitCharRange!(), ParserKind!(true, true))("躁-鬱"))
+        {
+            assert(match                             == true);
+            assert(value.token.type                        == TokenType.RANGE_CHAR_RANGE);
+            assert(value.token.text                       == "-");
+            assert(value.children.length             == 2);
+            assert(value.children[0].token.type            == TokenType.RANGE_ONE_CHAR);
+            assert(value.children[0].token.text           == "躁");
+            assert(value.children[0].children.length == 0);
+            assert(value.children[1].token.type            == TokenType.RANGE_ONE_CHAR);
+            assert(value.children[1].token.text           == "鬱");
+            assert(value.children[1].children.length == 0);
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template rangeLit()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateSetInfo!
+            (
+                combinateConvert!
+                (
+                    combinateUnTuple!
+                    (
+                        combinateSequence!
+                        (
+                            combinateNone!
+                            (
+                                parseString!"["
+                            ),
+                            combinateMore1!
+                            (
+                                combinateUnTuple!
+                                (
+                                    combinateSequence!
+                                    (
+                                        combinateNotPred!
+                                        (
+                                            parseString!"]"
+                                        ),
+                                        combinateChoice!
+                                        (
+                                            rangeLitCharRange!(),
+                                            rangeLitOneChar!()
+                                        )
+                                    )
                                 )
+                            ),
+                            combinateNone!
+                            (
+                                parseString!"]"
                             )
                         ),
-                        combinateNone!(
-                            parseString!"]"
-                        )
                     ),
-                    function(string[] strs) => strs.length == 1 ? strs[0] : "combinateChoice!("~strs.join(",")~")"
-                ).parse(input, info);
-            }
+                    (Node[] children) => Node(Token(TokenType.RANGE, "RANGE_LIT"), children)
+                )
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(rangeLit!(), ParserKind!(true, true))("[a-zあ躁-鬱]"))
+        {
+            assert(match                                         == true);
+            assert(value.token.type                                    == TokenType.RANGE);
+            assert(value.token.text                                   == "RANGE_LIT");
+            assert(value.children.length                         == 3);
+            assert(value.children[0].token.type                        == TokenType.RANGE_CHAR_RANGE);
+            assert(value.children[0].token.text                       == "-");
+            assert(value.children[0].children.length             == 2);
+            assert(value.children[0].children[0].token.type            == TokenType.RANGE_ONE_CHAR);
+            assert(value.children[0].children[0].token.text           == "a");
+            assert(value.children[0].children[0].children.length == 0);
+            assert(value.children[0].children[1].token.type            == TokenType.RANGE_ONE_CHAR);
+            assert(value.children[0].children[1].token.text           == "z");
+            assert(value.children[0].children[1].children.length == 0);
+            assert(value.children[1].token.type                        == TokenType.RANGE_ONE_CHAR);
+            assert(value.children[1].token.text                       == "あ");
+            assert(value.children[1].children.length             == 0);
+            assert(value.children[2].token.type                        == TokenType.RANGE_CHAR_RANGE);
+            assert(value.children[2].token.text                       == "-");
+            assert(value.children[2].children.length             == 2);
+            assert(value.children[2].children[0].token.type            == TokenType.RANGE_ONE_CHAR);
+            assert(value.children[2].children[0].token.text           == "躁");
+            assert(value.children[2].children[0].children.length == 0);
+            assert(value.children[2].children[1].token.type            == TokenType.RANGE_ONE_CHAR);
+            assert(value.children[2].children[1].token.text           == "鬱");
+            assert(value.children[2].children[1].children.length == 0);
         }
 
-        template charRange(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        combinateChoice!(
-                            parseEscapeSequence!(),
-                            parseAnyChar!()
-                        ),
-                        combinateNone!(
-                            parseString!"-"
-                        ),
-                        combinateChoice!(
-                            parseEscapeSequence!(),
-                            parseAnyChar!()
-                        ),
-                    ),
-                    function(string low, string high) => "parseCharRange!('" ~ low ~ "','" ~ high ~ "')"
-                ).parse(input, info);
-            }
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template stringLit()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateMakeNode!
+            (
+                DLex.StringLiteral!(),
+                TokenType.STRING
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(stringLit!(), ParserKind!(true, true))(q{"hoge"}))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.STRING);
+            assert(value.token.text == q{"hoge"});
+            assert(value.children.length == 0);
         }
 
-        template oneChar(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateChoice!(
-                        parseEscapeSequence!(),
-                        parseAnyChar!()
-                    ),
-                    function(string c) => "parseString!\"" ~ c ~ "\""
-                ).parse(input, info);
-            }
+        with(parse!(stringLit!(), ParserKind!(true, true))(q{r"hoge\"}))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.STRING);
+            assert(value.token.text == q{r"hoge\"});
+            assert(value.children.length == 0);
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(rangeLit!().parse(makeInput("[a-z]"), new CallerInfo(0, "")) == makeParseResult(true, "parseCharRange!('a','z')", makeInput("", 5), Error("Expected failure", 4)));
-                assert(rangeLit!().parse(makeInput("[a-zA-Z_]"), new CallerInfo(0, "")) == makeParseResult(true, "combinateChoice!(parseCharRange!('a','z'),parseCharRange!('A','Z'),parseString!\"_\"" ")", makeInput("", 9), Error("Expected failure", 8)));
-                return true;
-            };
-            static assert(dg());
-            dg();
+        with(parse!(stringLit!(), ParserKind!(true, true))(q{`"hoge"`}))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.STRING);
+            assert(value.token.text == q{`"hoge"`});
+            assert(value.children.length == 0);
         }
 
-    // stringLit
-        template stringLit(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        combinateNone!(
-                            parseString!"\""
-                        ),
-                        combinateMore0!(
-                            combinateSequence!(
-                                combinateNotPred!(
-                                    parseString!"\""
-                                ),
-                                combinateChoice!(
-                                    parseEscapeSequence!(),
-                                    parseAnyChar!()
-                                )
-                            )
-                        ),
-                        combinateNone!(
-                            parseString!"\""
-                        )
-                    ),
-                    function(string[] strs) => "parseString!\"" ~ strs.flat() ~ "\""
-                ).parse(input, info);
-            }
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template literal()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateChoice!
+            (
+                eofLit!(),
+                rangeLit!(),
+                stringLit!()
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(literal!(), ParserKind!(true, true))("$"))
+        {
+            assert(match                 == true);
+            assert(value.token.type            == TokenType.DOLLAR);
+            assert(value.token.text           == "$");
+            assert(value.children.length == 0);
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(stringLit!().parse(makeInput("\"hello\nworld\" "), new CallerInfo(0, "")) == makeParseResult(true, "parseString!\"hello\nworld\"", makeInput(" ", 13, 2), Error("Expected failure", 12, 2)));
-                assert(stringLit!().parse(makeInput("aa\""), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'\"' expected but 'a' found", 0)));
-                return true;
-            };
-            static assert(dg());
-            dg();
+        with(parse!(literal!(), ParserKind!(true, true))("[a-zあ躁-鬱]"))
+        {
+            assert(match                                         == true);
+            assert(value.token.type                                    == TokenType.RANGE);
+            assert(value.token.text                                   == "RANGE_LIT");
+            assert(value.children.length                         == 3);
+            assert(value.children[0].token.type                        == TokenType.RANGE_CHAR_RANGE);
+            assert(value.children[0].token.text                       == "-");
+            assert(value.children[0].children.length             == 2);
+            assert(value.children[0].children[0].token.type            == TokenType.RANGE_ONE_CHAR);
+            assert(value.children[0].children[0].token.text           == "a");
+            assert(value.children[0].children[0].children.length == 0);
+            assert(value.children[0].children[1].token.type            == TokenType.RANGE_ONE_CHAR);
+            assert(value.children[0].children[1].token.text           == "z");
+            assert(value.children[0].children[1].children.length == 0);
+            assert(value.children[1].token.type                        == TokenType.RANGE_ONE_CHAR);
+            assert(value.children[1].token.text                       == "あ");
+            assert(value.children[1].children.length             == 0);
+            assert(value.children[2].token.type                        == TokenType.RANGE_CHAR_RANGE);
+            assert(value.children[2].token.text                       == "-");
+            assert(value.children[2].children.length             == 2);
+            assert(value.children[2].children[0].token.type            == TokenType.RANGE_ONE_CHAR);
+            assert(value.children[2].children[0].token.text           == "躁");
+            assert(value.children[2].children[0].children.length == 0);
+            assert(value.children[2].children[1].token.type            == TokenType.RANGE_ONE_CHAR);
+            assert(value.children[2].children[1].token.text           == "鬱");
+            assert(value.children[2].children[1].children.length == 0);
         }
 
-    // literal
-        template literal(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvertWithState!(
-                    combinateChoice!(
-                        rangeLit!(),
-                        stringLit!(),
-                        eofLit!()
-                    ),
-                    function(string literal, StateType state)
-                    =>
-                    state[1].length ? "combinateSkip!(combinateMemoize!(" ~ literal ~ ")," ~ state[1] ~ ")" : "combinateMemoize!(" ~ literal ~ ")"
-                ).parse(input, info);
-            }
+        with(parse!(literal!(), ParserKind!(true, true))(q{"hoge"}))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.STRING);
+            assert(value.token.text == q{"hoge"});
+            assert(value.children.length == 0);
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(literal!().parse(makeInput("\"hello\nworld\""), new CallerInfo(0, "")) == makeParseResult(true, "combinateMemoize!(parseString!\"hello\nworld\")", makeInput("", 13, 2), Error("Expected failure", 12, 2)));
-                assert(literal!().parse(makeInput("[a-z]"), new CallerInfo(0, "")) == makeParseResult(true, "combinateMemoize!(parseCharRange!('a','z'))", makeInput("", 5), Error("Expected failure", 4)));
-                assert(literal!().parse(makeInput("$"), new CallerInfo(0, "")) == makeParseResult(true, "combinateMemoize!(parseEOF!())", makeInput("", 1)));
-                assert(literal!().parse(makeInput("$", 0, 1, tuple("", "skip!()")), new CallerInfo(0, "")) == makeParseResult(true, "combinateSkip!(combinateMemoize!(parseEOF!()),skip!())", makeInput("", 1, 1, tuple("", "skip!()"))));
-                assert(literal!().parse(makeInput("表が怖い噂のソフト"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'$' expected but '表' found", 0)));
-                return true;
-            };
-            static assert(dg());
-            dg();
+        with(parse!(literal!(), ParserKind!(true, true))(q{r"hoge\"}))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.STRING);
+            assert(value.token.text == q{r"hoge\"});
+            assert(value.children.length == 0);
         }
 
-    // primaryExp
-        template primaryExp(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateChoice!(
-                    literal!(),
-                    nonterminal!(),
-                    combinateSequence!(
-                        combinateNone!(
+        with(parse!(literal!(), ParserKind!(true, true))(q{`"hoge"`}))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.STRING);
+            assert(value.token.text == q{`"hoge"`});
+            assert(value.children.length == 0);
+        }
+
+        with(parse!(literal!(), ParserKind!(true, true))("hoge"))
+        {
+            assert(match          == false);
+            assert(error.msg      == "'\"' expected");
+            assert(error.position == 0);
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template primaryExp()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateChoice!
+            (
+                stringLit!(),
+                rangeLit!(),
+                eofLit!(),
+                combinateUnTuple!
+                (
+                    combinateSequence!
+                    (
+                        combinateNone!
+                        (
                             parseString!"("
                         ),
                         parseSpaces!(),
                         choiceExp!(),
                         parseSpaces!(),
-                        combinateNone!(
+                        combinateNone!
+                        (
                             parseString!")"
                         )
                     )
-                ).parse(input, info);
-            }
+                ),
+                nonterminal!()
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(primaryExp!(), ParserKind!(true, true))("$"))
+        {
+            assert(match                 == true);
+            assert(value.token.type            == TokenType.DOLLAR);
+            assert(value.token.text           == "$");
+            assert(value.children.length == 0);
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(primaryExp!().parse(makeInput("(&(^$)?)"), new CallerInfo(0, "")) == makeParseResult(true, "combinateOption!(combinateAndPred!(combinateNotPred!(combinateMemoize!(parseEOF!()))))", makeInput("", 8), Error("'(' expected but ')' found", 7)));
-                assert(primaryExp!().parse(makeInput("int"), new CallerInfo(__LINE__, "")) == makeParseResult(true, " #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(int!())", makeInput("", 3)));
-                assert(primaryExp!().parse(makeInput("###このコメントは表示されません###"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("'(' expected but '#' found", 0)));
-                assert(primaryExp!().parse(makeInput("(&(^$)?"), new CallerInfo(0, "")) == makeParseResult(false, "", makeInput(""), Error("')' expected but EOF found", 7)));
-                return true;
-            };
-            static assert(dg());
-            dg();
+        with(parse!(primaryExp!(), ParserKind!(true, true))("($)"))
+        {
+            assert(match                 == true);
+            assert(value.token.type            == TokenType.DOLLAR);
+            assert(value.token.text           == "$");
+            assert(value.children.length == 0);
         }
 
-    // preExp
-        template preExp(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        combinateOption!(
-                            combinateChoice!(
-                                parseString!"&",
-                                parseString!"^",
-                                parseString!"!!",
-                                parseString!"!"
-                            )
-                        ),
-                        primaryExp!()
+        with(parse!(primaryExp!(), ParserKind!(true, true))("_ab0="))
+        {
+            assert(match                 == true);
+            assert(nextInput.source      == "=");
+            assert(value.token.type            == TokenType.NONTERMINAL);
+            assert(value.token.text           == "_ab0");
+            assert(value.children.length == 0);
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template preExp()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateConvert!
+            (
+                combinateSequence!
+                (
+                    combinateOption!
+                    (
+                        combinateChoice!
+                        (
+                            parseString!"!",
+                            parseString!"&",
+                            parseString!"^"
+                        )
                     ),
-                    function(Option!string op, string primaryExp){
-                        final switch(op.value){
-                            case "&":
-                                return "combinateAndPred!(" ~ primaryExp ~ ")";
-                            case "^":
-                                return "combinateNotPred!(" ~ primaryExp ~ ")";
-                            case "!!":
-                                return "combinateChangeState!(" ~ primaryExp ~ ")";
+                    primaryExp!(),
+                ),
+                function(Option!string op, Node primaryExp)
+                {
+                    if(op.some)
+                    {
+                        Node preExp;
+
+                        final switch(op.value)
+                        {
                             case "!":
-                                return "combinateNone!(" ~ primaryExp ~ ")";
-                            case "":
-                                return primaryExp;
+                                preExp.token.type = TokenType.EXCLAM;
+                                break;
+                            case "&":
+                                preExp.token.type = TokenType.ANPERSAND;
+                                break;
+                            case "^":
+                                preExp.token.type = TokenType.ASCIICIRCUM;
+                                break;
                         }
+                        preExp.token.text = op;
+                        preExp.children ~= primaryExp;
+
+                        return preExp;
                     }
-                ).parse(input, info);
-            }
+                    else
+                    {
+                        return primaryExp;
+                    }
+                }
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(preExp!(), ParserKind!(true, true))("!$"))
+        {
+            assert(match                             == true);
+            assert(value.token.type                        == TokenType.EXCLAM);
+            assert(value.token.text                       == "!");
+            assert(value.children.length             == 1);
+            assert(value.children[0].token.type            == TokenType.DOLLAR);
+            assert(value.children[0].token.text           == "$");
+            assert(value.children[0].children.length == 0);
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(preExp!().parse(makeInput("!$"), new CallerInfo(0, "")) == makeParseResult(true, "combinateNone!(combinateMemoize!(parseEOF!()))", makeInput("", 2)));
-                assert(preExp!().parse(makeInput("!!$"), new CallerInfo(0, "")) == makeParseResult(true, "combinateChangeState!(combinateMemoize!(parseEOF!()))", makeInput("", 3)));
-                return true;
-            };
-            static assert(dg());
-            dg();
+        with(parse!(preExp!(), ParserKind!(true, true))("&$"))
+        {
+            assert(match                             == true);
+            assert(value.token.type                        == TokenType.ANPERSAND);
+            assert(value.token.text                       == "&");
+            assert(value.children.length             == 1);
+            assert(value.children[0].token.type            == TokenType.DOLLAR);
+            assert(value.children[0].token.text           == "$");
+            assert(value.children[0].children.length == 0);
         }
 
-    // postExp
-        template postExp(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        preExp!(),
-                        combinateOption!(
-                            combinateSequence!(
-                                combinateChoice!(
-                                    parseString!"+",
-                                    parseString!"*"
-                                ),
-                                combinateOption!(
-                                    combinateSequence!(
-                                        combinateNone!(
+        with(parse!(preExp!(), ParserKind!(true, true))("^$"))
+        {
+            assert(match                             == true);
+            assert(nextInput.source                  == "");
+            assert(nextInput.position                == 2);
+            assert(nextInput.line                    == 0);
+            assert(value.token.type                        == TokenType.ASCIICIRCUM);
+            assert(value.token.text                       == "^");
+            assert(value.children.length             == 1);
+            assert(value.children[0].token.type            == TokenType.DOLLAR);
+            assert(value.children[0].token.text           == "$");
+            assert(value.children[0].children.length == 0);
+        }
+
+        with(parse!(preExp!(), ParserKind!(true, true))("$"))
+        {
+            assert(match                 == true);
+            assert(nextInput.source      == "");
+            assert(nextInput.position    == 1);
+            assert(value.token.type            == TokenType.DOLLAR);
+            assert(value.token.text           == "$");
+            assert(value.children.length == 0);
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template postExp()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateConvert!
+            (
+                combinateSequence!
+                (
+                    preExp!(),
+                    combinateOption!
+                    (
+                        combinateSequence!
+                        (
+                            combinateChoice!
+                            (
+                                parseString!"*",
+                                parseString!"+",
+                            ),
+                            combinateOption!
+                            (
+                                combinateUnTuple!
+                                (
+                                    combinateSequence!
+                                    (
+                                        combinateNone!
+                                        (
                                             parseString!"<"
                                         ),
                                         choiceExp!(),
-                                        combinateNone!(
+                                        combinateNone!
+                                        (
                                             parseString!">"
                                         )
                                     )
                                 )
                             )
                         )
-                    ),
-                    function(string preExp, Option!(Tuple!(string, Option!string)) op){
-                        final switch(op.value[0]){
-                            case "+":{
-                                if(op.value[1].some){
-                                    return "combinateMore1!(" ~ preExp ~ "," ~ op.value[1].value ~ ")";
-                                }else{
-                                    return "combinateMore1!(" ~ preExp ~ ")";
-                                }
-                            }
-                            case "*":{
-                                if(op.value[1].some){
-                                    return "combinateMore0!(" ~ preExp ~ "," ~ op.value[1].value ~ ")";
-                                }else{
-                                    return "combinateMore0!(" ~ preExp ~ ")";
-                                }
-                            }
-                            case "":{
-                                return preExp;
-                            }
+                    )
+                ),
+                function(Node preExp, Option!(Tuple!(string, Option!Node)) op)
+                {
+                    if(op.some)
+                    {
+                        Node postExp;
+
+                        final switch(op[0])
+                        {
+                            case "*":
+                                postExp.token.type = TokenType.ASTERISK;
+                                break;
+                            case "+":
+                                postExp.token.type = TokenType.PLUS;
+                                break;
                         }
+
+                        postExp.token.text = op[0];
+                        postExp.children ~= preExp;
+
+                        if(op[1].some)
+                        {
+                            postExp.children ~= op[1];
+                        }
+
+                        return postExp;
                     }
-                ).parse(input, info);
-            }
+                    else
+                    {
+                        return preExp;
+                    }
+                }
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(postExp!(), ParserKind!(true, true))("$*"))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.ASTERISK);
+            assert(value.token.text == "*");
+            assert(value.children.length == 1);
+            assert(value.children[0].token.type == TokenType.DOLLAR);
+            assert(value.children[0].token.text == "$");
+            assert(value.children[0].children.length == 0);
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(postExp!().parse(makeInput("!$*"), new CallerInfo(0, "")) == makeParseResult(true, "combinateMore0!(combinateNone!(combinateMemoize!(parseEOF!())))", makeInput("", 3)));
-                return true;
-            };
-            static assert(dg());
-            dg();
+        with(parse!(postExp!(), ParserKind!(true, true))("$+"))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.PLUS);
+            assert(value.token.text == "+");
+            assert(value.children.length == 1);
+            assert(value.children[0].token.type == TokenType.DOLLAR);
+            assert(value.children[0].token.text == "$");
+            assert(value.children[0].children.length == 0);
         }
 
-    // optionExp
-        template optionExp(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        postExp!(),
-                        parseSpaces!(),
-                        combinateOption!(
-                            combinateNone!(
-                                parseString!"?"
-                            )
+        with(parse!(postExp!(), ParserKind!(true, true))("$*<$>"))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.ASTERISK);
+            assert(value.token.text == "*");
+            assert(value.children.length == 2);
+            assert(value.children[0].token.type == TokenType.DOLLAR);
+            assert(value.children[0].token.text == "$");
+            assert(value.children[0].children.length == 0);
+            assert(value.children[1].token.type == TokenType.DOLLAR);
+            assert(value.children[1].token.text == "$");
+            assert(value.children[1].children.length == 0);
+        }
+
+        with(parse!(postExp!(), ParserKind!(true, true))("$+<$>"))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.PLUS);
+            assert(value.token.text == "+");
+            assert(value.children.length == 2);
+            assert(value.children[0].token.type == TokenType.DOLLAR);
+            assert(value.children[0].token.text == "$");
+            assert(value.children[0].children.length == 0);
+            assert(value.children[1].token.type == TokenType.DOLLAR);
+            assert(value.children[1].token.text == "$");
+            assert(value.children[1].children.length == 0);
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template optionExp()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateConvert!
+            (
+                combinateSequence!
+                (
+                    postExp!(),
+                    combinateOption!
+                    (
+                        combinateNone!
+                        (
+                            parseString!"?"
                         )
-                    ),
-                    function(string convExp, Option!None op) => op.some ? "combinateOption!("~convExp~")" : convExp
-                ).parse(input, info);
-            }
+                    )
+                ),
+                function(Node postExp, Option!None op)
+                {
+                    if(op.some)
+                    {
+                        Node optionExp;
+
+                        optionExp.token.type = TokenType.QUESTION;
+                        optionExp.token.text = "?";
+                        optionExp.children ~= postExp;
+
+                        return optionExp;
+                    }
+                    else
+                    {
+                        return postExp;
+                    }
+                }
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(optionExp!(), ParserKind!(true, true))("$?"))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.QUESTION);
+            assert(value.token.text == "?");
+            assert(value.children.length == 1);
+            assert(value.children[0].token.type == TokenType.DOLLAR);
+            assert(value.children[0].token.text == "$");
+            assert(value.children[0].children.length == 0);
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(optionExp!().parse(makeInput("(&(^\"hello\"))?"), new CallerInfo(0, "")) == makeParseResult(true, "combinateOption!(combinateAndPred!(combinateNotPred!(combinateMemoize!(parseString!\"hello\"))))", makeInput("", 14)));
-                return true;
-            };
-            static assert(dg());
-            dg();
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template seqExp()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateConvert!
+            (
+                combinateMore1!
+                (
+                    optionExp!(),
+                    parseSpaces!()
+                ),
+                function(Node[] optionExps)
+                {
+                    if(optionExps.length > 1)
+                    {
+                        Node seqExp;
+
+                        seqExp.token.type = TokenType.SEQUENCE;
+                        seqExp.token.text = "SEQ";
+                        seqExp.children = optionExps;
+
+                        return seqExp;
+                    }
+                    else
+                    {
+                        return optionExps[0];
+                    }
+                }
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(seqExp!(), ParserKind!(true, true))("$"))
+        {
+            assert(match                 == true);
+            assert(value.token.type            == TokenType.DOLLAR);
+            assert(value.token.text           == "$");
+            assert(value.children.length == 0);
         }
 
-    // seqExp
-        template seqExp(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateMore1!(
-                        optionExp!(),
-                        parseSpaces!()
-                    ),
-                    function(string[] optionExps) => optionExps.length > 1 ? "combinateSequence!("~optionExps.join(",")~")" : optionExps[0]
-                ).parse(input, info);
-            }
+        with(parse!(seqExp!(), ParserKind!(true, true))("$ $"))
+        {
+            assert(match                             == true);
+            assert(value.token.type                        == TokenType.SEQUENCE);
+            assert(value.token.text                       == "SEQ");
+            assert(value.children.length             == 2);
+            assert(value.children[0].token.type            == TokenType.DOLLAR);
+            assert(value.children[0].token.text           == "$");
+            assert(value.children[0].children.length == 0);
+            assert(value.children[1].token.type            == TokenType.DOLLAR);
+            assert(value.children[1].token.text           == "$");
+            assert(value.children[1].children.length == 0);
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(seqExp!().parse(makeInput("!$* (&(^$))?"), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateMore0!(combinateNone!(combinateMemoize!(parseEOF!()))),combinateOption!(combinateAndPred!(combinateNotPred!(combinateMemoize!(parseEOF!())))))", makeInput("", 12), Error("'(' expected but EOF found", 12)));
-                assert(seqExp!().parse(makeInput("!\"hello\" $"), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateNone!(combinateMemoize!(parseString!\"hello\")),combinateMemoize!(parseEOF!()))", makeInput("", 10), Error("'(' expected but EOF found", 10)));
-                assert(seqExp!().parse(makeInput("!$* (&(^$)?"), new CallerInfo(0, "")) == makeParseResult(true, "combinateMore0!(combinateNone!(combinateMemoize!(parseEOF!())))", makeInput("(&(^$)?", 4), Error("')' expected but EOF found", 11)));
-                return true;
-            };
-            static assert(dg());
-            dg();
-        }
+        return true;
+    }
 
-    // convExp
-        template convExp(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        getCallerLine!(),
-                        getCallerFile!(),
-                        seqExp!(),
-                        combinateMore0!(
-                            combinateSequence!(
+    static assert(test());
+    test();
+}
+
+
+template convExp()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateConvert!
+            (
+                combinateSequence!
+                (
+                    seqExp!(),
+                    combinateMore0!
+                    (
+                        combinateUnTuple!
+                        (
+                            combinateSequence!
+                            (
                                 parseSpaces!(),
-                                combinateChoice!(
-                                    parseString!">>>",
-                                    parseString!">>?",
+                                parseGetLine!(),
+                                parseGetCallerLine!(),
+                                parseGetCallerFile!(),
+                                combinateChoice!
+                                (
+                                    parseString!">?",
                                     parseString!">>"
                                 ),
                                 parseSpaces!(),
-                                getLine!(),
-                                combinateChoice!(
+                                combinateChoice!
+                                (
                                     func!(),
                                     typeName!()
                                 )
                             )
                         )
-                    ),
-                    function(size_t callerLine, string callerFile, string seqExp, Tuple!(string, size_t, string)[] funcs){
-                        string result = seqExp;
-                        foreach(func; funcs){
-                            string line = (callerLine + func[1] - 1).to!string();
-                            final switch(func[0]){
-                                case ">>":
-                                    result = "combinateConvert!(" ~ line ~ ",`" ~ callerFile ~ "`," ~ result ~ ",#line " ~ line ~ "\n" ~ func[2] ~ ")";
-                                    break;
-                                case ">>>":
-                                    result = "combinateConvertWithState!(" ~ (callerLine + func[1] - 1).to!string() ~ ",`" ~ callerFile ~ "`," ~ result ~ ",#line " ~ line ~ "\n" ~ func[2] ~ ")";
-                                    break;
-                                case ">>?":
-                                    result = "combinateCheck!(" ~ (callerLine + func[1] - 1).to!string() ~ ",`" ~ callerFile ~ "`," ~ result ~ ",#line " ~ line ~ "\n" ~ func[2] ~ ")";
-                                    break;
-                            }
-                        }
-                        return result;
+                    )
+                ),
+                function(Node seqExp, Tuple!(size_t, size_t, string, string, Node)[] funcs)
+                {
+                    Node result = seqExp;
+
+                    foreach(func; funcs)
+                    {
+                        Node node;
+
+                        size_t line = func[0];
+                        size_t callerLine = func[1];
+                        string callerFile = func[2];
+                        string op = func[3];
+                        Node funcNode = func[4];
+
+                        node.token.type = op == ">>" ? TokenType.LEFT_SHIFT : TokenType.LEFT_QUESTION;
+                        node.token.text = op;
+                        node.children ~= result;
+                        node.children ~= funcNode;
+                        node.line = line + callerLine + 1;
+                        node.file = callerFile;
+
+                        result = node;
                     }
-                ).parse(input, info);
-            }
+
+                    return result;
+                }
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(convExp!(), ParserKind!(true, true))("$"))
+        {
+            assert(match == true);
+            assert(value.token.type            == TokenType.DOLLAR);
+            assert(value.token.text           == "$");
+            assert(value.children.length == 0);
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(convExp!().parse(makeInput(q{!"hello" $ >> {return false;}}), new CallerInfo(__LINE__, `src\ctpg.d`)) == makeParseResult(true, "combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateSequence!(combinateNone!(combinateMemoize!(parseString!\"hello\")),combinateMemoize!(parseEOF!())),#line " ~ toStringNow!__LINE__ ~ "\nfunction(){return false;})", makeInput("", 29), Error("'(' expected but '>' found", 11)));
-                assert(convExp!().parse(makeInput(q{"hello" >> flat >> to!int}), new CallerInfo(__LINE__, `src/ctpg.d`)) == makeParseResult(true, "combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateMemoize!(parseString!\"hello\"),#line " ~ toStringNow!__LINE__ ~ "\nflat),#line " ~ toStringNow!__LINE__ ~ "\nto!int)", makeInput("", 25), Error("'(' expected but '>' found", 8)));
-                assert(convExp!().parse(makeInput(q{$ >>> to!string >>? isValid}, 0, 1, tuple("", "skip!()")), new CallerInfo(__LINE__, `src\ctpg.d`)) == makeParseResult(true, "combinateCheck!(" ~ toStringNow!__LINE__ ~ r",`src\ctpg.d`,combinateConvertWithState!(" ~ toStringNow!__LINE__ ~ r",`src\ctpg.d`,combinateSkip!(combinateMemoize!(parseEOF!()),skip!()),#line " ~ toStringNow!__LINE__ ~ "\nto!string),#line " ~ toStringNow!__LINE__ ~ "\nisValid)", makeInput("", 27, 1, tuple("", "skip!()")), Error("'(' expected but '>' found", 2)));
-                assert(convExp!().parse(makeInput(q{!"hello" $ > {return false;}}), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateNone!(combinateMemoize!(parseString!\"hello\")),combinateMemoize!(parseEOF!()))", makeInput("> {return false;}", 11), Error("'(' expected but '>' found", 11)));
-                return true;
-            };
-            static assert(dg());
-            dg();
+        with(parse!(convExp!(), ParserKind!(true, true))("$ >> hoge"))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.LEFT_SHIFT);
+            assert(value.token.text == ">>");
+            assert(value.line == __LINE__ - 4);
+            assert(value.file == __FILE__);
+            assert(value.children.length == 2);
+            assert(value.children[0].token.type            == TokenType.DOLLAR);
+            assert(value.children[0].token.text           == "$");
+            assert(value.children[0].children.length == 0);
+            assert(value.children[1].token.type            == TokenType.TEMPLATE_INSTANCE);
+            assert(value.children[1].token.text           == "hoge");
+            assert(value.children[1].children.length == 0);
         }
 
-    // choiceExp
-        template choiceExp(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        getLine!(),
-                        getCallerLine!(),
-                        getCallerFile!(),
-                        convExp!(),
-                        combinateMore0!(
-                            combinateSequence!(
-                                parseSpaces!(),
-                                combinateNone!(
-                                    parseString!"/"
+        with(parse!(convExp!(), ParserKind!(true, true))("$ >> hoge >> piyo"))
+        {
+            assert(match                                         == true);
+            assert(value.token.type                                    == TokenType.LEFT_SHIFT);
+            assert(value.token.text                                   == ">>");
+            assert(value.line                                    == __LINE__ - 4);
+            assert(value.file                                    == __FILE__);
+            assert(value.children.length                         == 2);
+            assert(value.children[0].token.type                        == TokenType.LEFT_SHIFT);
+            assert(value.children[0].token.text                       == ">>");
+            assert(value.children[0].line                        == __LINE__ - 9);
+            assert(value.children[0].file                        == __FILE__);
+            assert(value.children[0].children.length             == 2);
+            assert(value.children[0].children[0].token.type            == TokenType.DOLLAR);
+            assert(value.children[0].children[0].token.text           == "$");
+            assert(value.children[0].children[0].children.length == 0);
+            assert(value.children[0].children[1].token.type            == TokenType.TEMPLATE_INSTANCE);
+            assert(value.children[0].children[1].token.text           == "hoge");
+            assert(value.children[0].children[1].children.length == 0);
+            assert(value.children[1].token.type                        == TokenType.TEMPLATE_INSTANCE);
+            assert(value.children[1].token.text                       == "piyo");
+            assert(value.children[1].children.length             == 0);
+        }
+
+        with(parse!(convExp!(), ParserKind!(true, true))("$ >> hoge >? piyo"))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.LEFT_QUESTION);
+            assert(value.token.text == ">?");
+            assert(value.children.length == 2);
+            assert(value.children[0].token.type == TokenType.LEFT_SHIFT);
+            assert(value.children[0].token.text == ">>");
+            assert(value.children[0].children.length == 2);
+            assert(value.children[0].children[0].token.type            == TokenType.DOLLAR);
+            assert(value.children[0].children[0].token.text           == "$");
+            assert(value.children[0].children[0].children.length == 0);
+            assert(value.children[0].children[1].token.type            == TokenType.TEMPLATE_INSTANCE);
+            assert(value.children[0].children[1].token.text           == "hoge");
+            assert(value.children[0].children[1].children.length == 0);
+            assert(value.children[1].token.type            == TokenType.TEMPLATE_INSTANCE);
+            assert(value.children[1].token.text           == "piyo");
+            assert(value.children[1].children.length == 0);
+        }
+
+        with(parse!(convExp!(), ParserKind!(true, true))("$ >> (a, b){ return a + b; }"))
+        {
+            assert(match == true);
+            assert(value.token.type == TokenType.LEFT_SHIFT);
+            assert(value.token.text == ">>");
+            assert(value.children.length == 2);
+            assert(value.children[0].token.type            == TokenType.DOLLAR);
+            assert(value.children[0].token.text           == "$");
+            assert(value.children[0].children.length == 0);
+            assert(value.children[1].token.type            == TokenType.CONVERTER);
+            assert(value.children[1].token.text           == q{(a, b){ return a + b; }});
+            assert(value.children[1].children.length == 0);
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template choiceExp()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateConvert!
+            (
+                combinateMore1!
+                (
+                    convExp!(),
+                    combinateSequence!
+                    (
+                        parseSpaces!(),
+                        parseString!"/",
+                        parseSpaces!()
+                    )
+                ),
+                function(Node[] convExps)
+                {
+                    if(convExps.length > 1)
+                    {
+                        Node choiceExp;
+
+                        choiceExp.token.type = TokenType.SLASH;
+                        choiceExp.token.text = "/";
+                        choiceExp.children = convExps;
+
+                        return choiceExp;
+                    }
+                    else
+                    {
+                        return convExps[0];
+                    }
+                }
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(choiceExp!(), ParserKind!(true, true))("$"))
+        {
+            assert(match                 == true);
+            assert(value.token.type            == TokenType.DOLLAR);
+            assert(value.token.text           == "$");
+            assert(value.children.length == 0);
+        }
+
+        with(parse!(choiceExp!(), ParserKind!(true, true))("$ "))
+        {
+            assert(match                 == true);
+            assert(value.token.type            == TokenType.DOLLAR);
+            assert(value.token.text           == "$");
+            assert(value.children.length == 0);
+        }
+
+        with(parse!(choiceExp!(), ParserKind!(true, true))("$ / $"))
+        {
+            assert(match                             == true);
+            assert(value.token.type                        == TokenType.SLASH);
+            assert(value.token.text                       == "/");
+            assert(value.children.length             == 2);
+            assert(value.children[0].token.type            == TokenType.DOLLAR);
+            assert(value.children[0].token.text           == "$");
+            assert(value.children[0].children.length == 0);
+            assert(value.children[1].token.type            == TokenType.DOLLAR);
+            assert(value.children[1].token.text           == "$");
+            assert(value.children[1].children.length == 0);
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template def()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateConvert!
+            (
+                combinateSequence!
+                (
+                    combinateOption!
+                    (
+                        combinateUnTuple!
+                        (
+                            combinateSequence!
+                            (
+                                combinateNone!
+                                (
+                                    parseString!"@setSkip(",
                                 ),
                                 parseSpaces!(),
-                                convExp!()
+                                choiceExp!(),
+                                parseSpaces!(),
+                                combinateNone!
+                                (
+                                    parseString!")"
+                                ),
+                                parseSpaces!()
                             )
                         )
                     ),
-                    function(size_t line, size_t callerLine, string callerFile, string convExp, string[] convExps) => convExps.length ? "combinateChoice!(" ~ (callerLine + line - 1).to!string() ~ ",`" ~ callerFile ~ "`," ~ convExp ~ "," ~ convExps.join(",") ~ ")" : convExp
-                ).parse(input, info);
-            }
+                    typeName!(),
+                    parseSpaces!(),
+                    id!(),
+                    parseSpaces!(),
+                    combinateNone!
+                    (
+                        parseString!"="
+                    ),
+                    parseSpaces!(),
+                    choiceExp!(),
+                    parseSpaces!(),
+                    combinateNone!
+                    (
+                        parseString!";"
+                    )
+                ),
+                function(Option!Node skip, Node type, Node name, Node choiceExp)
+                {
+                    Node def;
+
+                    def.token.type = TokenType.DEFINITION;
+                    def.children ~= type;
+                    def.children ~= name;
+
+                    if(skip.some)
+                    {
+                        Node skipNode;
+
+                        skipNode.token.type = TokenType.SET_SKIP;
+                        skipNode.children ~= skip;
+                        skipNode.children ~= choiceExp;
+
+                        def.children ~= skipNode;
+                    }
+                    else
+                    {
+                        def.children ~= choiceExp;
+                    }
+
+                    return def;
+                }
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(def!(), ParserKind!(true, true))(q{int hoge = $;}))
+        {
+            assert(match                             == true);
+            assert(value.token.type                        == TokenType.DEFINITION);
+            assert(value.children.length             == 3);
+            assert(value.children[0].token.type            == TokenType.TEMPLATE_INSTANCE);
+            assert(value.children[0].token.text           == "int");
+            assert(value.children[0].children.length == 0);
+            assert(value.children[1].token.type            == TokenType.ID);
+            assert(value.children[1].token.text           == "hoge");
+            assert(value.children[1].children.length == 0);
+            assert(value.children[2].token.type            == TokenType.DOLLAR);
+            assert(value.children[2].token.text           == "$");
+            assert(value.children[2].children.length == 0);
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                assert(choiceExp!().parse(makeInput(`!$* / (&(^"a"))?`), new CallerInfo(__LINE__, `src\ctpg.d`)) == makeParseResult(true, "combinateChoice!(" ~ toStringNow!__LINE__ ~ ",`src\\ctpg.d`,combinateMore0!(combinateNone!(combinateMemoize!(parseEOF!()))),combinateOption!(combinateAndPred!(combinateNotPred!(combinateMemoize!(parseString!\"a\")))))", makeInput("", 16), Error("'(' expected but '/' found", 4)));
-                assert(choiceExp!().parse(makeInput(`!"hello" $`, 0, 1, tuple("", "skip!()")), new CallerInfo(0, "")) == makeParseResult(true, "combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),skip!())),combinateSkip!(combinateMemoize!(parseEOF!()),skip!()))", makeInput("", 10, 1, tuple("", "skip!()")), Error("'(' expected but EOF found", 10)));
-                return true;
-            };
-            static assert(dg());
-            dg();
+        with(parse!(def!(), ParserKind!(true, true))(q{@setSkip($) int hoge = $;}))
+        {
+            assert(match                                               == true);
+            assert(value.token.type                                    == TokenType.DEFINITION);
+            assert(value.children.length                               == 3);
+            assert(value.children[0].token.type                        == TokenType.TEMPLATE_INSTANCE);
+            assert(value.children[0].token.text                        == "int");
+            assert(value.children[0].children.length                   == 0);
+            assert(value.children[1].token.type                        == TokenType.ID);
+            assert(value.children[1].token.text                        == "hoge");
+            assert(value.children[1].children.length                   == 0);
+            assert(value.children[2].token.type                        == TokenType.SET_SKIP);
+            assert(value.children[2].children.length                   == 2);
+            assert(value.children[2].children[0].token.type            == TokenType.DOLLAR);
+            assert(value.children[2].children[0].token.text            == "$");
+            assert(value.children[2].children[0].children.length       == 0);
+            assert(value.children[2].children[1].token.type            == TokenType.DOLLAR);
+            assert(value.children[2].children[1].token.text            == "$");
+            assert(value.children[2].children[1].children.length       == 0);
         }
 
-    // def
-        template def(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateSequence!(
-                        combinateChangeState!(
-                            combinateConvertWithState!(
-                                combinateOption!(
-                                    combinateSequence!(
-                                        combinateNone!(parseString!"@skip("),
-                                        combinateChangeState!(
-                                            combinateConvertWithState!(
-                                                success!(),
-                                                function(StateType state) => tuple(state[0], "")
-                                            )
-                                        ),
-                                        choiceExp!(),
-                                        combinateNone!(parseString!")")
-                                    )
-                                ),
-                                function(Option!string skip, StateType state)
-                                =>
-                                skip.some ? tuple(state[0], skip.value) : tuple(state[0], state[0])
-                            )
-                        ),
-                        parseSpaces!(),
-                        typeName!(),
-                        getLine!(),
-                        getCallerLine!(),
-                        parseSpaces!(),
-                        id!(),
-                        parseSpaces!(),
-                        combinateNone!(
-                            parseString!"="
+        return true;
+    }
+
+    static assert(test());
+    test();
+}
+
+
+template defaultSkip()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateConvert!
+            (
+                combinateUnTuple!
+                (
+                    combinateSequence!
+                    (
+                        combinateNone!
+                        (
+                            parseString!"@_setSkip("
                         ),
                         parseSpaces!(),
                         choiceExp!(),
                         parseSpaces!(),
-                        combinateNone!(
-                            parseString!";"
+                        combinateNone!
+                        (
+                            parseString!")"
                         )
-                    ),
-                    function(string type, size_t line, size_t callerLine, string name, string choiceExp)
-                    =>
-                        "template " ~ name ~ "(){"
-                            "#line " ~ (line + callerLine - 1).to!string() ~ "\n"
-                            "alias " ~ type ~ " ResultType;"
-                            "static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){"
-                                "return "~choiceExp~".parse(input, info);"
-                            "}"
-                        "}"
-                ).parse(input, info);
-            }
+                    )
+                ),
+                function(Node skip)
+                {
+                    Node setSkipNode;
+
+                    setSkipNode.token.type = TokenType.GLOBAL_SET_SKIP;
+                    setSkipNode.children ~= skip;
+
+                    return setSkipNode;
+                }
+            ).build!(kind, SrcType).parse(input, caller);
         }
+    }
+}
 
-        debug(ctpg) unittest{
-            enum dg = {
-                cast(void)__LINE__;
-                assert(def!().parse(makeInput(`@skip(" ") bool hoge = !"hello" $ >> {return false;};`), new CallerInfo(__LINE__, `src/ctpg.d`)) == makeParseResult(true, "template hoge(){#line " ~ toStringNow!__LINE__~ "\nalias bool ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateConvert!(" ~ toStringNow!__LINE__ ~ ",`src/ctpg.d`,combinateSequence!(combinateNone!(combinateSkip!(combinateMemoize!(parseString!\"hello\"),combinateMemoize!(parseString!\" \"))),combinateSkip!(combinateMemoize!(parseEOF!()),combinateMemoize!(parseString!\" \"))),#line " ~ toStringNow!__LINE__ ~ "\nfunction(){return false;}).parse(input, info);}}", makeInput("", 53, 1, tuple("", "combinateMemoize!(parseString!\" \")")), Error("'(' expected but '>' found", 34)));
-                assert(def!().parse(makeInput(`None recursive = A $;`), new CallerInfo(__LINE__, "")) == makeParseResult(true, "template recursive(){#line " ~ toStringNow!__LINE__~ "\nalias None ResultType;static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){return combinateSequence!( #line " ~ toStringNow!__LINE__ ~ "\ncombinateMemoize!(A!()),combinateMemoize!(parseEOF!())).parse(input, info);}}", makeInput("", 21), Error("'(' expected but ';' found", 20)));
-                assert(def!().parse(makeInput(`None recursive  A $;`), new CallerInfo(__LINE__, "")) == makeParseResult(false, "", makeInput(""), Error("'=' expected but 'A' found", 16)));
-                assert(def!().parse(makeInput("None recursive  \nA $;"), new CallerInfo(__LINE__, "")) == makeParseResult(false, "", makeInput(""), Error("'=' expected but 'A' found", 17, 2)));
-                return true;
-            };
-            static assert(dg());
-            dg();
-        };
 
-    // defs
-        template defs(){
-            alias string ResultType;
-            ParseResult!(string, ResultType) parse()(Input!string input, in CallerInfo info){
-                return combinateConvert!(
-                    combinateSequence!(
+template defs()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ Node };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinateConvert!
+            (
+                combinateUnTuple!
+                (
+                    combinateSequence!
+                    (
                         parseSpaces!(),
-                        combinateMore1!(
-                            combinateChoice!(
-                                combinateConvert!(
-                                    combinateChangeState!(
-                                        combinateConvert!(
-                                            combinateSequence!(
-                                                combinateNone!(parseString!"@default_skip("),
-                                                combinateChangeState!(
-                                                    combinateConvert!(
-                                                        success!(),
-                                                        () => tuple("", "")
-                                                    )
-                                                ),
-                                                choiceExp!(),
-                                                combinateNone!(parseString!")")
-                                            ),
-                                            function(string skip) => tuple(skip, "")
-                                        )
-                                    ),
-                                    function() => ""
-                                ),
-                                def!(),
+                        combinateMore0!
+                        (
+                            combinateChoice!
+                            (
+                                defaultSkip!(),
+                                def!()
                             ),
                             parseSpaces!()
                         ),
                         parseSpaces!(),
                         parseEOF!()
-                    ),
-                    flat
-                ).parse(input, info);
-            }
+                    )
+                ),
+                function(Node[] nodes)
+                {
+                    Node defs;
+
+                    defs.token.type = TokenType.DEFINITIONS;
+                    defs.children = nodes;
+
+                    return defs;
+                }
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(parse!(defs!(), ParserKind!(true, true))(q{int hoge = $; int piyo = $;}))
+        {
+            assert(match                                         == true);
+            assert(value.token.type                                    == TokenType.DEFINITIONS);
+            assert(value.children.length                         == 2);
+            assert(value.children[0].token.type                        == TokenType.DEFINITION);
+            assert(value.children[0].children.length             == 3);
+            assert(value.children[0].children[0].token.type            == TokenType.TEMPLATE_INSTANCE);
+            assert(value.children[0].children[0].token.text           == "int");
+            assert(value.children[0].children[0].children.length == 0);
+            assert(value.children[0].children[1].token.type            == TokenType.ID);
+            assert(value.children[0].children[1].token.text           == "hoge");
+            assert(value.children[0].children[1].children.length == 0);
+            assert(value.children[0].children[2].token.type            == TokenType.DOLLAR);
+            assert(value.children[0].children[2].token.text           == "$");
+            assert(value.children[0].children[2].children.length == 0);
+            assert(value.children[1].token.type                        == TokenType.DEFINITION);
+            assert(value.children[1].children.length             == 3);
+            assert(value.children[1].children[0].token.type            == TokenType.TEMPLATE_INSTANCE);
+            assert(value.children[1].children[0].token.text           == "int");
+            assert(value.children[1].children[0].children.length == 0);
+            assert(value.children[1].children[1].token.type            == TokenType.ID);
+            assert(value.children[1].children[1].token.text           == "piyo");
+            assert(value.children[1].children[1].children.length == 0);
+            assert(value.children[1].children[2].token.type            == TokenType.DOLLAR);
+            assert(value.children[1].children[2].token.text           == "$");
+            assert(value.children[1].children[2].children.length == 0);
         }
 
-        debug(ctpg) unittest{
-            enum dg = {
-                cast(void)__LINE__; 
-                assert(defs!().parse(makeInput(q{
-                    @default_skip(" " / "\t" / "\n")
-                    bool hoge = !"hello" $ >> {return false;};
-                    @skip(" ") Tuple!piyo hoge2 = hoge* >> {return tuple("foo");};
-                }), new CallerInfo(__LINE__ - 4, r"src\ctpg.d")) == makeParseResult(true, 
-                    "template hoge(){"
-                        "#line " ~ toStringNow!(__LINE__ - 4) ~ "\n"
-                        "alias bool ResultType;"
-                        "static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){"
-                            "return combinateConvert!(" ~ toStringNow!(__LINE__ - 7) ~ ",`src\\ctpg.d`,"
-                                "combinateSequence!("
-                                    "combinateNone!("
-                                        "combinateSkip!("
-                                            "combinateMemoize!(parseString!\"hello\"),"
-                                            "combinateChoice!(" ~ toStringNow!(__LINE__ - 13) ~ ",`src\\ctpg.d`,"
-                                                "combinateMemoize!(parseString!\" \"),"
-                                                "combinateMemoize!(parseString!\"\\t\"),"
-                                                "combinateMemoize!(parseString!\"\\n\")"
-                                            ")"
-                                        ")"
-                                    "),"
-                                    "combinateSkip!("
-                                        "combinateMemoize!(parseEOF!()),"
-                                        "combinateChoice!(" ~ toStringNow!(__LINE__ - 22) ~ ",`src\\ctpg.d`,"
-                                            "combinateMemoize!(parseString!\" \"),"
-                                            "combinateMemoize!(parseString!\"\\t\"),"
-                                            "combinateMemoize!(parseString!\"\\n\")"
-                                        ")"
-                                    ")"
-                                "),#line " ~ toStringNow!(__LINE__ - 27) ~ "\n"
-                                "function(){"
-                                    "return false;"
-                                "}"
-                            ").parse(input, info);"
-                        "}"
-                    "}"
-                    "template hoge2(){"
-                        "#line " ~ toStringNow!(__LINE__ - 34) ~ "\n"
-                        "alias Tuple!piyo ResultType;"
-                        "static ParseResult!(R, ResultType) parse(R)(Input!R input, in CallerInfo info){"
-                            "return combinateConvert!(" ~ toStringNow!(__LINE__ - 37) ~ ",`src\\ctpg.d`,"
-                                "combinateMore0!("
-                                    " #line " ~ toStringNow!(__LINE__ - 39) ~ "\n"
-                                    "combinateSkip!("
-                                        "combinateMemoize!(hoge!()),"
-                                        "combinateMemoize!(parseString!\" \")"
-                                    ")"
-                                "),#line " ~ toStringNow!(__LINE__ - 44) ~ "\n"
-                                "function(){"
-                                    "return tuple(\"foo\");"
-                                "}"
-                            ").parse(input, info);"
-                        "}"
-                    "}",
-                makeInput("", 216, 5, tuple("combinateChoice!(" ~ toStringNow!(__LINE__ - 53) ~ ",`src\\ctpg.d`,combinateMemoize!(parseString!\" \"),combinateMemoize!(parseString!\"\\t\"),combinateMemoize!(parseString!\"\\n\"))", "combinateMemoize!(parseString!\" \")")), Error("'_' expected but EOF found", 216, 5)));
-                return true;
-            };
-            static assert(dg());
-            dg();
-        };
+        with(parse!(defs!(), ParserKind!(true, true))(q{@setSkip($) int hoge = $; @setSkip($) int piyo = $;}))
+        {
+            assert(match                                                     == true);
+            assert(value.token.type                                          == TokenType.DEFINITIONS);
+            assert(value.children.length                                     == 2);
+            assert(value.children[0].token.type                              == TokenType.DEFINITION);
+            assert(value.children[0].children.length                         == 3);
+            assert(value.children[0].children[0].token.type                  == TokenType.TEMPLATE_INSTANCE);
+            assert(value.children[0].children[0].token.text                  == "int");
+            assert(value.children[0].children[0].children.length             == 0);
+            assert(value.children[0].children[1].token.type                  == TokenType.ID);
+            assert(value.children[0].children[1].token.text                  == "hoge");
+            assert(value.children[0].children[1].children.length             == 0);
+            assert(value.children[0].children[2].token.type                  == TokenType.SET_SKIP);
+            assert(value.children[0].children[2].children.length             == 2);
+            assert(value.children[0].children[2].children[0].token.type      == TokenType.DOLLAR);
+            assert(value.children[0].children[2].children[0].token.text      == "$");
+            assert(value.children[0].children[2].children[0].children.length == 0);
+            assert(value.children[0].children[2].children[1].token.type      == TokenType.DOLLAR);
+            assert(value.children[0].children[2].children[1].token.text      == "$");
+            assert(value.children[0].children[2].children[1].children.length == 0);
+            assert(value.children[1].token.type                              == TokenType.DEFINITION);
+            assert(value.children[1].children.length                         == 3);
+            assert(value.children[1].children[0].token.type                  == TokenType.TEMPLATE_INSTANCE);
+            assert(value.children[1].children[0].token.text                  == "int");
+            assert(value.children[1].children[0].children.length             == 0);
+            assert(value.children[1].children[1].token.type                  == TokenType.ID);
+            assert(value.children[1].children[1].token.text                  == "piyo");
+            assert(value.children[1].children[1].children.length             == 0);
+            assert(value.children[1].children[2].token.type                  == TokenType.SET_SKIP);
+            assert(value.children[1].children[2].children.length             == 2);
+            assert(value.children[1].children[2].children[0].token.type      == TokenType.DOLLAR);
+            assert(value.children[1].children[2].children[0].token.text      == "$");
+            assert(value.children[1].children[2].children[0].children.length == 0);
+            assert(value.children[1].children[2].children[1].token.type      == TokenType.DOLLAR);
+            assert(value.children[1].children[2].children[1].token.text      == "$");
+            assert(value.children[1].children[2].children[1].children.length == 0);
+        }
 
+        with(parse!(defs!(), ParserKind!(true, true))(q{@_setSkip($) @setSkip($) int hoge = $; @setSkip($) int piyo = $;}))
+        {
+            assert(match                                                     == true);
+            assert(value.token.type                                                == TokenType.DEFINITIONS);
+            assert(value.children.length                                     == 3);
+            assert(value.children[0].token.type                                    == TokenType.GLOBAL_SET_SKIP);
+            assert(value.children[0].children.length                         == 1);
+            assert(value.children[0].children[0].token.type                        == TokenType.DOLLAR);
+            assert(value.children[0].children[0].token.text                       == "$");
+            assert(value.children[0].children[0].children.length             == 0);
+            assert(value.children[1].token.type                              == TokenType.DEFINITION);
+            assert(value.children[1].children.length                         == 3);
+            assert(value.children[1].children[0].token.type                  == TokenType.TEMPLATE_INSTANCE);
+            assert(value.children[1].children[0].token.text                  == "int");
+            assert(value.children[1].children[0].children.length             == 0);
+            assert(value.children[1].children[1].token.type                  == TokenType.ID);
+            assert(value.children[1].children[1].token.text                  == "hoge");
+            assert(value.children[1].children[1].children.length             == 0);
+            assert(value.children[1].children[2].token.type                  == TokenType.SET_SKIP);
+            assert(value.children[1].children[2].children.length             == 2);
+            assert(value.children[1].children[2].children[0].token.type      == TokenType.DOLLAR);
+            assert(value.children[1].children[2].children[0].token.text      == "$");
+            assert(value.children[1].children[2].children[0].children.length == 0);
+            assert(value.children[1].children[2].children[1].token.type      == TokenType.DOLLAR);
+            assert(value.children[1].children[2].children[1].token.text      == "$");
+            assert(value.children[1].children[2].children[1].children.length == 0);
+            assert(value.children[2].token.type                              == TokenType.DEFINITION);
+            assert(value.children[2].children.length                         == 3);
+            assert(value.children[2].children[0].token.type                  == TokenType.TEMPLATE_INSTANCE);
+            assert(value.children[2].children[0].token.text                  == "int");
+            assert(value.children[2].children[0].children.length             == 0);
+            assert(value.children[2].children[1].token.type                  == TokenType.ID);
+            assert(value.children[2].children[1].token.text                  == "piyo");
+            assert(value.children[2].children[1].children.length             == 0);
+            assert(value.children[2].children[2].token.type                  == TokenType.SET_SKIP);
+            assert(value.children[2].children[2].children.length             == 2);
+            assert(value.children[2].children[2].children[0].token.type      == TokenType.DOLLAR);
+            assert(value.children[2].children[2].children[0].token.text      == "$");
+            assert(value.children[2].children[2].children[0].children.length == 0);
+            assert(value.children[2].children[2].children[1].token.type      == TokenType.DOLLAR);
+            assert(value.children[2].children[2].children[1].token.text      == "$");
+            assert(value.children[2].children[2].children[1].children.length == 0);
+        }
+
+        return true;
+    }
+
+    static assert(test());
+    test();
+}

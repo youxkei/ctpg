@@ -368,7 +368,8 @@ alias SExpValue.list makeList;
 // parser
 //////////////////////////////////////////////////////////////////////
 
-mixin(generateParsers(parserStr)); enum parserStr = q{
+mixin(genParsers(parserStr)); enum parserStr = 
+q{
     SExpValue sexp = !atmospheres vector
                    / !atmospheres list
                    / !atmospheres quote
@@ -377,7 +378,7 @@ mixin(generateParsers(parserStr)); enum parserStr = q{
                    / !atmospheres boolean >> makeBoolean
                    / !atmospheres floating >> makeFloating
                    / !atmospheres symbol >> makeSymbol
-                   / !atmospheres unitstr >> (s){ return SExpValue.unit; };
+                   / !atmospheres !unitstr >> { return SExpValue.unit; };
     long integer = intstr >> to!long;
     bool boolean = booleanstr >> inputBool;
     real floating = floatingstr >> to!real;
@@ -446,18 +447,18 @@ mixin(generateParsers(parserStr)); enum parserStr = q{
     string atmosphere = whitespace / comment;
     
     string initial = letter / specialInitial;
-    string letter = [a-zA-Z];
+    string letter = [a-zA-Z] >> to!string;
     string specialInitial = "!" / "$" / "%" / "&" / "*" / "/" / ":" / "<" / "=" / ">" / "?" / "^" / "_" / "~";
     string subsequents = subsequent* >> join;
     string subsequent = initial / digit / specialSubsequent;
     string specialSubsequent = "+" / "-" / "." / "@";
     string peculiarIdentifier = "+" / "-" / "..." / "->" subsequents >> join;
-    string digit = [0-9];
+    string digit = [0-9] >> to!string;
     string sign = "+" / "-";
     string characterName = "nul" / "alarm" / "backspace" / "tab"
                          / "linefeed" / "newline" / "vtab" / "page" / "return"
                          / "esc" / "space" / "delete";
-    string anyChar = parseAnyChar;
+    string anyChar = parseAnyChar >> to!string;
 };
 
 //////////////////////////////////////////////////////////////////////
