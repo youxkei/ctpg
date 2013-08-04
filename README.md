@@ -2,6 +2,7 @@
 https://github.com/youkei/ctpg/wiki
 
 # History
+- 2.2.0: Fix error message line of undefined parser
 - 2.1.0: Add comment feature to DSL
 - 2.0.0: Full scratch
 - 1.2.0: Add SExp example (Thanks to @gcfutsuki !!)
