@@ -2639,6 +2639,20 @@ string genParsers(string src, size_t line = __LINE__ , string file = __FILE__)
 alias generateParsers = genParsers;
 
 
+template checkIfExist(bool exist, string exp, size_t line, string file)
+{
+    static if(exist)
+    {
+        enum checkIfExist = exp ~ "!()";
+    }
+    else
+    {
+        pragma(msg, file ~ "(" ~ line.to!string() ~ "): Error: undefined parser " ~ exp);
+        static assert(false);
+    }
+}
+
+
 private:
 
 enum TokenType
@@ -4713,7 +4727,7 @@ string generate(Node node)
             break;
 
         case TokenType.NONTERMINAL:
-            code = "#line " ~ node.line.to!string() ~ "\n" ~ node.token.text ~ "!()";
+            code = "mixin(checkIfExist!(is(typeof(" ~ node.token.text ~ ")), \"" ~ node.token.text ~ "\", " ~ node.line.to!string() ~ ", \"" ~ node.file ~ "\"))";
             break;
 
         case TokenType.UNDEFINED:
