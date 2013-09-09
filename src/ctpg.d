@@ -5,8 +5,8 @@ import std.range       : ElementEncodingType, isForwardRange, isRandomAccessRang
 import std.traits      : CommonType, EnumMembers, ReturnType, Unqual, isArray, isSomeChar, isSomeString;
 import std.typecons    : Tuple, tuple;
 
-debug = ctpg;
-debug = ctpgSuppressErrorMsg;
+// debug = ctpg;
+// debug = ctpgSuppressErrorMsg;
 
 debug(ctpg) version(unittest)
 {
@@ -2266,7 +2266,7 @@ debug(ctpg) unittest
         }
 
         return true;
-    };
+    }
 
     static assert(test());
     test();
@@ -4006,6 +4006,7 @@ Node expandSkip(Node node, Node skip = Node.init)
 
         case TokenType.SKIP_WITH:
             node.children[1] = node.children[1].expandSkip(skip);
+            break;
 
         case TokenType.DEFINITIONS:
             foreach(ref child; node.children)
