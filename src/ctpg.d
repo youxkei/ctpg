@@ -284,28 +284,18 @@ debug(ctpg) unittest
     {
         foreach(conv; convs) foreach(kind; ParserKinds)
         {
-            with(parse!(parseString!"hoge", kind)(conv!"hogehoge"))
+            with(parse!(parseEOF!(), kind)(conv!""))
             {
-                                         assert(match              == true);
-                static if(kind.hasValue) assert(value              == "hoge");
-                                         assert(nextInput.source   == conv!"hoge");
-                                         assert(nextInput.position == 4);
-                                         assert(nextInput.line     == 0);
+                assert(match              == true);
+                assert(nextInput.source   == conv!"");
+                assert(nextInput.position == 0);
+                assert(nextInput.line     == 0);
             }
 
-            with(parse!(parseString!"\n\nhoge", kind)(conv!"\n\nhogehoge"))
-            {
-                                         assert(match              == true);
-                static if(kind.hasValue) assert(value              == "\n\nhoge");
-                                         assert(nextInput.source   == conv!"hoge");
-                                         assert(nextInput.position == 6);
-                                         assert(nextInput.line     == 2);
-            }
-
-            with(parse!(parseString!"hoge", kind)(conv!"fuga"))
+            with(parse!(parseEOF!(), kind)(conv!"hoge"))
             {
                                          assert(match          == false);
-                static if(kind.hasError) assert(error.msg      == "'hoge' expected");
+                static if(kind.hasError) assert(error.msg      == "EOF expected");
                 static if(kind.hasError) assert(error.position == 0);
             }
 
