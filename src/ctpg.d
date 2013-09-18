@@ -737,6 +737,29 @@ debug(ctpg) unittest
     {
         foreach(conv; convs) foreach(kind; ParserKinds)
         {
+            with(parse!(parseSpaces!())(conv!" \n\t\r\f"))
+            {
+                assert(match == true);
+                assert(nextInput.source == conv!"");
+                assert(nextInput.position == 5);
+                assert(nextInput.line == 1);
+            }
+
+            with(parse!(parseSpaces!())(conv!" \n\ta\r\f"))
+            {
+                assert(match == true);
+                assert(nextInput.source == conv!"a\r\f");
+                assert(nextInput.position == 3);
+                assert(nextInput.line == 1);
+            }
+
+            with(parse!(parseSpaces!())(conv!""))
+            {
+                assert(match == true);
+                assert(nextInput.source == conv!"");
+                assert(nextInput.position == 0);
+                assert(nextInput.line == 0);
+            }
         }
 
         return true;
