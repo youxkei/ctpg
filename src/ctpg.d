@@ -4736,17 +4736,35 @@ string generate(Node node)
             break;
 
         case TokenType.RANGE:
-            switch(node.children[0].token.type)
+            if(node.children.length > 1)
             {
-                case TokenType.RANGE_CHAR_RANGE:
-                    code = "parseCharRange!('" ~ node.children[0].children[0].token.text ~ "','" ~ node.children[0].children[1].token.text ~ "')";
-                    break;
+                code ~= "combinateChoice!(";
+            }
 
-                case TokenType.RANGE_ONE_CHAR:
-                    code = "parseCharRange!('" ~ node.children[0].token.text ~ "','" ~ node.children[0].token.text ~ "')";
-                    break;
+            foreach(i, child; node.children)
+            {
+                if(i)
+                {
+                    code ~= ",";
+                }
 
-                default: assert(false);
+                switch(child.token.type)
+                {
+                    case TokenType.RANGE_CHAR_RANGE:
+                        code ~= "parseCharRange!('" ~ child.children[0].token.text ~ "','" ~ child.children[1].token.text ~ "')";
+                        break;
+
+                    case TokenType.RANGE_ONE_CHAR:
+                        code ~= "parseCharRange!('" ~ child.token.text ~ "','" ~ child.token.text ~ "')";
+                        break;
+
+                    default: assert(false);
+                }
+            }
+
+            if(node.children.length > 1)
+            {
+                code ~= ")";
             }
             break;
 
@@ -4791,6 +4809,82 @@ string generate(Node node)
     }
 
     return code;
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(TokenType)
+        {
+            assert (
+                Node(Token(RANGE), [
+                    Node(Token(RANGE_ONE_CHAR, "a"))
+                ]).generate()
+
+                 == 
+
+                "parseCharRange!('a','a')"
+            );
+
+            assert (
+                Node(Token(RANGE), [
+                    Node(Token(RANGE_CHAR_RANGE), [
+                        Node(Token(RANGE_ONE_CHAR, "a")),
+                        Node(Token(RANGE_ONE_CHAR, "z"))
+                    ])
+                ]).generate()
+
+                 == 
+
+                "parseCharRange!('a','z')"
+            );
+
+            assert (
+                Node(Token(RANGE), [
+                    Node(Token(RANGE_CHAR_RANGE), [
+                        Node(Token(RANGE_ONE_CHAR, "a")),
+                        Node(Token(RANGE_ONE_CHAR, "z"))
+                    ]),
+                    Node(Token(RANGE_ONE_CHAR, "_"))
+                ]).generate()
+
+                 == 
+
+                 "combinateChoice!"
+                 "("
+                    "parseCharRange!('a','z'),"
+                    "parseCharRange!('_','_')"
+                 ")"
+            );
+
+            with (
+                parse!
+                (
+                    mixin (
+                        Node(Token(RANGE), [
+                            Node(Token(RANGE_CHAR_RANGE), [
+                                Node(Token(RANGE_ONE_CHAR, "a")),
+                                Node(Token(RANGE_ONE_CHAR, "z"))
+                            ]),
+                            Node(Token(RANGE_ONE_CHAR, "_"))
+                        ]).generate()
+                    ),
+                    ParserKind!(true, true)
+                )("a")
+            )
+            {
+                assert(match == true);
+                assert(nextInput.source == "");
+                assert(value == 'a');
+            }
+        }
+
+        return true;
+    }
+
+    debug(ctpg) static assert(test());
+    test();
 }
 
 
