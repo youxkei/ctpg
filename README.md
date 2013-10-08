@@ -2,6 +2,9 @@
 https://github.com/youkei/ctpg/wiki
 
 # History
+- 2.2.3 
+  - Fix issue [#3](https://github.com/youkei/ctpg/issues/3)
+  - Refactor unittests
 - 2.2.2: Add target type for dub
 - 2.2.1: Fix unintended fall-through
 - 2.2.0: Fix error message line of undefined parser
