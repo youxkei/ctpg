@@ -284,28 +284,18 @@ debug(ctpg) unittest
     {
         foreach(conv; convs) foreach(kind; ParserKinds)
         {
-            with(parse!(parseString!"hoge", kind)(conv!"hogehoge"))
+            with(parse!(parseEOF!(), kind)(conv!""))
             {
-                                         assert(match              == true);
-                static if(kind.hasValue) assert(value              == "hoge");
-                                         assert(nextInput.source   == conv!"hoge");
-                                         assert(nextInput.position == 4);
-                                         assert(nextInput.line     == 0);
+                assert(match              == true);
+                assert(nextInput.source   == conv!"");
+                assert(nextInput.position == 0);
+                assert(nextInput.line     == 0);
             }
 
-            with(parse!(parseString!"\n\nhoge", kind)(conv!"\n\nhogehoge"))
-            {
-                                         assert(match              == true);
-                static if(kind.hasValue) assert(value              == "\n\nhoge");
-                                         assert(nextInput.source   == conv!"hoge");
-                                         assert(nextInput.position == 6);
-                                         assert(nextInput.line     == 2);
-            }
-
-            with(parse!(parseString!"hoge", kind)(conv!"fuga"))
+            with(parse!(parseEOF!(), kind)(conv!"hoge"))
             {
                                          assert(match          == false);
-                static if(kind.hasError) assert(error.msg      == "'hoge' expected");
+                static if(kind.hasError) assert(error.msg      == "EOF expected");
                 static if(kind.hasError) assert(error.position == 0);
             }
 
@@ -747,6 +737,23 @@ debug(ctpg) unittest
     {
         foreach(conv; convs) foreach(kind; ParserKinds)
         {
+            with(parse!(parseSpaces!())(conv!" \n\t\r\f"))
+            {
+                assert(match == true);
+                assert(nextInput.source == conv!"");
+            }
+
+            with(parse!(parseSpaces!())(conv!" \n\ta\r\f"))
+            {
+                assert(match == true);
+                assert(nextInput.source == conv!"a\r\f");
+            }
+
+            with(parse!(parseSpaces!())(conv!""))
+            {
+                assert(match == true);
+                assert(nextInput.source == conv!"");
+            }
         }
 
         return true;
@@ -948,6 +955,7 @@ debug(ctpg) unittest
                 assert(match              == true);
                 assert(nextInput.source   == conv!"");
                 assert(nextInput.position == 4);
+                assert(nextInput.line     == 0);
             }
 
             with(parse!(combinateChangeError!(parseString!"hoge", "エラーだよ！！"), kind)(conv!"fuga"))
@@ -1028,6 +1036,8 @@ debug(ctpg) unittest
                                          assert(match            == true);
                 static if(kind.hasValue) assert(value            == tuple("hoge", "fuga"));
                                          assert(nextInput.source == conv!"input");
+                                         assert(nextInput.position == 0);
+                                         assert(nextInput.line   == 0);
             }
 
             with(parse!(combinateUnTuple!(TestParser!(tuple("hoge"))), kind)(conv!"input"))
@@ -1035,6 +1045,8 @@ debug(ctpg) unittest
                                          assert(match            == true);
                 static if(kind.hasValue) assert(value            == "hoge");
                                          assert(nextInput.source == conv!"input");
+                                         assert(nextInput.position == 0);
+                                         assert(nextInput.line   == 0);
             }
         }
 
@@ -1150,6 +1162,8 @@ debug(ctpg) unittest
                                          assert(match            == true);
                 static if(kind.hasValue) assert(value            == tuple("hoge", "fuga"));
                                          assert(nextInput.source == conv!"hoge");
+                                         assert(nextInput.position == 8);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateSequence!(parseString!"hoge", parseString!"fuga"), kind)(conv!"hoge"))
@@ -1171,6 +1185,8 @@ debug(ctpg) unittest
                                          assert(match            == true);
                 static if(kind.hasValue) assert(value            == tuple("hoge", "fuga"));
                                          assert(nextInput.source == conv!"");
+                                         assert(nextInput.position == 8);
+                                         assert(nextInput.line == 0);
             }
         }
 
@@ -1285,6 +1301,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value              == "hoge");
                                          assert(nextInput.source   == conv!"");
                                          assert(nextInput.position == 4);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateChoice!(parseString!"hoge", parseString!"fuga"), kind)(conv!"fuga"))
@@ -1293,6 +1310,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value              == "fuga");
                                          assert(nextInput.source   == conv!"");
                                          assert(nextInput.position == 4);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateChoice!(parseString!"hoge", parseString!"fuga"), kind)(conv!"piyo"))
@@ -1430,6 +1448,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value              == []);
                                          assert(nextInput.source   == conv!"");
                                          assert(nextInput.position == 0);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateMore!(0, parseString!"hoge", parseString!","), kind)(conv!"hoge,hoge,hoge"))
@@ -1438,6 +1457,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value              == ["hoge", "hoge", "hoge"]);
                                          assert(nextInput.source   == conv!"");
                                          assert(nextInput.position == 14);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateMore!(0, parseString!"hoge", parseString!","), kind)(conv!"hoge,hoge,hoge,"))
@@ -1446,6 +1466,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value              == ["hoge", "hoge", "hoge"]);
                                          assert(nextInput.source   == conv!",");
                                          assert(nextInput.position == 14);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateMore!(4, parseString!"hoge", parseString!","), kind)(conv!"hoge,hoge,hoge"))
@@ -1534,6 +1555,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value.some         == false);
                                          assert(nextInput.source   == conv!"fuga");
                                          assert(nextInput.position == 0);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateOption!(parseString!"hoge"), kind)(conv!"hoge"))
@@ -1542,6 +1564,8 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value.some         == true);
                 static if(kind.hasValue) assert(value        == "hoge");
                                          assert(nextInput.source   == conv!"");
+                                         assert(nextInput.position == 4);
+                                         assert(nextInput.line == 0);
             }
         }
 
@@ -1602,6 +1626,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value              == None());
                                          assert(nextInput.source   == conv!"");
                                          assert(nextInput.position == 4);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateNone!(parseString!"hoge"), kind)(conv!"fuga"))
@@ -1658,6 +1683,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value              == None());
                                          assert(nextInput.source   == conv!"hoge");
                                          assert(nextInput.position == 0);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateAndPred!(parseString!"hoge"), kind)(conv!"fuga"))
@@ -1715,6 +1741,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value              == None());
                                          assert(nextInput.source   == conv!"fuga");
                                          assert(nextInput.position == 0);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateNotPred!(parseString!"hoge"), kind)(conv!"hoge"))
@@ -1835,6 +1862,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value.len          == 4);
                                          assert(nextInput.source   == conv!"e");
                                          assert(nextInput.position == 4);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateConvert!(parseString!"hoge", Struct), kind)(conv!"!!!!"))
@@ -1850,6 +1878,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value.len          == 4);
                                          assert(nextInput.source   == conv!"e");
                                          assert(nextInput.position == 4);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateConvert!(parseString!"hoge", Class), kind)(conv!"!!!!"))
@@ -1865,6 +1894,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value              == 4);
                                          assert(nextInput.source   == conv!"e");
                                          assert(nextInput.position == 4);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateConvert!(parseString!"hoge", Function), kind)(conv!"!!!!"))
@@ -1880,6 +1910,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value              == 4);
                                          assert(nextInput.source   == conv!"e");
                                          assert(nextInput.position == 4);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateConvert!(parseString!"hoge", TemplateFunction), kind)(conv!"!!!!"))
@@ -1895,6 +1926,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value              == 4);
                                          assert(nextInput.source   == conv!"e");
                                          assert(nextInput.position == 4);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateConvert!(parseString!"hoge", (x) => x.length), kind)(conv!"!!!!"))
@@ -1910,6 +1942,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value              == 4);
                                          assert(nextInput.source   == conv!"e");
                                          assert(nextInput.position == 4);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateConvert!(parseString!"hoge", (x){ return x.length; }), kind)(conv!"!!!!"))
@@ -2007,6 +2040,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value              == "hoge");
                                          assert(nextInput.source   == conv!"!");
                                          assert(nextInput.position == 4);
+                                         assert(nextInput.line == 0);
             }
 
             with(parse!(combinateCheck!(parseString!"hoge!", Function), kind)(conv!"hoge!"))
@@ -2094,6 +2128,7 @@ debug(ctpg) unittest
                 static if(kind.hasValue) assert(value              == conv!"hogefuga");
                                          assert(nextInput.source   == conv!"piyo");
                                          assert(nextInput.position == 8);
+                                         assert(nextInput.line == 0);
             }
 
             static if(kind.hasValue) static assert(!__traits(compiles, parse!(combinateInputSlice!(parseString!"hoge"), kind)(0)));
@@ -2222,8 +2257,6 @@ debug(ctpg) unittest
                                          assert(match              == true);
                 static if(kind.hasValue) assert(value              == "hoge");
                                          assert(nextInput.source   == conv!"hoge");
-                                         assert(nextInput.position == 4);
-                                         assert(nextInput.line     == 0);
             }
 
             with(parse!(combinateSkip!(parseString!"\n\n", parseString!"hoge"), kind)(conv!"\n\nhogehoge"))
@@ -2231,8 +2264,6 @@ debug(ctpg) unittest
                                          assert(match              == true);
                 static if(kind.hasValue) assert(value              == "hoge");
                                          assert(nextInput.source   == conv!"hoge");
-                                         assert(nextInput.position == 6);
-                                         assert(nextInput.line     == 2);
             }
         }
 
@@ -2254,14 +2285,12 @@ debug(ctpg) unittest
             {
                 assert(match              == true);
                 assert(nextInput.source   == conv!"");
-                assert(nextInput.position == 3);
             }
 
             with(parse!(root!(), ParserKind!(false, kind.hasError))(conv!"aaaa"))
             {
                 assert(match              == true);
                 assert(nextInput.source   == conv!"aaa");
-                assert(nextInput.position == 1);
             }
         }
 
@@ -2322,8 +2351,6 @@ struct DLex
                 {
                                              assert(match              == true);
                                              assert(nextInput.source   == conv!"=");
-                                             assert(nextInput.position == 4);
-                                             assert(nextInput.line     == 0);
                     static if(kind.hasValue) assert(value              == conv!"_ab0");
                 }
             }
@@ -4709,17 +4736,35 @@ string generate(Node node)
             break;
 
         case TokenType.RANGE:
-            switch(node.children[0].token.type)
+            if(node.children.length > 1)
             {
-                case TokenType.RANGE_CHAR_RANGE:
-                    code = "parseCharRange!('" ~ node.children[0].children[0].token.text ~ "','" ~ node.children[0].children[1].token.text ~ "')";
-                    break;
+                code ~= "combinateChoice!(";
+            }
 
-                case TokenType.RANGE_ONE_CHAR:
-                    code = "parseCharRange!('" ~ node.children[0].token.text ~ "','" ~ node.children[0].token.text ~ "')";
-                    break;
+            foreach(i, child; node.children)
+            {
+                if(i)
+                {
+                    code ~= ",";
+                }
 
-                default: assert(false);
+                switch(child.token.type)
+                {
+                    case TokenType.RANGE_CHAR_RANGE:
+                        code ~= "parseCharRange!('" ~ child.children[0].token.text ~ "','" ~ child.children[1].token.text ~ "')";
+                        break;
+
+                    case TokenType.RANGE_ONE_CHAR:
+                        code ~= "parseCharRange!('" ~ child.token.text ~ "','" ~ child.token.text ~ "')";
+                        break;
+
+                    default: assert(false);
+                }
+            }
+
+            if(node.children.length > 1)
+            {
+                code ~= ")";
             }
             break;
 
@@ -4764,6 +4809,82 @@ string generate(Node node)
     }
 
     return code;
+}
+
+debug(ctpg) unittest
+{
+    static bool test()
+    {
+        with(TokenType)
+        {
+            assert (
+                Node(Token(RANGE), [
+                    Node(Token(RANGE_ONE_CHAR, "a"))
+                ]).generate()
+
+                 == 
+
+                "parseCharRange!('a','a')"
+            );
+
+            assert (
+                Node(Token(RANGE), [
+                    Node(Token(RANGE_CHAR_RANGE), [
+                        Node(Token(RANGE_ONE_CHAR, "a")),
+                        Node(Token(RANGE_ONE_CHAR, "z"))
+                    ])
+                ]).generate()
+
+                 == 
+
+                "parseCharRange!('a','z')"
+            );
+
+            assert (
+                Node(Token(RANGE), [
+                    Node(Token(RANGE_CHAR_RANGE), [
+                        Node(Token(RANGE_ONE_CHAR, "a")),
+                        Node(Token(RANGE_ONE_CHAR, "z"))
+                    ]),
+                    Node(Token(RANGE_ONE_CHAR, "_"))
+                ]).generate()
+
+                 == 
+
+                 "combinateChoice!"
+                 "("
+                    "parseCharRange!('a','z'),"
+                    "parseCharRange!('_','_')"
+                 ")"
+            );
+
+            with (
+                parse!
+                (
+                    mixin (
+                        Node(Token(RANGE), [
+                            Node(Token(RANGE_CHAR_RANGE), [
+                                Node(Token(RANGE_ONE_CHAR, "a")),
+                                Node(Token(RANGE_ONE_CHAR, "z"))
+                            ]),
+                            Node(Token(RANGE_ONE_CHAR, "_"))
+                        ]).generate()
+                    ),
+                    ParserKind!(true, true)
+                )("a")
+            )
+            {
+                assert(match == true);
+                assert(nextInput.source == "");
+                assert(value == 'a');
+            }
+        }
+
+        return true;
+    }
+
+    debug(ctpg) static assert(test());
+    test();
 }
 
 
@@ -4813,6 +4934,7 @@ debug(ctpg) unittest
             assert(match == true);
             assert(value.line == __LINE__ - 2);
             assert(value.file == __FILE__);
+            assert(nextInput.source == "");
         }
 
         return true;
@@ -4884,6 +5006,7 @@ debug(ctpg) unittest
         with(parse!(lineComment!(), ParserKind!(true, true))("// comment\nnot comment"))
         {
             assert(match              == true);
+            assert(value              == None());
             assert(nextInput.source   == "not comment");
         }
 
@@ -5179,6 +5302,7 @@ debug(ctpg) unittest
         with(parse!(func!(), ParserKind!(true, true))(q"<(a, b, c){ return "{}" ~ r"{}" ~ `{}` ~ a ~ b ~ c; }>"))
         {
             assert(match                 == true);
+            assert(nextInput.source == "");
             assert(value.token.type            == TokenType.CONVERTER);
             assert(value.token.text           == q"<(a, b, c){ return "{}" ~ r"{}" ~ `{}` ~ a ~ b ~ c; }>");
             assert(value.children.length == 0);
@@ -5243,6 +5367,7 @@ debug(ctpg) unittest
         with(parse!(id!(), ParserKind!(true, true))("__hogehoge12345678"))
         {
             assert(match                 == true);
+            assert(nextInput.source == "");
             assert(value.token.type            == TokenType.ID);
             assert(value.token.text           == "__hogehoge12345678");
             assert(value.children.length == 0);
@@ -5300,6 +5425,7 @@ debug(ctpg) unittest
         with(parse!(nonterminal!(), ParserKind!(true, true))("__hogehoge12345678"))
         {
             assert(match                 == true);
+            assert(nextInput.source == "");
             assert(value.token.type            == TokenType.NONTERMINAL);
             assert(value.token.text           == "__hogehoge12345678");
             assert(value.children.length == 0);
@@ -5368,6 +5494,7 @@ debug(ctpg) unittest
         with(parse!(typeName!(), ParserKind!(true, true))("hoge"))
         {
             assert(match == true);
+            assert(nextInput.source == "");
             assert(value.token.type == TokenType.TEMPLATE_INSTANCE);
             assert(value.token.text == "hoge");
             assert(value.children.length == 0);
@@ -5405,6 +5532,7 @@ debug(ctpg) unittest
         with(parse!(eofLit!(), ParserKind!(true, true))("$"))
         {
             assert(match                 == true);
+            assert(nextInput.source == "");
             assert(value.token.type            == TokenType.DOLLAR);
             assert(value.token.text           == "$");
             assert(value.children.length == 0);
@@ -5452,6 +5580,7 @@ debug(ctpg) unittest
         with(parse!(rangeLitOneChar!(), ParserKind!(true, true))("a"))
         {
             assert(match == true);
+            assert(nextInput.source == "");
             assert(value.token.type == TokenType.RANGE_ONE_CHAR);
             assert(value.token.text == "a");
             assert(value.children.length == 0);
@@ -5460,6 +5589,7 @@ debug(ctpg) unittest
         with(parse!(rangeLitOneChar!(), ParserKind!(true, true))("鬱"))
         {
             assert(match == true);
+            assert(nextInput.source == "");
             assert(value.token.type == TokenType.RANGE_ONE_CHAR);
             assert(value.token.text == "鬱");
             assert(value.children.length == 0);
@@ -5511,6 +5641,7 @@ debug(ctpg) unittest
         with(parse!(rangeLitCharRange!(), ParserKind!(true, true))("a-z"))
         {
             assert(match                             == true);
+            assert(nextInput.source == "");
             assert(value.token.type                        == TokenType.RANGE_CHAR_RANGE);
             assert(value.token.text                       == "-");
             assert(value.children.length             == 2);
@@ -5525,6 +5656,7 @@ debug(ctpg) unittest
         with(parse!(rangeLitCharRange!(), ParserKind!(true, true))("躁-鬱"))
         {
             assert(match                             == true);
+            assert(nextInput.source == "");
             assert(value.token.type                        == TokenType.RANGE_CHAR_RANGE);
             assert(value.token.text                       == "-");
             assert(value.children.length             == 2);
@@ -5602,6 +5734,7 @@ debug(ctpg) unittest
         with(parse!(rangeLit!(), ParserKind!(true, true))("[a-zあ躁-鬱]"))
         {
             assert(match                                         == true);
+            assert(nextInput.source == "");
             assert(value.token.type                                    == TokenType.RANGE);
             assert(value.token.text                                   == "RANGE_LIT");
             assert(value.children.length                         == 3);
@@ -5660,6 +5793,7 @@ debug(ctpg) unittest
         with(parse!(stringLit!(), ParserKind!(true, true))(q{"hoge"}))
         {
             assert(match == true);
+            assert(nextInput.source == "");
             assert(value.token.type == TokenType.STRING);
             assert(value.token.text == q{"hoge"});
             assert(value.children.length == 0);
@@ -5668,6 +5802,7 @@ debug(ctpg) unittest
         with(parse!(stringLit!(), ParserKind!(true, true))(q{r"hoge\"}))
         {
             assert(match == true);
+            assert(nextInput.source == "");
             assert(value.token.type == TokenType.STRING);
             assert(value.token.text == q{r"hoge\"});
             assert(value.children.length == 0);
@@ -5676,6 +5811,7 @@ debug(ctpg) unittest
         with(parse!(stringLit!(), ParserKind!(true, true))(q{`"hoge"`}))
         {
             assert(match == true);
+            assert(nextInput.source == "");
             assert(value.token.type == TokenType.STRING);
             assert(value.token.text == q{`"hoge"`});
             assert(value.children.length == 0);
@@ -5714,6 +5850,7 @@ debug(ctpg) unittest
         with(parse!(literal!(), ParserKind!(true, true))("$"))
         {
             assert(match                 == true);
+            assert(nextInput.source == "");
             assert(value.token.type            == TokenType.DOLLAR);
             assert(value.token.text           == "$");
             assert(value.children.length == 0);
@@ -5722,6 +5859,7 @@ debug(ctpg) unittest
         with(parse!(literal!(), ParserKind!(true, true))("[a-zあ躁-鬱]"))
         {
             assert(match                                         == true);
+            assert(nextInput.source == "");
             assert(value.token.type                                    == TokenType.RANGE);
             assert(value.token.text                                   == "RANGE_LIT");
             assert(value.children.length                         == 3);
@@ -5751,6 +5889,7 @@ debug(ctpg) unittest
         with(parse!(literal!(), ParserKind!(true, true))(q{"hoge"}))
         {
             assert(match == true);
+            assert(nextInput.source == "");
             assert(value.token.type == TokenType.STRING);
             assert(value.token.text == q{"hoge"});
             assert(value.children.length == 0);
@@ -5759,6 +5898,7 @@ debug(ctpg) unittest
         with(parse!(literal!(), ParserKind!(true, true))(q{r"hoge\"}))
         {
             assert(match == true);
+            assert(nextInput.source == "");
             assert(value.token.type == TokenType.STRING);
             assert(value.token.text == q{r"hoge\"});
             assert(value.children.length == 0);
@@ -5767,6 +5907,7 @@ debug(ctpg) unittest
         with(parse!(literal!(), ParserKind!(true, true))(q{`"hoge"`}))
         {
             assert(match == true);
+            assert(nextInput.source == "");
             assert(value.token.type == TokenType.STRING);
             assert(value.token.text == q{`"hoge"`});
             assert(value.children.length == 0);
@@ -5830,6 +5971,7 @@ debug(ctpg) unittest
         with(parse!(primaryExp!(), ParserKind!(true, true))("$"))
         {
             assert(match                 == true);
+            assert(nextInput.source == "");
             assert(value.token.type            == TokenType.DOLLAR);
             assert(value.token.text           == "$");
             assert(value.children.length == 0);
@@ -5838,6 +5980,7 @@ debug(ctpg) unittest
         with(parse!(primaryExp!(), ParserKind!(true, true))("($)"))
         {
             assert(match                 == true);
+            assert(nextInput.source == "");
             assert(value.token.type            == TokenType.DOLLAR);
             assert(value.token.text           == "$");
             assert(value.children.length == 0);
@@ -5923,6 +6066,7 @@ debug(ctpg) unittest
         with(parse!(preExp!(), ParserKind!(true, true))("!$"))
         {
             assert(match                             == true);
+            assert(nextInput.source == "");
             assert(value.token.type                        == TokenType.EXCLAM);
             assert(value.token.text                       == "!");
             assert(value.children.length             == 1);
@@ -5934,6 +6078,7 @@ debug(ctpg) unittest
         with(parse!(preExp!(), ParserKind!(true, true))("&$"))
         {
             assert(match                             == true);
+            assert(nextInput.source == "");
             assert(value.token.type                        == TokenType.ANPERSAND);
             assert(value.token.text                       == "&");
             assert(value.children.length             == 1);
@@ -5946,8 +6091,6 @@ debug(ctpg) unittest
         {
             assert(match                             == true);
             assert(nextInput.source                  == "");
-            assert(nextInput.position                == 2);
-            assert(nextInput.line                    == 0);
             assert(value.token.type                        == TokenType.ASCIICIRCUM);
             assert(value.token.text                       == "^");
             assert(value.children.length             == 1);
@@ -5960,7 +6103,6 @@ debug(ctpg) unittest
         {
             assert(match                 == true);
             assert(nextInput.source      == "");
-            assert(nextInput.position    == 1);
             assert(value.token.type            == TokenType.DOLLAR);
             assert(value.token.text           == "$");
             assert(value.children.length == 0);
@@ -6060,6 +6202,7 @@ debug(ctpg) unittest
         with(parse!(postExp!(), ParserKind!(true, true))("$*"))
         {
             assert(match == true);
+            assert(nextInput.source    == "");
             assert(value.token.type == TokenType.ASTERISK);
             assert(value.token.text == "*");
             assert(value.children.length == 1);
@@ -6071,6 +6214,7 @@ debug(ctpg) unittest
         with(parse!(postExp!(), ParserKind!(true, true))("$+"))
         {
             assert(match == true);
+            assert(nextInput.source    == "");
             assert(value.token.type == TokenType.PLUS);
             assert(value.token.text == "+");
             assert(value.children.length == 1);
@@ -6082,6 +6226,7 @@ debug(ctpg) unittest
         with(parse!(postExp!(), ParserKind!(true, true))("$*<$>"))
         {
             assert(match == true);
+            assert(nextInput.source    == "");
             assert(value.token.type == TokenType.ASTERISK);
             assert(value.token.text == "*");
             assert(value.children.length == 2);
@@ -6096,6 +6241,7 @@ debug(ctpg) unittest
         with(parse!(postExp!(), ParserKind!(true, true))("$+<$>"))
         {
             assert(match == true);
+            assert(nextInput.source    == "");
             assert(value.token.type == TokenType.PLUS);
             assert(value.token.text == "+");
             assert(value.children.length == 2);
@@ -6165,6 +6311,7 @@ debug(ctpg) unittest
         with(parse!(optionExp!(), ParserKind!(true, true))("$?"))
         {
             assert(match == true);
+            assert(nextInput.source    == "");
             assert(value.token.type == TokenType.QUESTION);
             assert(value.token.text == "?");
             assert(value.children.length == 1);
@@ -6225,6 +6372,7 @@ debug(ctpg) unittest
         with(parse!(seqExp!(), ParserKind!(true, true))("$"))
         {
             assert(match                 == true);
+            assert(nextInput.source    == "");
             assert(value.token.type            == TokenType.DOLLAR);
             assert(value.token.text           == "$");
             assert(value.children.length == 0);
@@ -6233,6 +6381,7 @@ debug(ctpg) unittest
         with(parse!(seqExp!(), ParserKind!(true, true))("$ $"))
         {
             assert(match                             == true);
+            assert(nextInput.source    == "");
             assert(value.token.type                        == TokenType.SEQUENCE);
             assert(value.token.text                       == "SEQ");
             assert(value.children.length             == 2);
@@ -6328,6 +6477,7 @@ debug(ctpg) unittest
         with(parse!(convExp!(), ParserKind!(true, true))("$"))
         {
             assert(match == true);
+            assert(nextInput.source    == "");
             assert(value.token.type            == TokenType.DOLLAR);
             assert(value.token.text           == "$");
             assert(value.children.length == 0);
@@ -6336,9 +6486,10 @@ debug(ctpg) unittest
         with(parse!(convExp!(), ParserKind!(true, true))("$ >> hoge"))
         {
             assert(match == true);
+            assert(nextInput.source    == "");
             assert(value.token.type == TokenType.LEFT_SHIFT);
             assert(value.token.text == ">>");
-            assert(value.line == __LINE__ - 4);
+            assert(value.line == __LINE__ - 5);
             assert(value.file == __FILE__);
             assert(value.children.length == 2);
             assert(value.children[0].token.type            == TokenType.DOLLAR);
@@ -6352,14 +6503,15 @@ debug(ctpg) unittest
         with(parse!(convExp!(), ParserKind!(true, true))("$ >> hoge >> piyo"))
         {
             assert(match                                         == true);
+            assert(nextInput.source    == "");
             assert(value.token.type                                    == TokenType.LEFT_SHIFT);
             assert(value.token.text                                   == ">>");
-            assert(value.line                                    == __LINE__ - 4);
+            assert(value.line                                    == __LINE__ - 5);
             assert(value.file                                    == __FILE__);
             assert(value.children.length                         == 2);
             assert(value.children[0].token.type                        == TokenType.LEFT_SHIFT);
             assert(value.children[0].token.text                       == ">>");
-            assert(value.children[0].line                        == __LINE__ - 9);
+            assert(value.children[0].line                        == __LINE__ - 10);
             assert(value.children[0].file                        == __FILE__);
             assert(value.children[0].children.length             == 2);
             assert(value.children[0].children[0].token.type            == TokenType.DOLLAR);
@@ -6376,6 +6528,7 @@ debug(ctpg) unittest
         with(parse!(convExp!(), ParserKind!(true, true))("$ >> hoge >? piyo"))
         {
             assert(match == true);
+            assert(nextInput.source    == "");
             assert(value.token.type == TokenType.LEFT_QUESTION);
             assert(value.token.text == ">?");
             assert(value.children.length == 2);
@@ -6396,6 +6549,7 @@ debug(ctpg) unittest
         with(parse!(convExp!(), ParserKind!(true, true))("$ >> (a, b){ return a + b; }"))
         {
             assert(match == true);
+            assert(nextInput.source    == "");
             assert(value.token.type == TokenType.LEFT_SHIFT);
             assert(value.token.text == ">>");
             assert(value.children.length == 2);
@@ -6464,6 +6618,7 @@ debug(ctpg) unittest
         with(parse!(choiceExp!(), ParserKind!(true, true))("$"))
         {
             assert(match                 == true);
+            assert(nextInput.source    == "");
             assert(value.token.type            == TokenType.DOLLAR);
             assert(value.token.text           == "$");
             assert(value.children.length == 0);
@@ -6472,6 +6627,7 @@ debug(ctpg) unittest
         with(parse!(choiceExp!(), ParserKind!(true, true))("$ "))
         {
             assert(match                 == true);
+            assert(nextInput.source    == " ");
             assert(value.token.type            == TokenType.DOLLAR);
             assert(value.token.text           == "$");
             assert(value.children.length == 0);
@@ -6480,6 +6636,7 @@ debug(ctpg) unittest
         with(parse!(choiceExp!(), ParserKind!(true, true))("$ / $"))
         {
             assert(match                             == true);
+            assert(nextInput.source    == "");
             assert(value.token.type                        == TokenType.SLASH);
             assert(value.token.text                       == "/");
             assert(value.children.length             == 2);
@@ -6585,6 +6742,7 @@ debug(ctpg) unittest
         with(parse!(def!(), ParserKind!(true, true))(q{int hoge = $;}))
         {
             assert(match                             == true);
+            assert(nextInput.source    == "");
             assert(value.token.type                        == TokenType.DEFINITION);
             assert(value.children.length             == 3);
             assert(value.children[0].token.type            == TokenType.TEMPLATE_INSTANCE);
@@ -6601,6 +6759,7 @@ debug(ctpg) unittest
         with(parse!(def!(), ParserKind!(true, true))(q{@setSkip($) int hoge = $;}))
         {
             assert(match                                               == true);
+            assert(nextInput.source    == "");
             assert(value.token.type                                    == TokenType.DEFINITION);
             assert(value.children.length                               == 3);
             assert(value.children[0].token.type                        == TokenType.TEMPLATE_INSTANCE);
@@ -6718,6 +6877,7 @@ debug(ctpg) unittest
         with(parse!(defs!(), ParserKind!(true, true))(q{int hoge = $; int piyo = $;}))
         {
             assert(match                                         == true);
+            assert(nextInput.source    == "");
             assert(value.token.type                                    == TokenType.DEFINITIONS);
             assert(value.children.length                         == 2);
             assert(value.children[0].token.type                        == TokenType.DEFINITION);
@@ -6747,6 +6907,7 @@ debug(ctpg) unittest
         with(parse!(defs!(), ParserKind!(true, true))(q{@setSkip($) int hoge = $; @setSkip($) int piyo = $;}))
         {
             assert(match                                                     == true);
+            assert(nextInput.source    == "");
             assert(value.token.type                                          == TokenType.DEFINITIONS);
             assert(value.children.length                                     == 2);
             assert(value.children[0].token.type                              == TokenType.DEFINITION);
@@ -6786,6 +6947,7 @@ debug(ctpg) unittest
         with(parse!(defs!(), ParserKind!(true, true))(q{@_setSkip($) @setSkip($) int hoge = $; @setSkip($) int piyo = $;}))
         {
             assert(match                                                     == true);
+            assert(nextInput.source    == "");
             assert(value.token.type                                                == TokenType.DEFINITIONS);
             assert(value.children.length                                     == 3);
             assert(value.children[0].token.type                                    == TokenType.GLOBAL_SET_SKIP);
