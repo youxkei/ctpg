@@ -1,0 +1,22 @@
+{
+	"name": "ctpg",
+	"description": "Compile Time Parser Generator",
+	"homepage": "https://github.com/youkei/ctpg",
+    "license": "CC0",
+    "dependencies": {
+        "compile-time-unittest": "~>0.0.1"
+    },
+
+    "targetType": "library",
+    "buildTypes": {
+        "unittest": {
+            "sourcePaths": ["source", "example"],
+            "buildOptions": ["unittests", "debugMode", "debugInfo"],
+            "dflags": [
+                "-unittest",
+                "-debug=ctpg",
+                "-debug=ctpgSuppressErrorMsg"
+            ]
+        }
+    }
+}
