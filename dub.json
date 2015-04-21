@@ -4,7 +4,7 @@
 	"homepage": "https://github.com/youkei/ctpg",
     "license": "CC0",
     "dependencies": {
-        "compile-time-unittest": "~>0.0.1"
+        "compile-time-unittest": "~>0.0.2"
     },
 
     "targetType": "library",
