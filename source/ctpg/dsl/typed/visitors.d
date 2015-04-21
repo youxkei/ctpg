@@ -1813,7 +1813,7 @@ string generate(Node node)
                     "}"
                     "static Result parse(ctpg.input.Input!SrcType input, in ctpg.caller.Caller caller)"
                     "{"
-                        "static if(!ctpg._is._is!(typeof(" ~ node.children[2].generate() ~ ".build!(kind, SrcType).parse(input, caller)), \":\", Result))"
+                        "static if(!ctpg.is_wrapper.isImplicitlyConvertible!(typeof(" ~ node.children[2].generate() ~ ".build!(kind, SrcType).parse(input, caller)), Result))"
                         "{"
                             "pragma(msg, `" ~ node.children[1].file ~ "(" ~ node.children[1].line.to!string() ~ "): '" ~ node.children[1].token.text ~ "' should return '" ~ node.children[0].token.text ~ "', not '` ~ ctpg.parse_result.getParseResultType!(" ~ node.children[2].generate() ~ ".build!(kind, SrcType)).stringof ~ `'`);"
                             "static assert(false);"

@@ -2,7 +2,7 @@ module ctpg.dsl.typed.combinators;
 
 import ctpg : parse;
 
-import ctpg._is : _is;
+import ctpg.is_wrapper : isSameType;
 import ctpg.for_unittest : TestParser;
 import ctpg.caller : Caller;
 import ctpg.input : Input;
@@ -25,7 +25,7 @@ template setInfo(alias parser)
 {
     template build(alias kind, SrcType)
     {
-        static if(_is!(getParseResultType!(parser.build!(kind, SrcType)), "==", Node))
+        static if(isSameType!(getParseResultType!(parser.build!(kind, SrcType)), Node))
         {
             mixin MAKE_RESULT!q{ Node };
 

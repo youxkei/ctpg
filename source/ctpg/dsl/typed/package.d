@@ -42,7 +42,7 @@ string generateParsers(string src, size_t line = __LINE__ , string file = __FILE
 
     +/
     immutable static staticImports =
-        "static import ctpg._is;"
+        "static import ctpg.is_wrapper;"
         "static import ctpg.parsers;"
         "static import ctpg.combinators;"
         "static import ctpg.caller;"
