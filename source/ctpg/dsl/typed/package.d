@@ -41,6 +41,14 @@ string generateParsers(string src, size_t line = __LINE__ , string file = __FILE
     /+
 
     +/
+    immutable static staticImports =
+        "static import ctpg._is;"
+        "static import ctpg.parsers;"
+        "static import ctpg.combinators;"
+        "static import ctpg.caller;"
+        "static import ctpg.input;"
+        "static import ctpg.parse_result;"
+        "static import ctpg.none;";
 
     auto parsed = src.parse!(defs, ParserKind!(true, true))(line, file);
 
@@ -56,13 +64,15 @@ string generateParsers(string src, size_t line = __LINE__ , string file = __FILE
             .removeSkipWithDuplicates()
         ;
 
+        string generated = staticImports ~ code.generate();
+
         version(ctpgPrintGeneratedCode)
         {
-            return code.generate() ~ "pragma(msg, \"\n======== " ~ file ~ "(" ~ line.to!string ~ ") =========\n\n\"q{" ~ code.toString() ~ "}\"\n\n=====================\n\n\"q{" ~ code.generate() ~ "});";
+            return generated ~ "pragma(msg, \"\n======== " ~ file ~ "(" ~ line.to!string ~ ") =========\n\n\"q{" ~ code.toString() ~ "}\"\n\n=====================\n\n\"q{" ~ generated ~ "});";
         }
         else
         {
-            return code.generate();
+            return generated;
         }
     }
     else
@@ -73,17 +83,6 @@ string generateParsers(string src, size_t line = __LINE__ , string file = __FILE
 
 mixin template CTPG_DSL_TYPED(string src, size_t line = __LINE__ , string file = __FILE__)
 {
-
-    static import ctpg._is;
-    static import ctpg.parsers;
-    static import ctpg.combinators;
-    static import ctpg.caller;
-    static import ctpg.input;
-    static import ctpg.parse_result;
-    static import ctpg.none;
-
     static import ctpg.dsl.typed;
-
-
     mixin(ctpg.dsl.typed.generateParsers(src, line, file));
 }
