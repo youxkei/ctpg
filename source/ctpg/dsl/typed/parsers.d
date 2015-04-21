@@ -15,12 +15,224 @@ import ctpg.parser_kind : ParserKind;
 import ctpg.dsl.typed.node : Node;
 import ctpg.dsl.typed.token : Token, TokenType;
 
-import parsers = ctpg.parsers : eof, string_, charRange, anyChar, getCallerLine, getCallerFile, getLine, stringLiteral, identifier;
-import combinators = ctpg.combinators : untuple, sequence, choice, more0, more1, option, none, convert, inputSlice, changeError;
-import ownCombinators = ctpg.dsl.typed.combinators : setInfo, makeNode;
+import parsers = ctpg.parsers;
+import combinators = ctpg.combinators;
+import ownCombinators = ctpg.dsl.typed.combinators;
 
 import compile_time_unittest : enableCompileTimeUnittest;
 mixin enableCompileTimeUnittest;
+
+
+template identifier()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ SrcType };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinators.inputSlice!
+            (
+                combinators.sequence!
+                (
+                    combinators.choice!
+                    (
+                        parsers.charRange!('a', 'z'),
+                        parsers.charRange!('A', 'Z'),
+                        parsers.string_!"_",
+                    ),
+                    combinators.more0!
+                    (
+                        combinators.choice!
+                        (
+                            parsers.charRange!('a', 'z'),
+                            parsers.charRange!('A', 'Z'),
+                            parsers.charRange!('0', '9'),
+                            parsers.string_!"_",
+                        )
+                    )
+                )
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    with(parse!identifier("_ab0="))
+    {
+        assert(match              == true);
+        assert(nextInput.source   == "=");
+        assert(value              == "_ab0");
+    }
+}
+
+
+template doubleQuotedString()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ SrcType };
+
+        static Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinators.inputSlice!
+            (
+                combinators.sequence!
+                (
+                    parsers.string_!`"`,
+                    combinators.more0!
+                    (
+                        combinators.sequence!
+                        (
+                            combinators.notPred!
+                            (
+                                parsers.string_!`"`
+                            ),
+                            combinators.choice!
+                            (
+                                parsers.string_!`\"`,
+                                parsers.anyChar!()
+                            )
+                        )
+                    ),
+                    parsers.string_!`"`
+                )
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+
+template wysiwygString()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ SrcType };
+
+        static Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinators.inputSlice!
+            (
+                combinators.sequence!
+                (
+                    parsers.string_!`r"`,
+                    combinators.more0!
+                    (
+                        combinators.sequence!
+                        (
+                            combinators.notPred!
+                            (
+                                parsers.string_!`"`
+                            ),
+                            parsers.anyChar!()
+                        )
+                    ),
+                    parsers.string_!`"`
+                )
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+
+template alternateWysiwygString()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ SrcType };
+
+        static Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinators.inputSlice!
+            (
+                combinators.sequence!
+                (
+                    parsers.string_!"`",
+                    combinators.more0!
+                    (
+                        combinators.sequence!
+                        (
+                            combinators.notPred!
+                            (
+                                parsers.string_!"`"
+                            ),
+                            parsers.anyChar!()
+                        )
+                    ),
+                    parsers.string_!"`"
+                )
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+
+template stringLiteral()
+{
+    template build(alias kind, SrcType)
+    {
+        mixin MAKE_RESULT!q{ SrcType };
+
+        Result parse(Input!SrcType input, in Caller caller)
+        {
+            return combinators.inputSlice!
+            (
+                combinators.choice!
+                (
+                    wysiwygString!(),
+                    alternateWysiwygString!(),
+                    doubleQuotedString!()
+                )
+            ).build!(kind, SrcType).parse(input, caller);
+        }
+    }
+}
+
+debug(ctpg) unittest
+{
+    with(parse!stringLiteral(`"foo"`))
+    {
+        assert(match            == true);
+        assert(value            == `"foo"`);
+        assert(nextInput.source == "");
+    }
+
+    with(parse!stringLiteral(`"foo\nbar"`))
+    {
+        assert(match            == true);
+        assert(value            == `"foo\nbar"`);
+        assert(nextInput.source == "");
+    }
+
+    with(parse!stringLiteral(`"foo\"bar"`))
+    {
+        assert(match            == true);
+        assert(value            == `"foo\"bar"`);
+        assert(nextInput.source == "");
+    }
+
+    with(parse!stringLiteral(`"foo"bar"`))
+    {
+        assert(match            == true);
+        assert(value            == `"foo"`);
+        assert(nextInput.source == `bar"`);
+    }
+
+    with(parse!stringLiteral(`r"foo\"bar"`))
+    {
+        assert(match            == true);
+        assert(value            == `r"foo\"`);
+        assert(nextInput.source == `bar"`);
+    }
+
+    with(parse!stringLiteral("`foo`bar`"))
+    {
+        assert(match            == true);
+        assert(value            == "`foo`");
+        assert(nextInput.source == "bar`");
+    }
+}
 
 
 // 一行コメントを消費するパーサ
@@ -254,7 +466,7 @@ template arch(string open, string close)
                                 ),
                                 combinators.choice!
                                 (
-                                    parsers.stringLiteral!(),
+                                    stringLiteral!(),
                                     parsers.anyChar!()
                                 )
                             )
@@ -351,7 +563,7 @@ template id()
             (
                 combinators.changeError!
                 (
-                    parsers.identifier!(),
+                    identifier!(),
                     "identifier expected"
                 ),
                 TokenType.ID
@@ -401,7 +613,7 @@ template nonterminal()
             (
                 combinators.changeError!
                 (
-                    parsers.identifier!(),
+                    identifier!(),
                     "identifier expected"
                 ),
                 TokenType.NONTERMINAL
@@ -732,7 +944,7 @@ template stringLit()
         {
             return ownCombinators.makeNode!
             (
-                parsers.stringLiteral!(),
+                stringLiteral!(),
                 TokenType.STRING
             ).build!(kind, SrcType).parse(input, caller);
         }

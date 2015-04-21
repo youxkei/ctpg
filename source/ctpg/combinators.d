@@ -16,7 +16,7 @@ import ctpg.none         : None;
 import ctpg.macro_       : MAKE_RESULT;
 import ctpg.option       : Option;
 
-import parsers = ctpg.parsers : string_, success;
+import parsers = ctpg.parsers;
 
 import compile_time_unittest : enableCompileTimeUnittest;
 mixin enableCompileTimeUnittest;
@@ -72,20 +72,20 @@ debug(ctpg) unittest
     {
         with(parse!(untuple!(TestParser!(tuple("hoge", "fuga"))), kind)(conv!"input"))
         {
-                                     assert(match            == true);
-            static if(kind.hasValue) assert(value            == tuple("hoge", "fuga"));
-                                     assert(nextInput.source == conv!"input");
+                                     assert(match              == true);
+            static if(kind.hasValue) assert(value              == tuple("hoge", "fuga"));
+                                     assert(nextInput.source   == conv!"input");
                                      assert(nextInput.position == 0);
-                                     assert(nextInput.line   == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(untuple!(TestParser!(tuple("hoge"))), kind)(conv!"input"))
         {
-                                     assert(match            == true);
-            static if(kind.hasValue) assert(value            == "hoge");
-                                     assert(nextInput.source == conv!"input");
+                                     assert(match              == true);
+            static if(kind.hasValue) assert(value              == "hoge");
+                                     assert(nextInput.source   == conv!"input");
                                      assert(nextInput.position == 0);
-                                     assert(nextInput.line   == 0);
+                                     assert(nextInput.line     == 0);
         }
     }
 }
@@ -190,11 +190,11 @@ debug(ctpg) unittest
     {
         with(parse!(sequence!(parsers.string_!"hoge", parsers.string_!"fuga"), kind)(conv!"hogefugahoge"))
         {
-                                     assert(match            == true);
-            static if(kind.hasValue) assert(value            == tuple("hoge", "fuga"));
-                                     assert(nextInput.source == conv!"hoge");
+                                     assert(match              == true);
+            static if(kind.hasValue) assert(value              == tuple("hoge", "fuga"));
+                                     assert(nextInput.source   == conv!"hoge");
                                      assert(nextInput.position == 8);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(sequence!(parsers.string_!"hoge", parsers.string_!"fuga"), kind)(conv!"hoge"))
@@ -213,11 +213,11 @@ debug(ctpg) unittest
 
         with(parse!(sequence!(parsers.string_!"hoge", TestParser!(None()), parsers.string_!"fuga"), kind)(conv!"hogefuga"))
         {
-                                     assert(match            == true);
-            static if(kind.hasValue) assert(value            == tuple("hoge", "fuga"));
-                                     assert(nextInput.source == conv!"");
+                                     assert(match              == true);
+            static if(kind.hasValue) assert(value              == tuple("hoge", "fuga"));
+                                     assert(nextInput.source   == conv!"");
                                      assert(nextInput.position == 8);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
     }
 }
@@ -323,7 +323,7 @@ debug(ctpg) unittest
             static if(kind.hasValue) assert(value              == "hoge");
                                      assert(nextInput.source   == conv!"");
                                      assert(nextInput.position == 4);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(choice!(parsers.string_!"hoge", parsers.string_!"fuga"), kind)(conv!"fuga"))
@@ -332,7 +332,7 @@ debug(ctpg) unittest
             static if(kind.hasValue) assert(value              == "fuga");
                                      assert(nextInput.source   == conv!"");
                                      assert(nextInput.position == 4);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(choice!(parsers.string_!"hoge", parsers.string_!"fuga"), kind)(conv!"piyo"))
@@ -452,13 +452,13 @@ template more(size_t n, alias parser, alias sep = success!())
     }
 }
 
-template more0(alias parser, alias sep = success!())
+template more0(alias parser, alias sep = parsers.success!())
 {
     alias more0 = more!(0, parser, sep);
 }
 
 
-template more1(alias parser, alias sep = success!())
+template more1(alias parser, alias sep = parsers.success!())
 {
     alias more1 = more!(1, parser, sep);
 }
@@ -473,7 +473,7 @@ debug(ctpg) unittest
             static if(kind.hasValue) assert(value              == []);
                                      assert(nextInput.source   == conv!"");
                                      assert(nextInput.position == 0);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(more!(0, parsers.string_!"hoge", parsers.string_!","), kind)(conv!"hoge,hoge,hoge"))
@@ -482,7 +482,7 @@ debug(ctpg) unittest
             static if(kind.hasValue) assert(value              == ["hoge", "hoge", "hoge"]);
                                      assert(nextInput.source   == conv!"");
                                      assert(nextInput.position == 14);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(more!(0, parsers.string_!"hoge", parsers.string_!","), kind)(conv!"hoge,hoge,hoge,"))
@@ -491,7 +491,7 @@ debug(ctpg) unittest
             static if(kind.hasValue) assert(value              == ["hoge", "hoge", "hoge"]);
                                      assert(nextInput.source   == conv!",");
                                      assert(nextInput.position == 14);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(more!(4, parsers.string_!"hoge", parsers.string_!","), kind)(conv!"hoge,hoge,hoge"))
@@ -547,7 +547,7 @@ debug(ctpg) unittest
             static if(kind.hasValue) assert(value              == None());
                                      assert(nextInput.source   == conv!"hoge");
                                      assert(nextInput.position == 0);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(andPred!(parsers.string_!"hoge"), kind)(conv!"fuga"))
@@ -597,7 +597,7 @@ debug(ctpg) unittest
             static if(kind.hasValue) assert(value              == None());
                                      assert(nextInput.source   == conv!"fuga");
                                      assert(nextInput.position == 0);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(notPred!(parsers.string_!"hoge"), kind)(conv!"hoge"))
@@ -659,17 +659,17 @@ debug(ctpg) unittest
             static if(kind.hasValue) assert(value.some         == false);
                                      assert(nextInput.source   == conv!"fuga");
                                      assert(nextInput.position == 0);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(option!(parsers.string_!"hoge"), kind)(conv!"hoge"))
         {
                                      assert(match              == true);
             static if(kind.hasValue) assert(value.some         == true);
-            static if(kind.hasValue) assert(value        == "hoge");
+            static if(kind.hasValue) assert(value              == "hoge");
                                      assert(nextInput.source   == conv!"");
                                      assert(nextInput.position == 4);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
     }
 }
@@ -722,7 +722,7 @@ debug(ctpg) unittest
             static if(kind.hasValue) assert(value              == None());
                                      assert(nextInput.source   == conv!"");
                                      assert(nextInput.position == 4);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(none!(parsers.string_!"hoge"), kind)(conv!"fuga"))
@@ -836,7 +836,7 @@ debug(ctpg) unittest
             static if(kind.hasValue) assert(value.len          == 4);
                                      assert(nextInput.source   == conv!"e");
                                      assert(nextInput.position == 4);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(convert!(parsers.string_!"hoge", Struct), kind)(conv!"!!!!"))
@@ -852,7 +852,7 @@ debug(ctpg) unittest
             static if(kind.hasValue) assert(value.len          == 4);
                                      assert(nextInput.source   == conv!"e");
                                      assert(nextInput.position == 4);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(convert!(parsers.string_!"hoge", Class), kind)(conv!"!!!!"))
@@ -868,7 +868,7 @@ debug(ctpg) unittest
             static if(kind.hasValue) assert(value              == 4);
                                      assert(nextInput.source   == conv!"e");
                                      assert(nextInput.position == 4);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(convert!(parsers.string_!"hoge", Function), kind)(conv!"!!!!"))
@@ -884,7 +884,7 @@ debug(ctpg) unittest
             static if(kind.hasValue) assert(value              == 4);
                                      assert(nextInput.source   == conv!"e");
                                      assert(nextInput.position == 4);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(convert!(parsers.string_!"hoge", TemplateFunction), kind)(conv!"!!!!"))
@@ -900,7 +900,7 @@ debug(ctpg) unittest
             static if(kind.hasValue) assert(value              == 4);
                                      assert(nextInput.source   == conv!"e");
                                      assert(nextInput.position == 4);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(convert!(parsers.string_!"hoge", (x) => x.length), kind)(conv!"!!!!"))
@@ -916,7 +916,7 @@ debug(ctpg) unittest
             static if(kind.hasValue) assert(value              == 4);
                                      assert(nextInput.source   == conv!"e");
                                      assert(nextInput.position == 4);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(convert!(parsers.string_!"hoge", (x){ return x.length; }), kind)(conv!"!!!!"))
@@ -1006,7 +1006,7 @@ debug(ctpg) unittest
             static if(kind.hasValue) assert(value              == "hoge");
                                      assert(nextInput.source   == conv!"!");
                                      assert(nextInput.position == 4);
-                                     assert(nextInput.line == 0);
+                                     assert(nextInput.line     == 0);
         }
 
         with(parse!(check!(parsers.string_!"hoge!", Function), kind)(conv!"hoge!"))

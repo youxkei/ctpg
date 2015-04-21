@@ -18,7 +18,7 @@ import ctpg.none         : None;
 import ctpg.macro_       : MAKE_RESULT;
 import ctpg.unsupported_input_type_exception : UnsupportedInputTypeException;
 
-import combinators = ctpg.combinators : sequence, choice, more0, notPred, none, inputSlice;
+import combinators = ctpg.combinators;
 
 import compile_time_unittest : enableCompileTimeUnittest;
 mixin enableCompileTimeUnittest;
@@ -152,19 +152,19 @@ debug(ctpg) unittest
     {
         with(parse!(spaces!())(conv!" \n\t\r\f"))
         {
-            assert(match == true);
+            assert(match            == true);
             assert(nextInput.source == conv!"");
         }
 
         with(parse!(spaces!())(conv!" \n\ta\r\f"))
         {
-            assert(match == true);
+            assert(match            == true);
             assert(nextInput.source == conv!"a\r\f");
         }
 
         with(parse!(spaces!())(conv!""))
         {
-            assert(match == true);
+            assert(match            == true);
             assert(nextInput.source == conv!"");
         }
     }
@@ -664,238 +664,3 @@ debug(ctpg) unittest
 }
 
 
-template doubleQuotedString()
-{
-    template build(alias kind, SrcType)
-    {
-        mixin MAKE_RESULT!q{ SrcType };
-
-        static Result parse(Input!SrcType input, in Caller caller)
-        {
-            return combinators.inputSlice!
-            (
-                combinators.sequence!
-                (
-                    string_!"\"",
-                    combinators.more0!
-                    (
-                        combinators.sequence!
-                        (
-                            combinators.notPred!
-                            (
-                                string_!"\""
-                            ),
-                            combinators.choice!
-                            (
-                                escapeSequence!(),
-                                charRange!(dchar.min, dchar.max)
-                            )
-                        )
-                    ),
-                    string_!"\""
-                )
-            ).build!(kind, SrcType).parse(input, caller);
-        }
-    }
-}
-
-debug(ctpg) unittest
-{
-    foreach(conv; convs) foreach(kind; ParserKinds)
-    {
-    }
-}
-
-
-template alternateWysiwygString()
-{
-    template build(alias kind, SrcType)
-    {
-        mixin MAKE_RESULT!q{ SrcType };
-
-        static Result parse(Input!SrcType input, in Caller caller)
-        {
-            return combinators.inputSlice!
-            (
-                combinators.sequence!
-                (
-                    string_!"`",
-                    combinators.more0!
-                    (
-                        combinators.sequence!
-                        (
-                            combinators.notPred!
-                            (
-                                string_!"`"
-                            ),
-                            charRange!(dchar.min, dchar.max)
-                        )
-                    ),
-                    string_!"`"
-                )
-            ).build!(kind, SrcType).parse(input, caller);
-        }
-    }
-}
-
-debug(ctpg) unittest
-{
-    foreach(conv; convs) foreach(kind; ParserKinds)
-    {
-    }
-}
-
-
-template wysiwygString()
-{
-    template build(alias kind, SrcType)
-    {
-        mixin MAKE_RESULT!q{ SrcType };
-
-        static Result parse(Input!SrcType input, in Caller caller)
-        {
-            return combinators.inputSlice!
-            (
-                combinators.sequence!
-                (
-                    string_!"r\"",
-                    combinators.more0!
-                    (
-                        combinators.sequence!
-                        (
-                            combinators.notPred!
-                            (
-                                string_!"\""
-                            ),
-                            charRange!(dchar.min, dchar.max)
-                        )
-                    ),
-                    string_!"\""
-                )
-            ).build!(kind, SrcType).parse(input, caller);
-        }
-    }
-}
-
-debug(ctpg) unittest
-{
-    foreach(conv; convs) foreach(kind; ParserKinds)
-    {
-    }
-}
-
-
-template stringLiteral()
-{
-    template build(alias kind, SrcType)
-    {
-        mixin MAKE_RESULT!q{ SrcType };
-
-        Result parse(Input!SrcType input, in Caller caller)
-        {
-            return combinators.inputSlice!
-            (
-                combinators.choice!
-                (
-                    wysiwygString!(),
-                    alternateWysiwygString!(),
-                    doubleQuotedString!()
-                )
-            ).build!(kind, SrcType).parse(input, caller);
-        }
-    }
-}
-
-debug(ctpg) unittest
-{
-    foreach(conv; convs) foreach(kind; ParserKinds)
-    {
-    }
-}
-
-
-template escapeSequence()
-{
-    template build(alias kind, SrcType)
-    {
-        mixin MAKE_RESULT!q{ SrcType };
-
-        static Result parse(Input!SrcType input, in Caller caller)
-        {
-            return combinators.inputSlice!
-            (
-                combinators.choice!
-                (
-                    string_!`\'`,
-                    string_!`\"`,
-                    string_!`\?`,
-                    string_!`\\`,
-                    string_!`\a`,
-                    string_!`\b`,
-                    string_!`\f`,
-                    string_!`\n`,
-                    string_!`\r`,
-                    string_!`\t`,
-                    string_!`\v`,
-                    string_!"\u0000",
-                    string_!"\u001A",
-                )
-            ).build!(kind, SrcType).parse(input, caller);
-        }
-    }
-}
-
-debug(ctpg) unittest
-{
-    foreach(conv; convs) foreach(kind; ParserKinds)
-    {
-    }
-}
-
-
-template identifier()
-{
-    template build(alias kind, SrcType)
-    {
-        mixin MAKE_RESULT!q{ SrcType };
-
-        Result parse(Input!SrcType input, in Caller caller)
-        {
-            return combinators.inputSlice!
-            (
-                combinators.sequence!
-                (
-                    combinators.choice!
-                    (
-                        charRange!('a', 'z'),
-                        charRange!('A', 'Z'),
-                        string_!"_",
-                    ),
-                    combinators.more0!
-                    (
-                        combinators.choice!
-                        (
-                            charRange!('a', 'z'),
-                            charRange!('A', 'Z'),
-                            charRange!('0', '9'),
-                            string_!"_",
-                        )
-                    )
-                )
-            ).build!(kind, SrcType).parse(input, caller);
-        }
-    }
-}
-
-debug(ctpg) unittest
-{
-    foreach(conv; convs) foreach(kind; ParserKinds)
-    {
-        with(parse!(identifier!(), kind)(conv!"_ab0="))
-        {
-                                     assert(match              == true);
-                                     assert(nextInput.source   == conv!"=");
-            static if(kind.hasValue) assert(value              == conv!"_ab0");
-        }
-    }
-}
