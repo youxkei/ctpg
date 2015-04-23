@@ -1,0 +1,25 @@
+{
+	"name": "ctpg",
+	"description": "Compile Time Parser Generator",
+	"homepage": "https://github.com/youkei/ctpg",
+    "license": "CC0",
+    "dependencies": {
+        "compile-time-unittest": "~>0.0.2",
+        "selflinoin": "~>0.0.1"
+    },
+
+    "configurations": [
+        {
+            "name": "unittest",
+            "importPaths": ["source", "example"],
+            "sourcePaths": ["source", "example"],
+            "debugVersions": ["ctpg"]
+        },
+        {
+            "name": "unittest-compiles",
+            "importPaths": ["source", "example"],
+            "sourcePaths": ["source", "example"],
+            "debugVersions": ["ctpg", "ctpgCompilesTest"]
+        }
+    ]
+}
