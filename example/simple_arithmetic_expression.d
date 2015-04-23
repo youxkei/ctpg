@@ -13,6 +13,10 @@ import ctpg : parse;
 import ctpg.parsers : skip;
 import ctpg.dsl.typed : CTPG_DSL_TYPED;
 
+import compile_time_unittest : enableCompileTimeUnittest;
+mixin enableCompileTimeUnittest;
+
+
 class SimpleArithmeticParser
 {
     mixin CTPG_DSL_TYPED!

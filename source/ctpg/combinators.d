@@ -21,6 +21,8 @@ import parsers = ctpg.parsers;
 import compile_time_unittest : enableCompileTimeUnittest;
 mixin enableCompileTimeUnittest;
 
+import selflinoin : makeCompilationErrorMessage;
+
 
 template untuple(alias parser)
 {
@@ -348,6 +350,8 @@ debug(ctpg) unittest
             static if(kind.hasError) assert(error.msg      == "'piyo' expected");
             static if(kind.hasError) assert(error.position == 4);
         }
+
+        assert(!__traits(compiles, parse!(choice!(TestParser!"hoge", TestParser!1))(conv!"")));
     }
 }
 
@@ -753,7 +757,7 @@ template convert(alias parser, alias converter, size_t line = 0, string file = "
 
             static if(is(ConverterType == void))
             {
-                debug(ctpgSuppressErrorMsg) {} else pragma(msg, file ~ "(" ~ line.to!string() ~ "): Error: Cannot call '" ~ converter.stringof ~ "' using '>>' with types: " ~ T.stringof);
+                debug(ctpgSuppressErrorMsg) {} else pragma(msg, makeCompilationErrorMessage("Cannot call '" ~ converter.stringof ~ "' using '>>' with types: " ~ T.stringof, file, line));
                 static assert(false);
             }
 
@@ -939,12 +943,12 @@ template check(alias parser, alias checker, size_t line = 0, string file = "")
 
         static if(!__traits(compiles, checker(T.init.field)) && !__traits(compiles, checker(T.init)))
         {
-            debug(ctpgSuppressErrorMsg) {} else pragma(msg, file ~ "(" ~ line.to!string() ~ "): Error: Cannot call '" ~ checker.stringof ~ "' using '>?' with types: " ~ T.stringof);
+            debug(ctpgSuppressErrorMsg) {} else pragma(msg, makeCompilationErrorMessage("Cannot call '" ~ checker.stringof ~ "' using '>?' with types: " ~ T.stringof, file, line));
             static assert(false);
         }
         else static if(!is(typeof(checker(T.init.field)) == bool) && !is(typeof(checker(T.init)) == bool))
         {
-            debug(ctpgSuppressErrorMsg) {} else pragma(msg, file ~ "(" ~ line.to!string() ~ "): Error: '" ~ checker.stringof ~ "' does not return bool");
+            debug(ctpgSuppressErrorMsg) {} else pragma(msg, makeCompilationErrorMessage("'" ~ checker.stringof ~ "' does not return bool"));
             static assert(false);
         }
 
@@ -1037,7 +1041,7 @@ template inputSlice(alias parser, size_t line = 0, string file = "")
         {
             static if(!isArray!SrcType && !hasSlicing!SrcType)
             {
-                debug(ctpgSuppressErrorMsg) {} else pragma(msg, file ~ "(" ~ line.to!string() ~ "): Error: Input type should be sliceable");
+                debug(ctpgSuppressErrorMsg) {} else pragma(msg, makeCompilationErrorMessage("Input type should be sliceable", file, line));
                 static assert(false);
             }
 

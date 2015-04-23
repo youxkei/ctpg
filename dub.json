@@ -4,19 +4,16 @@
 	"homepage": "https://github.com/youkei/ctpg",
     "license": "CC0",
     "dependencies": {
-        "compile-time-unittest": "~>0.0.2"
+        "compile-time-unittest": "~>0.0.2",
+        "selflinoin": "~>0.0.1"
     },
 
-    "targetType": "library",
-    "buildTypes": {
-        "unittest": {
+    "configurations": [
+        {
+            "name": "unittest",
+            "importPaths": ["source", "example"],
             "sourcePaths": ["source", "example"],
-            "buildOptions": ["unittests", "debugMode", "debugInfo"],
-            "dflags": [
-                "-unittest",
-                "-debug=ctpg",
-                "-debug=ctpgSuppressErrorMsg"
-            ]
+            "debugVersions": ["ctpg", "ctpgSuppressErrorMsg"]
         }
-    }
+    ]
 }

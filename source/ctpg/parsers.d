@@ -20,6 +20,8 @@ import ctpg.unsupported_input_type_exception : UnsupportedInputTypeException;
 
 import combinators = ctpg.combinators;
 
+import selflinoin : makeCompilationErrorMessage;
+
 import compile_time_unittest : enableCompileTimeUnittest;
 mixin enableCompileTimeUnittest;
 
@@ -299,7 +301,7 @@ template charRange(dchar begin, dchar end, size_t line = 0, string file = "")
 {
     static if(begin > end)
     {
-        debug(ctpgSuppressErrorMsg) {} else pragma(msg, file ~ "(" ~ line.to!string() ~ "): Error: Invalid char range");
+        debug(ctpgSuppressErrorMsg) {} else pragma(msg, makeCompilationErrorMessage("Error: Invalid char range", file, line));
         static assert(false);
     }
 

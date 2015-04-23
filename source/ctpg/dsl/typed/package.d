@@ -11,6 +11,8 @@ import ctpg.dsl.typed.parsers : defs;
 
 import ctpg.dsl.typed.visitors : applySkipLiteral, applyMemoizeSkip, applyMemoizeLiteral, applyMemoizeNonterminal, expandSkip, removeMemoizeDuplicates, removeSkipWithDuplicates, generate;
 
+import selflinoin : makeCompilationErrorMessage;
+
 
 string generateParsers(string src, size_t line = __LINE__ , string file = __FILE__)
 {
@@ -77,7 +79,7 @@ string generateParsers(string src, size_t line = __LINE__ , string file = __FILE
     }
     else
     {
-        return "pragma(msg,\"" ~ file ~ "(" ~ (line + src[0 .. parsed.error.position].count('\n') + 1).to!string() ~ "): Error: " ~ parsed.error.msg ~ "\");static assert(false);";
+        return "pragma(msg,\"" ~ makeCompilationErrorMessage(parsed.error.msg, file, line + src[0 .. parsed.error.position].count('\n') + 1) ~ "\");static assert(false);";
     }
 }
 
