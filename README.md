@@ -2,7 +2,10 @@
 https://github.com/youkei/ctpg/wiki
 
 # History
-- 2.2.3 
+- 3.0.0
+  - Divide ctpg.d into modules
+  - Change DSL interface from string mixin to template mixin
+- 2.2.3
   - Fix issue [#3](https://github.com/youkei/ctpg/issues/3)
   - Refactor unittests
 - 2.2.2: Add target type for dub
