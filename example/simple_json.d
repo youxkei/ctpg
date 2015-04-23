@@ -55,6 +55,8 @@ unittest
     with (parse!json(`{ "foo": "bar", "bar": "buz" }`))
     {
         assert (match);
+        assert (value["foo"].str == "bar");
+        assert (value["bar"].str == "buz");
     }
     assert (parse!json("null").value.type == JSON_TYPE.NULL);
 }
