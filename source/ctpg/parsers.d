@@ -301,7 +301,7 @@ template charRange(dchar begin, dchar end, size_t line = 0, string file = "")
 {
     static if(begin > end)
     {
-        debug(ctpgSuppressErrorMsg) {} else pragma(msg, makeCompilationErrorMessage("Error: Invalid char range", file, line));
+        pragma(msg, makeCompilationErrorMessage("Error: Invalid char range", file, line));
         static assert(false);
     }
 
@@ -545,7 +545,10 @@ debug(ctpg) unittest
 
         assertThrown!UnsupportedInputTypeException(parse!(charRange!('a', 'z'), kind)([1, 0]));
 
-        static assert(!__traits(compiles, parse!(charRange!('z', 'a'), kind)(conv!"")));
+        debug(ctpgCompilesTest)
+        {
+            static assert(!__traits(compiles, parse!(charRange!('z', 'a'), kind)(conv!"")));
+        }
     }
 }
 
@@ -664,5 +667,3 @@ debug(ctpg) unittest
         }
     }
 }
-
-

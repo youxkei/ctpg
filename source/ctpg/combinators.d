@@ -8,13 +8,14 @@ import std.range : hasSlicing;
 import ctpg : parse;
 
 import ctpg.for_unittest : TestParser, convs;
-import ctpg.parse_result : ParseResult, getParseResultType;
+import ctpg.parse_result : ParseResult, getParseResultType, getParseResultTypes;
 import ctpg.parser_kind  : ParserKind, ParserKinds;
 import ctpg.input        : Input;
 import ctpg.caller       : Caller;
 import ctpg.none         : None;
 import ctpg.macro_       : MAKE_RESULT;
 import ctpg.option       : Option;
+import ctpg.is_wrapper   : isSameType;
 
 import parsers = ctpg.parsers;
 
@@ -225,12 +226,19 @@ debug(ctpg) unittest
 }
 
 
-template choice(parsers...)
+
+template choiceWithFileLine(string file, size_t line, parsers...)
 {
     static assert(parsers.length > 0);
 
     template build(alias kind, SrcType)
     {
+        static if (kind.hasValue && isSameType!(CommonType!(getParseResultTypes!(kind, SrcType, parsers)), void))
+        {
+            pragma(msg, makeCompilationErrorMessage("incompatible types: " ~ getParseResultTypes!(kind, SrcType, parsers).stringof, file, line));
+            static assert(false);
+        }
+
         static if(parsers.length == 1)
         {
             mixin MAKE_RESULT!q{ getParseResultType!(parsers[0].build!(kind, SrcType)) };
@@ -315,6 +323,11 @@ template choice(parsers...)
     }
 }
 
+template choice(parsers...)
+{
+    alias choice = choiceWithFileLine!("", 0, parsers);
+}
+
 debug(ctpg) unittest
 {
     foreach(conv; convs) foreach(kind; ParserKinds)
@@ -351,7 +364,17 @@ debug(ctpg) unittest
             static if(kind.hasError) assert(error.position == 4);
         }
 
-        assert(!__traits(compiles, parse!(choice!(TestParser!"hoge", TestParser!1))(conv!"")));
+        debug(ctpgCompilesTest)
+        {
+            static if(kind.hasValue)
+            {
+                static assert(!__traits(compiles, parse!(choice!(TestParser!"hoge", TestParser!1), kind)(conv!"")));
+            }
+            else
+            {
+                static assert(__traits(compiles, parse!(choice!(TestParser!"hoge", TestParser!1), kind)(conv!"")));
+            }
+        }
     }
 }
 
@@ -757,7 +780,7 @@ template convert(alias parser, alias converter, size_t line = 0, string file = "
 
             static if(is(ConverterType == void))
             {
-                debug(ctpgSuppressErrorMsg) {} else pragma(msg, makeCompilationErrorMessage("Cannot call '" ~ converter.stringof ~ "' using '>>' with types: " ~ T.stringof, file, line));
+                pragma(msg, makeCompilationErrorMessage("Cannot call '" ~ converter.stringof ~ "' using '>>' with types: " ~ T.stringof, file, line));
                 static assert(false);
             }
 
@@ -930,7 +953,17 @@ debug(ctpg) unittest
             static if(kind.hasError) assert(error.position == 0);
         }
 
-        static if(kind.hasValue) static assert(!__traits(compiles, parse!(convert!(parsers.string_!"hoge", (size_t x){ return x; }), kind)(conv!"hoge")));
+        debug(ctpgCompilesTest)
+        {
+            static if(kind.hasValue)
+            {
+                static assert(!__traits(compiles, parse!(convert!(parsers.string_!"hoge", (size_t x){ return x; }), kind)(conv!"hoge")));
+            }
+            else
+            {
+                static assert(__traits(compiles, parse!(convert!(parsers.string_!"hoge", (size_t x){ return x; }), kind)(conv!"hoge")));
+            }
+        }
     }
 }
 
@@ -943,12 +976,12 @@ template check(alias parser, alias checker, size_t line = 0, string file = "")
 
         static if(!__traits(compiles, checker(T.init.field)) && !__traits(compiles, checker(T.init)))
         {
-            debug(ctpgSuppressErrorMsg) {} else pragma(msg, makeCompilationErrorMessage("Cannot call '" ~ checker.stringof ~ "' using '>?' with types: " ~ T.stringof, file, line));
+            pragma(msg, makeCompilationErrorMessage("Cannot call '" ~ checker.stringof ~ "' using '>?' with types: " ~ T.stringof, file, line));
             static assert(false);
         }
         else static if(!is(typeof(checker(T.init.field)) == bool) && !is(typeof(checker(T.init)) == bool))
         {
-            debug(ctpgSuppressErrorMsg) {} else pragma(msg, makeCompilationErrorMessage("'" ~ checker.stringof ~ "' does not return bool"));
+            pragma(msg, makeCompilationErrorMessage("'" ~ checker.stringof ~ "' does not return bool", file, line));
             static assert(false);
         }
 
@@ -1027,8 +1060,11 @@ debug(ctpg) unittest
             static if(kind.hasError) assert(error.position == 0);
         }
 
-        static assert(!__traits(compiles, parse!(check!(parsers.string_!"hoge", (int    i  ){ return false; }), kind)(conv!"hoge")));
-        static assert(!__traits(compiles, parse!(check!(parsers.string_!"hoge", (string str){ return 0;     }), kind)(conv!"hoge")));
+        debug(ctpgCompilesTest)
+        {
+            static assert(!__traits(compiles, parse!(check!(parsers.string_!"hoge", (int    i  ){ return false; }), kind)(conv!"hoge")));
+            static assert(!__traits(compiles, parse!(check!(parsers.string_!"hoge", (string str){ return 0;     }), kind)(conv!"hoge")));
+        }
     }
 }
 
@@ -1041,7 +1077,7 @@ template inputSlice(alias parser, size_t line = 0, string file = "")
         {
             static if(!isArray!SrcType && !hasSlicing!SrcType)
             {
-                debug(ctpgSuppressErrorMsg) {} else pragma(msg, makeCompilationErrorMessage("Input type should be sliceable", file, line));
+                pragma(msg, makeCompilationErrorMessage("Input type should be sliceable", file, line));
                 static assert(false);
             }
 
@@ -1093,7 +1129,19 @@ debug(ctpg) unittest
                                      assert(nextInput.line     == 0);
         }
 
-        static if(kind.hasValue) static assert(!__traits(compiles, parse!(inputSlice!(parsers.string_!"hoge"), kind)(0)));
+        debug(ctpgCompilesTest)
+        {
+            import std.algorithm : filter;
+
+            static if(kind.hasValue)
+            {
+                static assert(!__traits(compiles, parse!(inputSlice!(parsers.string_!"hoge"), kind)(conv!"hoge".filter!"true"())));
+            }
+            else
+            {
+                static assert(__traits(compiles, parse!(inputSlice!(parsers.string_!"hoge"), kind)(conv!"hoge".filter!"true"())));
+            }
+        }
     }
 }
 

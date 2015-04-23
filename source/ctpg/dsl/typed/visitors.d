@@ -1829,7 +1829,7 @@ string generate(Node node)
             {
                 code ~= child.generate() ~ ",";
             }
-            code = "ctpg.combinators.choice!(" ~ code ~ ")";
+            code = "ctpg.combinators.choiceWithFileLine!(`" ~ node.file ~ "`," ~ node.line.to!string() ~ "," ~ code ~ ")";
             break;
 
         case TokenType.LEFT_SHIFT:

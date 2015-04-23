@@ -36,7 +36,7 @@ q{
 
     JSONValue null_ = !"null" >> { return JSONValue(null); };
 
-    string stringLiteral = !"\"" (^"\"" anyChar)* !"\"" >> to!string;
+    string stringLiteral = !"\"" (^"\"" ("\\\"" / (anyChar >> to!string)))* !"\"" >> join >> to!string;
 };
 
 unittest

@@ -1680,17 +1680,24 @@ template choiceExp()
         {
             return combinators.convert!
             (
-                combinators.more1!
+                combinators.sequence!
                 (
-                    convExp!(),
-                    combinators.sequence!
+                    spaces!(),
+                    parsers.getLine!(),
+                    parsers.getCallerLine!(),
+                    parsers.getCallerFile!(),
+                    combinators.more1!
                     (
-                        spaces!(),
-                        parsers.string_!"/",
-                        spaces!()
+                        convExp!(),
+                        combinators.sequence!
+                        (
+                            spaces!(),
+                            parsers.string_!"/",
+                            spaces!()
+                        )
                     )
                 ),
-                function(Node[] convExps)
+                function(size_t line, size_t callerLine, string callerFile, Node[] convExps)
                 {
                     if(convExps.length > 1)
                     {
@@ -1699,6 +1706,8 @@ template choiceExp()
                         choiceExp.token.type = TokenType.SLASH;
                         choiceExp.token.text = "/";
                         choiceExp.children = convExps;
+                        choiceExp.line = line + callerLine + 1;
+                        choiceExp.file = callerFile;
 
                         return choiceExp;
                     }
