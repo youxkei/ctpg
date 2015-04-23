@@ -18,7 +18,6 @@ struct Node
         res = indent ~ "+-[" ~ token.text ~ "]\n";
         foreach(i, child; children)
         {
-            //if(i == children.length - 1)
             if(i == lastIndex)
             {
                 res ~= child.toString(indent ~ (last ? "   " : "|  "), true);
