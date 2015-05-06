@@ -1,14 +1,17 @@
 # Documentation
+
 https://github.com/youkei/ctpg/wiki
 
 # History
+
+- 3.0.2: Add build configuration to run unittest correctly
 - 3.0.1: Import a module for unittest correctly
 - 3.0.0
-  - Divide ctpg.d into modules
-  - Change DSL interface from string mixin to template mixin
+    - Divide ctpg.d into modules
+    - Change DSL interface from string mixin to template mixin
 - 2.2.3
-  - Fix issue [#3](https://github.com/youkei/ctpg/issues/3)
-  - Refactor unittests
+    - Fix issue [#3](https://github.com/youkei/ctpg/issues/3)
+    - Refactor unittests
 - 2.2.2: Add target type for dub
 - 2.2.1: Fix unintended fall-through
 - 2.2.0: Fix error message line of undefined parser
