@@ -2,6 +2,7 @@
 https://github.com/youkei/ctpg/wiki
 
 # History
+- 3.0.1: Import a module for unittest correctly
 - 3.0.0
   - Divide ctpg.d into modules
   - Change DSL interface from string mixin to template mixin

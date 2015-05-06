@@ -7,7 +7,7 @@ import std.range : hasSlicing;
 
 import ctpg : parse;
 
-import ctpg.for_unittest : TestParser, convs;
+import ctpg.for_unittest;
 import ctpg.parse_result : ParseResult, getParseResultType, getParseResultTypes;
 import ctpg.parser_kind  : ParserKind, ParserKinds;
 import ctpg.input        : Input;
