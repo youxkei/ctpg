@@ -10,6 +10,9 @@
 
     "configurations": [
         {
+            "name": "library"
+        },
+        {
             "name": "unittest",
             "importPaths": ["source", "example"],
             "sourcePaths": ["source", "example"],
