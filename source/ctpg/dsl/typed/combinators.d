@@ -2,8 +2,8 @@ module ctpg.dsl.typed.combinators;
 
 import ctpg : parse;
 
+import ctpg.for_unittest;
 import ctpg.is_wrapper : isSameType;
-import ctpg.for_unittest : TestParser;
 import ctpg.caller : Caller;
 import ctpg.input : Input;
 import ctpg.macro_ : MAKE_RESULT;

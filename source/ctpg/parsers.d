@@ -9,7 +9,7 @@ import std.range : ElementEncodingType, isRandomAccessRange;
 
 import ctpg : parse;
 
-import ctpg.for_unittest : convs;
+import ctpg.for_unittest;
 import ctpg.parse_result : ParseResult, getParseResultType;
 import ctpg.parser_kind  : ParserKind, ParserKinds;
 import ctpg.input        : Input;
